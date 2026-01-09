@@ -1,0 +1,124 @@
+﻿<UserControl x:Class="MyHomelabBrowser.controles.BrowserTabHeader"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Height="32"
+             MouseLeftButtonDown="Header_MouseLeftButtonDown"
+             MouseLeftButtonUp="Header_MouseLeftButtonUp"
+             PreviewMouseMove="Header_MouseMove">
+
+    
+    <Border x:Name="Root"
+            Background="#FF4C4747"
+            CornerRadius="10"
+            Padding="8,0"
+            SnapsToDevicePixels="True">
+
+        <Border.RenderTransform>
+            <TransformGroup>
+                <!-- vertical (detach) -->
+                <TranslateTransform x:Name="GhostOffset"/>
+                <!-- horizontal (reorder) -->
+                <TranslateTransform x:Name="ReorderOffset"/>
+            </TransformGroup>
+        </Border.RenderTransform>
+
+
+
+        <Grid VerticalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <!-- favicon -->
+                <ColumnDefinition Width="*"/>
+                <!-- title -->
+                <ColumnDefinition Width="22"/>
+                <!-- pin (fixe) -->
+                <ColumnDefinition Width="22"/>
+                <!-- close (fixe) -->
+            </Grid.ColumnDefinitions>
+
+            <!-- FAVICON -->
+            <Image x:Name="Icon"
+                   Grid.Column="0"
+                   Width="16"
+                   Height="16"
+                   Margin="0,0,6,0"
+                   VerticalAlignment="Center"/>
+
+            <!-- TITRE -->
+            <TextBlock x:Name="Title"
+                       Grid.Column="1"
+                       Foreground="White"
+                       FontSize="13"
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       Margin="0,0,6,0"/>
+
+            <!-- PIN -->
+            <Button x:Name="PinBtn"
+                    Grid.Column="2"
+                    Width="18"
+                    Height="18"
+                    Visibility="Visible"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Cursor="Hand"
+                    ToolTip="Épingler l’onglet">
+                <TextBlock x:Name="PinIcon"
+                           Text="📌"
+                           FontSize="12"
+                           Foreground="#777"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"/>
+            </Button>
+            
+            
+
+            <!-- CLOSE -->
+            <Button x:Name="CloseBtn"
+                    Grid.Column="3"
+                    Width="18"
+                    Height="18"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Foreground="#AAAAAA"
+                    Cursor="Hand"
+                    ToolTip="Fermer l’onglet"
+                    Content="✕">
+
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Foreground" Value="#AAAAAA"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="Root"
+                                            Background="Transparent"
+                                            CornerRadius="9">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"/>
+                                    </Border>
+
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Root"
+                                                    Property="Background"
+                                                    Value="#402020"/>
+                                            <Setter Property="Foreground"
+                                                    Value="#FF6666"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+        </Grid>
+    </Border>
+</UserControl>
