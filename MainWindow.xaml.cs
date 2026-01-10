@@ -1,10 +1,13 @@
-﻿using Microsoft.Web.WebView2.Wpf;
+﻿using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Wpf;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.controles;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -17,51 +20,212 @@ namespace MyHomelabBrowser
 {
     public partial class MainWindow : Window
     {
+        // ---------------------------
+        // Settings
+        // ---------------------------
+        readonly SettingsService _settings;
 
-        public MainWindow()
-        {
-
-            InitializeComponent();
-
-            _suspendTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(30)
-            };
-            _suspendTimer.Tick += (_, _) => AutoSuspendTabs();
-            _suspendTimer.Start();
-            _settings = new SettingsService();
-            _settings.SettingsChanged += ApplySettings;
-
-
-
-            CreateTab(_settings.Settings.StartPage);
-        }
-
+        // ---------------------------
+        // Omnibox
+        // ---------------------------
         bool _addressBarEditing;
-
-        readonly SettingsService _settings = new();
-
-        void SyncAddressBarWithTab(TabItem tab)
-        {
-            if (tab?.Tag is WebTabContent webTab &&
-                webTab.Web?.Source != null)
-            {
-                AddressBar.Text = webTab.Web.Source.AbsoluteUri;
-            }
-            else
-            {
-                AddressBar.Text = string.Empty;
-            }
-        }
-
+        private bool _addressBarSelectAllPending;
+        bool _navigatingFromHistory;
 
         // ---------------------------
         // Dock indicator + docking mode
         // ---------------------------
         public bool IsDockIndicatorVisible => DockIndicator.Visibility == Visibility.Visible;
-
         bool _isDocking;
 
+        // ---------------------------
+        // Suspension
+        // ---------------------------
+        DispatcherTimer _suspendTimer;
+        TimeSpan _SuspendDelay = TimeSpan.FromMinutes(5);
+
+        // ---------------------------
+        // History / Favorites (persisted)
+        // ---------------------------
+        readonly List<HistoryEntry> _history = new();
+        readonly List<FavoriteItem> _favorites = new();
+        CoreWebView2Environment? _privateEnvironment;
+        CoreWebView2Environment? _normalEnvironment;
+
+        string _lastHistoryUrl = "";
+        DateTime _lastHistoryAt = DateTime.MinValue;
+
+        string AppDataDir =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MyHomelabBrowser");
+
+        string HistoryPath => Path.Combine(AppDataDir, "history.json");
+        string FavoritesPath => Path.Combine(AppDataDir, "favorites.json");
+
+        static readonly JsonSerializerOptions JsonOpts = new()
+        {
+            WriteIndented = true,
+            PropertyNameCaseInsensitive = true
+        };
+
+        public MainWindow()
+        {
+            InitializeComponent();
+
+            // timers + settings
+            _suspendTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+            _suspendTimer.Tick += (_, _) => AutoSuspendTabs();
+            _suspendTimer.Start();
+
+            _settings = new SettingsService();
+            _settings.SettingsChanged += ApplySettings;
+            PreviewMouseDown += OnGlobalMouseDown;
+
+            // load persisted data (safe)
+            LoadHistory();
+            LoadFavorites();
+
+            // initial UI refresh (safe even if XAML not ready yet)
+            RefreshFavoritesBar();
+            UpdateFavoriteButton();
+
+
+
+            // start page
+            CreateTab(_settings.Settings.StartPage);
+        }
+
+        // ---------------------------
+        // Settings apply
+        // ---------------------------
+        void ApplySettings(BrowserSettings s)
+        {
+            _suspendTimer.IsEnabled = s.EnableSuspension;
+            _SuspendDelay = TimeSpan.FromMinutes(s.SuspendDelayMinutes);
+
+            RefreshCommandSuggestions();
+        }
+        async Task InitPrivateWebViewAsync(WebView2 web, BrowserTabHeader header, TabItem tab, string url)
+        {
+            try
+            {
+                await InitWebViewEnvironmentsAsync();
+
+                // Important : EnsureCoreWebView2Async peut être long -> on l'attend ici sans bloquer le clic
+                await web.EnsureCoreWebView2Async(_privateEnvironment);
+
+                // events privés
+                web.SourceChanged += (_, _) => Dispatcher.Invoke(UpdateAddressBarFromTab);
+
+                web.NavigationCompleted += (_, _) =>
+                {
+                    Dispatcher.Invoke(UpdateAddressBarFromTab);
+                    UpdateFavoriteButton();
+
+                    if (web.CoreWebView2 != null)
+                    {
+                        header.SetTitle(web.CoreWebView2.DocumentTitle);
+
+                        if (!string.IsNullOrEmpty(web.CoreWebView2.FaviconUri))
+                            header.SetIcon(new BitmapImage(new Uri(web.CoreWebView2.FaviconUri)));
+                    }
+
+                    AttachPreview(tab, web);
+                };
+
+                web.Source = new Uri(url);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString(), "Erreur onglet privé", MessageBoxButton.OK, MessageBoxImage.Error);
+
+                // optionnel : fermer l'onglet privé si init KO
+                Dispatcher.Invoke(() =>
+                {
+                    Tabs.Items.Remove(tab);
+                    if (Tabs.Items.Count == 0) Close();
+                });
+            }
+        }
+
+        async Task InitWebViewEnvironmentsAsync()
+        {
+            if (_privateEnvironment != null && _normalEnvironment != null)
+                return;
+
+            var baseDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "MyHomelabBrowser"
+            );
+
+            _normalEnvironment = await CoreWebView2Environment.CreateAsync(
+                userDataFolder: Path.Combine(baseDir, "Default")
+            );
+
+            _privateEnvironment = await CoreWebView2Environment.CreateAsync(
+                userDataFolder: Path.Combine(baseDir, "Private")
+            );
+        }
+
+
+        // ---------------------------
+        // Address bar sync
+        // ---------------------------
+        void SyncAddressBarWithTab(TabItem tab)
+        {
+            if (tab?.Tag is WebTabContent webTab && webTab.Web?.Source != null)
+                AddressBar.Text = webTab.Web.Source.AbsoluteUri;
+            else
+                AddressBar.Text = string.Empty;
+
+            UpdateFavoriteButton();
+        }
+        static T? FindParent<T>(DependencyObject child) where T : DependencyObject
+        {
+            while (child != null)
+            {
+                if (child is T t)
+                    return t;
+
+                child = VisualTreeHelper.GetParent(child);
+            }
+            return null;
+        }
+
+        void OnGlobalMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            // NE PAS intercepter les clics sur les boutons
+            if (e.OriginalSource is DependencyObject d &&
+                FindParent<Button>(d) != null)
+                return;
+
+            if (!AddressBar.IsKeyboardFocusWithin &&
+                !CommandSuggestionsPopup.IsMouseOver)
+            {
+                HideCommandSuggestions();
+            }
+        }
+
+
+        void UpdateAddressBarFromTab()
+        {
+            if (_addressBarEditing)
+                return;
+
+            if (Tabs.SelectedItem is not TabItem tab)
+                return;
+
+            if (tab.Tag is WebTabContent webTab)
+            {
+                var uri = webTab.Web.Source;
+                AddressBar.Text = uri?.ToString() ?? "";
+            }
+
+            UpdateFavoriteButton();
+        }
+
+        // ---------------------------
+        // Dock indicator
+        // ---------------------------
         public void BeginDockingMode() => _isDocking = true;
 
         public void EndDockingMode()
@@ -74,27 +238,10 @@ namespace MyHomelabBrowser
         public void HideDockIndicator() => DockIndicator.Visibility = Visibility.Collapsed;
 
         // ---------------------------
-        // Suspension
-        // ---------------------------
-        DispatcherTimer _suspendTimer;
-        TimeSpan _SuspendDelay = TimeSpan.FromMinutes(5);
-
-        // ---------------------------
         // Tabs / WebHost
         // ---------------------------
-        void ApplySettings(BrowserSettings s)
-        {
-            // suspension
-            _suspendTimer.IsEnabled = s.EnableSuspension;
-            _SuspendDelay = TimeSpan.FromMinutes(s.SuspendDelayMinutes);
-
-        }
-
-
-
         void OpenSettings()
         {
-            // Si déjà ouvert -> sélectionner
             foreach (TabItem t in Tabs.Items)
             {
                 if (t.Tag is ViewTabContent)
@@ -106,6 +253,7 @@ namespace MyHomelabBrowser
             }
 
             var view = new SettingsView(_settings);
+            view.OpenHistoryRequested += OpenHistory;
 
             var header = new BrowserTabHeader();
             header.SetTitle("Paramètres");
@@ -122,28 +270,11 @@ namespace MyHomelabBrowser
             Tabs.SelectedItem = tab;
             SyncWebHostWithSelection();
         }
-        void UpdateAddressBarFromTab()
-        {
-            if (_addressBarEditing)
-                return;
-
-            if (Tabs.SelectedItem is not TabItem tab)
-                return;
-
-            if (tab.Tag is WebTabContent webTab)
-            {
-                var uri = webTab.Web.Source;
-                AddressBar.Text = uri?.ToString() ?? "";
-            }
-        }
 
         void CreateTab(string url)
         {
-            
-            var web = new WebView2
-            {
-                Source = new Uri(url)
-            };
+            var web = new WebView2 { Source = new Uri(url) };
+
             var header = new BrowserTabHeader();
             header.SetTitle("Nouvel onglet");
 
@@ -154,27 +285,28 @@ namespace MyHomelabBrowser
                 IsSuspended = false,
                 LastActivated = DateTime.Now
             };
-            web.SourceChanged += (_, _) =>
-            {
-                Dispatcher.Invoke(UpdateAddressBarFromTab);
-            };
+
+            web.SourceChanged += (_, _) => Dispatcher.Invoke(UpdateAddressBarFromTab);
+
             var tab = new TabItem
             {
                 Header = header,
                 Tag = content
             };
+
+            // 1) addressbar + history + fav update
             web.NavigationCompleted += (_, _) =>
             {
                 Dispatcher.Invoke(UpdateAddressBarFromTab);
+
                 if (Tabs.SelectedItem == tab && web.Source != null)
-                {
                     AddressBar.Text = web.Source.AbsoluteUri;
-                }
+
+                if (web.Source != null)
+                    AddHistoryEntry(web);
+
+                UpdateFavoriteButton();
             };
-
-            
-
-            
 
             header.CloseRequested += () => CloseTab(tab);
 
@@ -193,6 +325,7 @@ namespace MyHomelabBrowser
 
             header.ReorderRequested += dir => ReorderTab(tab, dir);
 
+            // 2) title / icon / preview
             web.NavigationCompleted += (_, _) =>
             {
                 if (web.CoreWebView2 != null)
@@ -210,7 +343,509 @@ namespace MyHomelabBrowser
             Tabs.SelectedItem = tab;
             SyncWebHostWithSelection();
         }
+        private void NewPrivateTab_Click(object sender, RoutedEventArgs e)
+        {
+            // on ne bloque jamais l'UI sur EnsureCoreWebView2Async
+            CreatePrivateTab(GetNewTabUrl());
+        }
 
+
+        void CreatePrivateTab(string url)
+        {
+            var web = new WebView2(); // pas de Source ici, pas d'Ensure ici (on ne bloque pas)
+
+            var header = new BrowserTabHeader();
+            header.SetTitle("Privé");
+            header.SetPrivate(true);
+
+            var content = new WebTabContent
+            {
+                Web = web,
+                IsPrivate = true,
+                IsPinned = false,
+                IsSuspended = false,
+                LastActivated = DateTime.Now
+            };
+
+            var tab = new TabItem
+            {
+                Header = header,
+                Tag = content
+            };
+
+            header.CloseRequested += () => CloseTab(tab);
+
+            header.DetachRequested += () =>
+            {
+                if (_isDocking) return;
+                DetachTab(tab);
+            };
+
+            Tabs.Items.Add(tab);
+            Tabs.SelectedItem = tab;
+            SyncWebHostWithSelection();
+
+            // init async après coup (sans bloquer)
+            _ = InitPrivateWebViewAsync(web, header, tab, url);
+        }
+
+
+
+        void AnimatePrivateTransition()
+        {
+            var anim = new DoubleAnimation
+            {
+                From = 0.85,
+                To = 1,
+                Duration = TimeSpan.FromMilliseconds(180),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+
+            this.BeginAnimation(OpacityProperty, anim);
+        }
+
+        void SyncWebHostWithSelection()
+        {
+            if (Tabs.SelectedItem is not TabItem tab)
+            {
+                WebHost.Content = null;
+                PrivateIndicator.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            if (tab.Tag is WebTabContent webTab)
+            {
+                // indicateur texte
+                PrivateIndicator.Visibility =
+                    webTab.IsPrivate ? Visibility.Visible : Visibility.Collapsed;
+                ApplyPrivateTheme(webTab.IsPrivate);
+                AnimatePrivateTransition();
+                // UI barre d’adresse
+                AddressBar.Background = webTab.IsPrivate
+                    ? new SolidColorBrush(Color.FromRgb(70, 40, 90))   // privé
+                    : new SolidColorBrush(Color.FromRgb(72, 68, 68)); // normal
+
+                webTab.LastActivated = DateTime.Now;
+
+                WebHost.Content = webTab.IsSuspended
+                    ? CreateSuspendedPlaceholder(tab, webTab)
+                    : webTab.Web;
+            }
+            else if (tab.Tag is ViewTabContent viewTab)
+            {
+                PrivateIndicator.Visibility = Visibility.Collapsed;
+                ApplyPrivateTheme(false);
+                AnimatePrivateTransition();
+                AddressBar.Background = new SolidColorBrush(Color.FromRgb(72, 68, 68));
+                WebHost.Content = viewTab.View;
+                UpdateAddressBarFromTab();
+            }
+            else
+            {
+                WebHost.Content = null;
+                PrivateIndicator.Visibility = Visibility.Collapsed;
+            }
+
+            UpdateFavoriteButton();
+        }
+
+
+
+        private void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (Tabs.SelectedItem is TabItem tab)
+            {
+                SyncWebHostWithSelection();
+                SyncAddressBarWithTab(tab);
+            }
+        }
+
+        private void NewTab_Click(object sender, RoutedEventArgs e)
+            => CreateTab(GetNewTabUrl());
+
+        string GetNewTabUrl()
+        {
+            return _settings.Settings.NewTabPage?.Trim() is string url && url.Length > 0
+                ? url
+                : "about:blank";
+        }
+
+        // ---------------------------
+        // Favorites bar + star button (safe until XAML exists)
+        // ---------------------------
+        void RefreshFavoritesBar()
+        {
+            if (FavoritesBar == null) return;
+
+            FavoritesBar.Children.Clear();
+
+            // =====================
+            // Favoris racine
+            // =====================
+            foreach (var fav in _favorites.Where(f => f.Folder == null))
+            {
+                FavoritesBar.Children.Add(CreateFavoriteButton(fav));
+            }
+
+            // =====================
+            // Dossiers
+            // =====================
+            var folders = _favorites
+                .Where(f => !string.IsNullOrWhiteSpace(f.Folder))
+                .GroupBy(f => f.Folder!);
+
+            foreach (var folder in folders)
+            {
+                var menu = new Menu
+                {
+                    Background = Brushes.Transparent,
+                    Margin = new Thickness(4, 0, 4, 0)
+                };
+
+                // 📁 Header du dossier
+                var headerPanel = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+
+                headerPanel.Children.Add(new TextBlock
+                {
+                    Text = "📁",
+                    Margin = new Thickness(0, 0, 6, 0)
+                });
+
+                headerPanel.Children.Add(new TextBlock
+                {
+                    Text = folder.Key,
+                    Foreground = Brushes.White
+                });
+
+                var root = new MenuItem
+                {
+                    Header = headerPanel,
+                    Padding = new Thickness(10, 4, 10, 4)
+                };
+
+                foreach (var fav in folder)
+                {
+                    // item avec favicon
+                    var itemPanel = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal
+                    };
+
+                    itemPanel.Children.Add(new Image
+                    {
+                        Width = 16,
+                        Height = 16,
+                        Margin = new Thickness(0, 0, 6, 0),
+                        Source = GetFavicon(fav.Url)
+                    });
+
+                    itemPanel.Children.Add(new TextBlock
+                    {
+                        Text = fav.Title
+                    });
+
+                    var item = new MenuItem
+                    {
+                        Header = itemPanel,
+                        Tag = fav
+                    };
+
+                    item.Click += (_, _) => Navigate(fav.Url);
+
+                    item.MouseRightButtonUp += (_, _) =>
+                    {
+                        var dlg = new EditFavoriteDialog(fav)
+                        {
+                            Owner = this
+                        };
+
+                        if (dlg.ShowDialog() == true)
+                        {
+                            if (dlg.Deleted)
+                                RemoveFavorite(fav);
+                            else
+                                SaveFavorites();
+
+                            RefreshFavoritesBar();
+                            UpdateFavoriteButton();
+                        }
+                    };
+
+
+                    root.Items.Add(item);
+                }
+
+                menu.Items.Add(root);
+                FavoritesBar.Children.Add(menu);
+            }
+        }
+
+        BitmapImage GetFavicon(string url)
+        {
+            try
+            {
+                var uri = new Uri(url);
+                var faviconUrl = $"https://www.google.com/s2/favicons?domain={uri.Host}&sz=32";
+
+                return new BitmapImage(new Uri(faviconUrl));
+            }
+            catch
+            {
+                return null!;
+            }
+        }
+
+        Button CreateFavoriteButton(FavoriteItem fav)
+        {
+            var panel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            var icon = new Image
+            {
+                Width = 16,
+                Height = 16,
+                Margin = new Thickness(0, 0, 6, 0),
+                Source = GetFavicon(fav.Url)
+            };
+
+            var text = new TextBlock
+            {
+                Text = fav.Title,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = Brushes.White
+            };
+
+            panel.Children.Add(icon);
+            panel.Children.Add(text);
+
+            var btn = new Button
+            {
+                Content = panel,
+                Tag = fav,
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin = new Thickness(4, 0, 4, 0),
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0)
+            };
+
+            btn.Click += (_, _) => Navigate(fav.Url);
+
+            btn.MouseRightButtonUp += (_, _) =>
+            {
+                var dlg = new EditFavoriteDialog(fav)
+                {
+                    Owner = this
+                };
+
+                if (dlg.ShowDialog() == true)
+                {
+                    if (dlg.Deleted)
+                        RemoveFavorite(fav);
+                    else
+                        SaveFavorites();
+
+                    RefreshFavoritesBar();
+                    UpdateFavoriteButton();
+                }
+            };
+
+
+            return btn;
+        }
+
+
+
+        void UpdateFavoriteButton()
+        {
+            if (FavoriteButton == null) return;
+
+            if (Tabs.SelectedItem is not TabItem tab ||
+                tab.Tag is not WebTabContent web ||
+                web.Web.Source == null)
+            {
+                FavoriteButton.Foreground = Brushes.Gray;
+                return;
+            }
+
+            bool isFav = _favorites.Any(f => string.Equals(f.Url, web.Web.Source.AbsoluteUri, StringComparison.OrdinalIgnoreCase));
+            FavoriteButton.Foreground = isFav ? Brushes.Gold : Brushes.Gray;
+        }
+
+        private void ToggleFavorite_Click(object sender, RoutedEventArgs e)
+        {
+            if (Tabs.SelectedItem is not TabItem tab ||
+                tab.Tag is not WebTabContent web ||
+                web.Web.Source == null)
+                return;
+
+            var url = web.Web.Source.AbsoluteUri;
+            var existing = _favorites.FirstOrDefault(f => string.Equals(f.Url, url, StringComparison.OrdinalIgnoreCase));
+
+            if (existing != null)
+            {
+                RemoveFavorite(existing);
+                return;
+            }
+
+            AddFavorite(new FavoriteItem
+            {
+                Url = url,
+                Title = web.Web.CoreWebView2?.DocumentTitle ?? url,
+                // Folder = null par défaut (racine)
+            });
+        }
+
+        void AddFavorite(FavoriteItem fav)
+        {
+            // éviter doublons
+            if (_favorites.Any(f => string.Equals(f.Url, fav.Url, StringComparison.OrdinalIgnoreCase)))
+                return;
+
+            _favorites.Add(fav);
+            SaveFavorites();
+
+            RefreshFavoritesBar();
+            UpdateFavoriteButton();
+        }
+
+        void RemoveFavorite(FavoriteItem fav)
+        {
+            _favorites.Remove(fav);
+            SaveFavorites();
+
+            RefreshFavoritesBar();
+            UpdateFavoriteButton();
+        }
+
+        // ---------------------------
+        // History
+        // ---------------------------
+        void AddHistoryEntry(WebView2 web)
+        {
+            if (Tabs.SelectedItem is TabItem tab &&
+        tab.Tag is WebTabContent state &&
+        state.IsPrivate)
+                return;
+
+            // 🚫 navigation issue de l’historique → ne pas réenregistrer
+            if (_navigatingFromHistory)
+            {
+                _navigatingFromHistory = false;
+                return;
+            }
+
+            if (web.Source == null) return;
+
+            string url = web.Source.AbsoluteUri;
+            var now = DateTime.Now;
+
+            // anti-spam: même URL, très proche dans le temps
+            if (string.Equals(url, _lastHistoryUrl, StringComparison.OrdinalIgnoreCase) &&
+                (now - _lastHistoryAt) < TimeSpan.FromSeconds(3))
+                return;
+
+            _lastHistoryUrl = url;
+            _lastHistoryAt = now;
+
+            _history.Add(new HistoryEntry
+            {
+                Title = web.CoreWebView2?.DocumentTitle ?? web.Source.Host,
+                Url = url,
+                VisitedAt = now
+            });
+
+            // limiter taille (évite gonflement infini)
+            const int max = 5000;
+            if (_history.Count > max)
+                _history.RemoveRange(0, _history.Count - max);
+
+            SaveHistory();
+        }
+
+
+        // ---------------------------
+        // Persist (JSON)
+        // ---------------------------
+        void EnsureAppDataDir()
+        {
+            if (!Directory.Exists(AppDataDir))
+                Directory.CreateDirectory(AppDataDir);
+        }
+
+        void LoadHistory()
+        {
+            try
+            {
+                EnsureAppDataDir();
+                if (!File.Exists(HistoryPath)) return;
+
+                var json = File.ReadAllText(HistoryPath);
+                var items = JsonSerializer.Deserialize<List<HistoryEntry>>(json, JsonOpts);
+                _history.Clear();
+                if (items != null) _history.AddRange(items);
+            }
+            catch
+            {
+                // volontairement silencieux: pas de crash au démarrage
+                _history.Clear();
+            }
+        }
+
+        void SaveHistory()
+        {
+            try
+            {
+                EnsureAppDataDir();
+                var json = JsonSerializer.Serialize(_history, JsonOpts);
+                File.WriteAllText(HistoryPath, json);
+            }
+            catch
+            {
+                // silencieux: pas de crash pendant navigation
+            }
+        }
+
+        void LoadFavorites()
+        {
+            try
+            {
+                EnsureAppDataDir();
+                if (!File.Exists(FavoritesPath)) return;
+
+                var json = File.ReadAllText(FavoritesPath);
+                var items = JsonSerializer.Deserialize<List<FavoriteItem>>(json, JsonOpts);
+                _favorites.Clear();
+                if (items != null) _favorites.AddRange(items);
+            }
+            catch
+            {
+                _favorites.Clear();
+            }
+        }
+
+        void SaveFavorites()
+        {
+            try
+            {
+                EnsureAppDataDir();
+                var json = JsonSerializer.Serialize(_favorites, JsonOpts);
+                File.WriteAllText(FavoritesPath, json);
+            }
+            catch
+            {
+            }
+        }
+
+        // ---------------------------
+        // Reorder / pin
+        // ---------------------------
         void ReorderTab(TabItem tab, int direction)
         {
             int index = Tabs.Items.IndexOf(tab);
@@ -220,12 +855,10 @@ namespace MyHomelabBrowser
             if (newIndex < 0 || newIndex >= Tabs.Items.Count)
                 return;
 
-            // bloquer si on essaie de passer "devant" un pinned
             if (Tabs.Items[newIndex] is TabItem other &&
                 other.Tag is WebTabContent s && s.IsPinned)
                 return;
 
-            // animer (optionnel)
             double offset = direction * 160;
 
             if (tab.Header is BrowserTabHeader moving)
@@ -273,6 +906,10 @@ namespace MyHomelabBrowser
 
             MovePinnedTabsToFront();
         }
+
+        // ---------------------------
+        // Suspension
+        // ---------------------------
         void SuspendTab(TabItem tab, WebTabContent state)
         {
             if (state.IsSuspended)
@@ -280,7 +917,6 @@ namespace MyHomelabBrowser
 
             bool wasSelected = Equals(Tabs.SelectedItem, tab);
 
-            // 🔁 si onglet actif → basculer AVANT suspension
             if (wasSelected)
                 SelectFallbackTab(tab);
 
@@ -289,11 +925,9 @@ namespace MyHomelabBrowser
             if (tab.Header is BrowserTabHeader header)
                 header.ShowSuspended(true);
 
-            // 🔑 resync seulement si la sélection a changé
             if (!wasSelected || !Equals(Tabs.SelectedItem, tab))
                 SyncWebHostWithSelection();
         }
-
 
         UIElement CreateSuspendedPlaceholder(TabItem tab, WebTabContent state)
         {
@@ -403,56 +1037,9 @@ namespace MyHomelabBrowser
             Tabs.SelectedItem = null;
         }
 
-        private void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (Tabs.SelectedItem is TabItem tab)
-            {
-                SyncWebHostWithSelection();   
-                SyncAddressBarWithTab(tab);   
-            }
-        }
-
-
-        void SyncWebHostWithSelection()
-        {
-            if (Tabs.SelectedItem is not TabItem tab)
-            {
-                WebHost.Content = null;
-                return;
-            }
-
-            switch (tab.Tag)
-            {
-                case WebTabContent webTab:
-                    webTab.LastActivated = DateTime.Now;
-
-                    if (webTab.IsSuspended)
-                        WebHost.Content = CreateSuspendedPlaceholder(tab, webTab);
-                    else
-                        WebHost.Content = webTab.Web;
-
-                    break;
-
-                case ViewTabContent viewTab:
-                    WebHost.Content = viewTab.View;
-                    UpdateAddressBarFromTab();
-
-                    break;
-
-                default:
-                    WebHost.Content = null;
-                    break;
-            }
-        }
-
         // ---------------------------
         // Navigation / Omnibox
         // ---------------------------
-
-        private void NewTab_Click(object sender, RoutedEventArgs e)
-            => CreateTab(GetNewTabUrl());
-
-
         private void AddressBar_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key != Key.Enter) return;
@@ -461,15 +1048,18 @@ namespace MyHomelabBrowser
 
         void NavigateOrSearch(string input)
         {
+            
             if (!input.StartsWith("http", StringComparison.OrdinalIgnoreCase) &&
                 !input.Contains("."))
             {
-                Navigate($"https://google.fr/?q={Uri.EscapeDataString(input)}");
+                Navigate($"https://www.google.com/search?q={Uri.EscapeDataString(input)}");
                 return;
             }
 
             Navigate(input);
         }
+
+
         IEnumerable<CommandSetting> GetEnabledCommands()
         {
             if (!_settings.Settings.EnableCommands)
@@ -479,35 +1069,76 @@ namespace MyHomelabBrowser
                 .Where(c => c.Enabled)
                 .OrderBy(c => c.Key);
         }
+
         void ShowCommandSuggestions()
         {
             if (CommandList == null)
                 return;
 
-            CommandList.Visibility = Visibility.Visible;
+            if (CommandSuggestionsPopup != null)
+                CommandSuggestionsPopup.IsOpen = true;
 
-            // plus tard : filtrage commandes / historique ici
+            var text = AddressBar.Text?.Trim() ?? "";
+
+            var commands = _settings.Settings.Commands
+                .Where(c => c.Enabled && c.Key.StartsWith(text.TrimStart(':')))
+                .Select(c => new { Type = "cmd", c.Key, c.Description });
+
+            var history = _history
+                .Where(h => h.Title.Contains(text, StringComparison.OrdinalIgnoreCase)
+                         || h.Url.Contains(text, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(h => h.VisitedAt)
+                .Take(5)
+                .Select(h => new { Type = "history", Entry = h });
+
+            CommandList.ItemsSource = commands.Cast<object>()
+                .Concat(history)
+                .ToList();
+
+        }
+
+        void HideCommandSuggestions()
+        {
+            if (CommandSuggestionsPopup != null)
+                CommandSuggestionsPopup.IsOpen = false;
         }
 
         private void AddressBar_GotFocus(object sender, RoutedEventArgs e)
         {
-            CommandList.ItemsSource =
-                _settings.Settings.Commands
-                    .Where(c => c.Enabled)
-                    .ToList();
-
-            CommandList.Visibility = Visibility.Visible;
+            RefreshCommandSuggestions();
+            ShowCommandSuggestions();
+        }
+        private void AddressBar_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            RefreshOmniboxSuggestions(AddressBar.Text);
+            ShowCommandSuggestions();
         }
 
         private void CommandSuggestions_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (sender is not ListBox list || list.SelectedItem is not string cmd)
+            if (sender is not ListBox list || list.SelectedItem == null)
                 return;
 
-            AddressBar.Text = ":" + cmd;
-            AddressBar.CaretIndex = AddressBar.Text.Length;
-            list.SelectedItem = null;
+            // ---- COMMANDE ----
+            if (list.SelectedItem is CommandSetting cmd)
+            {
+                AddressBar.Text = ":" + cmd.Key;
+                AddressBar.CaretIndex = AddressBar.Text.Length;
+                list.SelectedItem = null;
+                AddressBar.Focus();
+                return;
+            }
+
+            // ---- HISTORIQUE ----
+            if (list.SelectedItem is HistoryEntry h)
+            {
+                Navigate(h.Url, fromHistory: true);
+                list.SelectedItem = null;
+                HideCommandSuggestions();
+                return;
+            }
         }
+
 
         void ExecuteCommand(string cmd)
         {
@@ -520,7 +1151,6 @@ namespace MyHomelabBrowser
             {
                 case "new":
                     CreateTab(GetNewTabUrl());
-               
                     break;
 
                 case "close":
@@ -555,16 +1185,100 @@ namespace MyHomelabBrowser
                     }
                     break;
 
+                case "history":
+                    OpenHistory();
+                    break;
+
                 case "suspend inactive":
                     AutoSuspendTabs();
                     break;
             }
         }
+        void RefreshOmniboxSuggestions(string input)
+        {
+            if (CommandList == null) return;
+
+            input = input.Trim();
+
+            if (input.StartsWith(":"))
+            {
+                CommandList.ItemsSource = GetEnabledCommands();
+                return;
+            }
+
+            if (input.StartsWith("*"))
+            {
+                CommandList.ItemsSource = _favorites;
+                return;
+            }
+
+            if (input.StartsWith("@"))
+            {
+                CommandList.ItemsSource = Tabs.Items
+                    .OfType<TabItem>()
+                    .Select(t => t.Header)
+                    .OfType<BrowserTabHeader>()
+                    .Select(h => h.Title.Text)
+                    .ToList();
+                return;
+            }
+
+            // historique par défaut
+            CommandList.ItemsSource = _history
+                .OrderByDescending(h => h.VisitedAt)
+                .Take(50)
+                .ToList();
+        }
+
+        void RemoveHistoryEntry(HistoryEntry entry)
+        {
+            _history.Remove(entry);
+            SaveHistory();
+        }
+
+        private void OpenHistory_Click(object sender, RoutedEventArgs e)
+        {
+            OpenHistory();
+        }
+
+        void OpenHistory()
+        {
+            // éviter doublon
+            foreach (TabItem t in Tabs.Items)
+            {
+                if (t.Tag is ViewTabContent v &&
+                    v.View is HistoryView)
+                {
+                    Tabs.SelectedItem = t;
+                    SyncWebHostWithSelection();
+                    return;
+                }
+            }
+
+            var view = new HistoryView(_history, Navigate, RemoveHistoryEntry);
+
+
+            var header = new BrowserTabHeader();
+            header.SetTitle("Historique");
+
+            var tab = new TabItem
+            {
+                Header = header,
+                Tag = new ViewTabContent { View = view }
+            };
+
+            header.CloseRequested += () => CloseTab(tab);
+
+            Tabs.Items.Add(tab);
+            Tabs.SelectedItem = tab;
+            SyncWebHostWithSelection();
+        }
+
+
         bool IsCommandEnabled(string key)
         {
             var settings = _settings.Settings;
 
-            // commandes globalement désactivées
             if (!settings.EnableCommands)
                 return false;
 
@@ -623,14 +1337,17 @@ namespace MyHomelabBrowser
             NavigateOrSearch(input);
         }
 
-        void Navigate(string url)
+        void Navigate(string url, bool fromHistory = false)
         {
             if (!url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 url = "https://" + url;
 
+            _navigatingFromHistory = fromHistory;
+
             if (Tabs.SelectedItem is TabItem tab && tab.Tag is WebTabContent state)
                 state.Web.Source = new Uri(url);
         }
+
 
         // ---------------------------
         // Sidebar
@@ -652,11 +1369,26 @@ namespace MyHomelabBrowser
             ToggleSidebarBtn.Content = sidebarOpen ? "❮" : "❯";
             sidebarOpen = !sidebarOpen;
         }
+
         private void AddressBar_LostFocus(object sender, RoutedEventArgs e)
         {
-            if (!CommandList.IsKeyboardFocusWithin)
-                CommandList.Visibility = Visibility.Collapsed;
+            if (CommandList != null && CommandList.IsKeyboardFocusWithin)
+                return;
+
+            HideCommandSuggestions();
         }
+
+        void RefreshCommandSuggestions()
+        {
+            if (CommandList == null)
+                return;
+
+            CommandList.ItemsSource =
+                _settings.Settings.Commands
+                    .Where(c => c.Enabled)
+                    .ToList();
+        }
+
         private void CommandSuggestions_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter && CommandList.SelectedItem != null)
@@ -664,7 +1396,7 @@ namespace MyHomelabBrowser
                 if (CommandList.SelectedItem is CommandSetting cmd)
                 {
                     ExecuteCommand(cmd.Key);
-                    CommandList.Visibility = Visibility.Collapsed;
+                    HideCommandSuggestions();
                     AddressBar.Focus();
                     e.Handled = true;
                 }
@@ -672,31 +1404,33 @@ namespace MyHomelabBrowser
 
             if (e.Key == Key.Escape)
             {
-                CommandList.Visibility = Visibility.Collapsed;
+                HideCommandSuggestions();
                 AddressBar.Focus();
                 e.Handled = true;
             }
         }
 
-        void HideCommandSuggestions()
-        {
-            if (CommandList == null)
-                return;
-
-            CommandList.Visibility = Visibility.Collapsed;
-        }
-
-        private bool _addressBarSelectAllPending;
-
         private void AddressBar_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (sender is not TextBox tb || tb.IsKeyboardFocusWithin)
+            if (sender is not TextBox tb)
                 return;
 
-            _addressBarSelectAllPending = true;
-            tb.Focus();
-            e.Handled = true;
+            // si le popup est ouvert et qu'on reclique dans la barre → fermer
+            if (CommandSuggestionsPopup?.IsOpen == true &&
+                !CommandSuggestionsPopup.IsMouseOver)
+            {
+                HideCommandSuggestions();
+                e.Handled = false;
+                return;
+            }
+
+            if (!tb.IsKeyboardFocusWithin)
+            {
+                tb.Focus();
+                e.Handled = true;
+            }
         }
+
 
         private void AddressBar_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
         {
@@ -761,7 +1495,6 @@ namespace MyHomelabBrowser
         // ---------------------------
         // Detach / Redock
         // ---------------------------
-
         void DetachTab(TabItem tab)
         {
             if (tab.Tag is not WebTabContent state)
@@ -796,12 +1529,27 @@ namespace MyHomelabBrowser
                 SyncWebHostWithSelection();
             }
         }
-        string GetNewTabUrl()
+
+
+        
+
+
+
+
+
+        void ApplyPrivateTheme(bool isPrivate)
         {
-            return _settings.Settings.NewTabPage?.Trim() is string url && url.Length > 0
-                ? url
-                : "about:blank";
+            Resources["FluentSurface"] =
+                isPrivate
+                    ? Resources["PrivateSurfaceBrush"]
+                    : Resources["NormalSurfaceBrush"];
+
+            AddressBar.Background =
+                isPrivate
+                    ? (Brush)Resources["PrivateAddressBrush"]
+                    : new SolidColorBrush(Color.FromRgb(72, 68, 68));
         }
+
 
         void RedockWebView(WebView2 web)
         {
@@ -875,6 +1623,7 @@ namespace MyHomelabBrowser
             public WebView2 Web { get; init; } = null!;
             public bool IsPinned { get; set; }
             public bool IsSuspended { get; set; }
+            public bool IsPrivate { get; set; }
             public DateTime LastActivated { get; set; } = DateTime.Now;
         }
 

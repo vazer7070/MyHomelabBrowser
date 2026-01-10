@@ -31,6 +31,11 @@ namespace MyHomelabBrowser.controles
             PinBtn.Click += (_, _) => PinRequested?.Invoke();
         }
 
+        public void SetPrivate(bool isPrivate)
+        {
+            SetTitle("🕶️ " + Title.Text);
+        }
+
         public void SetTitle(string title) => Title.Text = title;
         public void SetIcon(ImageSource icon) => Icon.Source = icon;
         bool _pinned;

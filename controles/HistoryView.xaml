@@ -1,0 +1,107 @@
+﻿<UserControl x:Class="MyHomelabBrowser.controles.HistoryView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource FluentBg}">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ===== HEADER ===== -->
+        <Grid Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBox x:Name="SearchBox"
+                     Height="36"
+                     Padding="12,0"
+                     VerticalContentAlignment="Center"
+                     Background="#2B2B2B"
+                     Foreground="White"
+                     BorderThickness="0"
+                     TextChanged="SearchBox_TextChanged"/>
+
+            <Button Grid.Column="1"
+                    Content="🧹 Tout effacer"
+                    Margin="12,0,0,0"
+                    Padding="14,6"
+                    Click="ClearAll_Click"/>
+        </Grid>
+
+        <!-- ===== LIST ===== -->
+        <ListView x:Name="HistoryList"
+                  Grid.Row="1"
+                  Background="Transparent"
+                  BorderThickness="0"
+                  SelectionMode="Single">
+
+            <!-- ===== GROUP HEADERS ===== -->
+            <ListView.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.HeaderTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Name}"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       Foreground="White"
+                                       Margin="0,16,0,6"/>
+                        </DataTemplate>
+                    </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+            </ListView.GroupStyle>
+
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="100"/>
+                            <ColumnDefinition Width="32"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- favicon -->
+                        <Image Width="18"
+                               Height="18"
+                               VerticalAlignment="Center"
+                               Source="{Binding Favicon}"/>
+
+                        <!-- title + url -->
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="{Binding Title}"
+                                       Foreground="White"
+                                       FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding Url}"
+                                       Foreground="#AAAAAA"
+                                       FontSize="12"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+
+                        <!-- date relative -->
+                        <TextBlock Grid.Column="2"
+                                   Text="{Binding RelativeDate}"
+                                   Foreground="#888888"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Right"/>
+
+                        <!-- delete -->
+                        <Button Grid.Column="3"
+                                Content="✕"
+                                Foreground="#FF6B6B"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                FontSize="14"
+                                Padding="4"
+                                Click="Delete_Click"/>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+
+        </ListView>
+    </Grid>
+</UserControl>

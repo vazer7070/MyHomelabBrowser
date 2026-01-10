@@ -12,6 +12,8 @@
             <!-- TAB BAR -->
             <RowDefinition Height="48"/>
             <!-- ADDRESS BAR -->
+            <RowDefinition Height="32"/>
+            <!-- FAVORITES BAR -->
             <RowDefinition Height="*"/>
             <!-- WEB -->
         </Grid.RowDefinitions>
@@ -22,7 +24,7 @@
         </Grid.ColumnDefinitions>
 
         <!-- =========================
-             TAB BAR (AU-DESSUS)
+             TAB BAR
              ========================= -->
         <Grid Grid.Row="0"
               Grid.ColumnSpan="2"
@@ -50,7 +52,6 @@
                     </ControlTemplate>
                 </TabControl.Template>
 
-                <!-- STYLE + ANIMATIONS -->
                 <TabControl.ItemContainerStyle>
                     <Style TargetType="TabItem">
                         <Setter Property="MinWidth" Value="160"/>
@@ -120,15 +121,61 @@
                 </TabControl.ItemContainerStyle>
             </TabControl>
 
-            <Button Grid.Column="1"
-                    Content="＋"
-                    Width="36"
-                    Height="32"
-                    Margin="6"
-                    Click="NewTab_Click"/>
+            <!-- + / PRIVATE BUTTONS + PRIVATE INDICATOR -->
+            <Grid Grid.Column="1"
+      Margin="6"
+      VerticalAlignment="Center">
+
+                <!-- BOUTONS (layout normal, inchangé) -->
+                <StackPanel Orientation="Horizontal"
+                VerticalAlignment="Center">
+
+                    <Button Content="＋"
+                Width="36"
+                Height="32"
+                Margin="0,0,4,0"
+                ToolTip="Nouvel onglet"
+                Click="NewTab_Click"/>
+
+                    <Button Content="🕶️"
+                Width="36"
+                Height="32"
+                ToolTip="Nouvel onglet privé"
+                Click="NewPrivateTab_Click"/>
+                </StackPanel>
+
+                <!-- INDICATEUR PRIVÉ (OVERLAY ABSOLU) -->
+                <Border x:Name="PrivateIndicator"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Center"
+            Margin="-150,0,0,0"
+            Height="28"
+            Padding="10,2"
+            Background="#402B1457"
+            CornerRadius="14"
+            Visibility="Collapsed"
+            IsHitTestVisible="False">
+
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="🕶️"
+                       Margin="0,0,6,0"
+                       Foreground="#C084FC"/>
+                        <TextBlock Text="Navigation privée"
+                       Foreground="#C084FC"
+                       FontWeight="SemiBold"
+                       FontSize="12"/>
+                    </StackPanel>
+                </Border>
+
+            </Grid>
+
+
+
         </Grid>
 
-        <!-- DOCK INDICATOR -->
+        <!-- =========================
+             DOCK INDICATOR
+             ========================= -->
         <Border x:Name="DockIndicator"
                 Grid.Row="0"
                 Grid.ColumnSpan="2"
@@ -142,83 +189,109 @@
                 Panel.ZIndex="200"/>
 
         <!-- =========================
-             ADDRESS BAR + COMMANDS
-             ========================= -->
+     ADDRESS BAR
+     ========================= -->
         <Grid Grid.Row="1"
-              Grid.ColumnSpan="2"
-              Height="48"
-              Background="{StaticResource FluentSurface}"
-              Panel.ZIndex="90">
+      Grid.ColumnSpan="2"
+      Height="48"
+      Background="{StaticResource FluentSurface}"
+      Panel.ZIndex="90">
 
-            <Grid>
-                <TextBox x:Name="AddressBar"
-                         Margin="10,6"
-                         Padding="12,5"
-                         FontSize="14"
-                         Background="#FF484444"
-                         Foreground="White"
+            <Grid Margin="10,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="36"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- ZONE ADRESSE -->
+                <Grid Grid.Column="0">
+
+                    <TextBox x:Name="AddressBar"
+                     Padding="12,5"
+                     FontSize="14"
+                     Background="#FF484444"
+                     Foreground="White"
+                     BorderThickness="0"
+                     KeyDown="AddressBar_KeyDown"
+                     PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown"
+                     GotKeyboardFocus="AddressBar_GotKeyboardFocus"
+                     GotFocus="AddressBar_GotFocus"
+                     LostFocus="AddressBar_LostFocus"/>
+
+                   
+                </Grid>
+
+                <!-- BOUTON FAVORI (ZONE DÉDIÉE, JAMAIS RECOUVERTE) -->
+                <Button x:Name="FavoriteButton"
+                Grid.Column="1"
+                Content="★"
+                Width="28"
+                Height="28"
+                Margin="4,0,0,0"
+                VerticalAlignment="Center"
+                Click="ToggleFavorite_Click"
+                Foreground="Gray"
+                Cursor="Hand"/>
+
+                <!-- COMMANDES / HISTORIQUE -->
+                <Popup x:Name="CommandSuggestionsPopup"
+               PlacementTarget="{Binding ElementName=AddressBar}"
+               Placement="Bottom"
+               StaysOpen="True"
+               AllowsTransparency="True"
+               Focusable="False"
+               PopupAnimation="Fade">
+
+                    <Border Margin="0,6,0,0"
+                    Background="#1E1E1E"
+                    BorderBrush="#444"
+                    BorderThickness="1"
+                    CornerRadius="12">
+
+                        <ListBox x:Name="CommandList"
+                         Background="Transparent"
                          BorderThickness="0"
-                         KeyDown="AddressBar_KeyDown"
-                         PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown"
-                         GotKeyboardFocus="AddressBar_GotKeyboardFocus"
-                         GotFocus="AddressBar_GotFocus"
-                         LostFocus="AddressBar_LostFocus"/>
+                         Foreground="White"
+                         FontSize="14"
+                         MaxHeight="260"
+                         SelectionChanged="CommandSuggestions_SelectionChanged"
+                         KeyDown="CommandSuggestions_KeyDown"/>
 
-                <!-- ✅ COMMAND SUGGESTIONS (RESTAURÉ) -->
-                <Border x:Name="CommandSuggestions"
-                        Margin="10,46,10,0"
-                        Background="#1E1E1E"
-                        BorderBrush="#444"
-                        BorderThickness="1"
-                        CornerRadius="12"
-                        Visibility="Collapsed"
-                        Panel.ZIndex="300"
-                        VerticalAlignment="Top">
-
-                    <ListBox x:Name="CommandList"
-                             Background="Transparent"
-                             BorderThickness="0"
-                             Foreground="White"
-                             FontSize="14"
-                             MaxHeight="260"
-                             SelectionChanged="CommandSuggestions_SelectionChanged"
-                             KeyDown="CommandSuggestions_KeyDown">
-
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Margin="6">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="140"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <TextBlock Text=":{Binding Key}"
-                                               FontWeight="SemiBold"/>
-
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding Description}"
-                                               Opacity="0.7"/>
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                </Border>
+                    </Border>
+                </Popup>
             </Grid>
         </Grid>
+
+
+
+        <!-- =========================
+             FAVORITES BAR
+             ========================= -->
+        <Border Grid.Row="2"
+                Grid.ColumnSpan="2"
+                Background="#1E1E1E"
+                BorderBrush="#2A2A2A"
+                BorderThickness="0,1,0,1">
+
+            <StackPanel x:Name="FavoritesBar"
+                        Orientation="Horizontal"
+                        Height="32"
+                        VerticalAlignment="Center"
+                        Margin="6,0"/>
+        </Border>
 
         <!-- =========================
              WEB
              ========================= -->
         <ContentControl x:Name="WebHost"
-                        Grid.Row="2"
+                        Grid.Row="3"
                         Grid.Column="0"
-                        Background="{StaticResource FluentBg}"
-                        Panel.ZIndex="0"/>
+                        Background="{StaticResource FluentBg}"/>
 
         <!-- =========================
              SIDEBAR
              ========================= -->
-        <Grid Grid.Row="2" Grid.Column="1" Panel.ZIndex="20">
+        <Grid Grid.Row="3" Grid.Column="1" Panel.ZIndex="20">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="24"/>
                 <ColumnDefinition Width="Auto"/>
@@ -236,10 +309,13 @@
                     Width="56"
                     Background="#1E1E1E">
                 <StackPanel Margin="0,48,0,0">
-                    <Button Content="⚙" Margin="6" Click="OpenSettings_Click"/>
+                    <Button Content="⚙" Margin="10" Click="OpenSettings_Click" Cursor="Hand"/>
                     <Button Content="🌐" Margin="6"/>
                     <Button Content="🔒" Margin="6"/>
-                    <Button Content="📜" Margin="6"/>
+                    <Button Content="📜"
+                            Margin="6"
+                            ToolTip="Historique"
+                            Click="OpenHistory_Click"/>
                 </StackPanel>
             </Border>
         </Grid>

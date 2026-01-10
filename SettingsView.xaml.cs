@@ -11,6 +11,8 @@ namespace MyHomelabBrowser
         readonly SettingsService _service;
         BrowserSettings _original;
         BrowserSettings _working;
+        public event Action? OpenHistoryRequested;
+
 
         public SettingsView(SettingsService service)
         {
@@ -22,6 +24,10 @@ namespace MyHomelabBrowser
             _working = _service.Settings.Clone();
 
             DataContext = _working;
+        }
+        private void OpenHistory_Click(object sender, RoutedEventArgs e)
+        {
+            OpenHistoryRequested?.Invoke();
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)

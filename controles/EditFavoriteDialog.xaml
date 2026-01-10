@@ -1,0 +1,122 @@
+﻿<Window x:Class="MyHomelabBrowser.controles.EditFavoriteDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="420"
+        Height="260"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <Border CornerRadius="12"
+            Background="#1E1E1E"
+            BorderBrush="#2A2A2A"
+            BorderThickness="1">
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="48"/>   <!-- HEADER -->
+                <RowDefinition Height="*"/>    <!-- CONTENT -->
+                <RowDefinition Height="56"/>   <!-- FOOTER -->
+            </Grid.RowDefinitions>
+
+            <!-- ================= HEADER ================= -->
+            <Grid Grid.Row="0"
+                  Background="#202020">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition Width="48"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Text="Modifier le favori"
+                           VerticalAlignment="Center"
+                           Margin="16,0"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="White"/>
+
+                <Button Grid.Column="1"
+                        Content="✕"
+                        Width="32"
+                        Height="32"
+                        Margin="8"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Foreground="#AAA"
+                        Click="Cancel_Click"/>
+            </Grid>
+
+            <!-- ================= CONTENT ================= -->
+            <StackPanel Grid.Row="1"
+                        Margin="16,12"
+                        VerticalAlignment="Top">
+
+                <TextBlock Text="Titre"
+                           Foreground="#B0B0B0"
+                           Margin="0,0,0,4"/>
+
+                <TextBox x:Name="TitleBox"
+                         Height="34"
+                         Padding="10,4"
+                         Background="#2A2A2A"
+                         Foreground="White"
+                         BorderThickness="0"
+                         Margin="0,0,0,16"/>
+
+                <TextBlock Text="Dossier (optionnel)"
+                           Foreground="#B0B0B0"
+                           Margin="0,0,0,4"/>
+
+                <TextBox x:Name="FolderBox"
+                         Height="34"
+                         Padding="10,4"
+                         Background="#2A2A2A"
+                         Foreground="White"
+                         BorderThickness="0"/>
+            </StackPanel>
+
+            <!-- ================= FOOTER ================= -->
+            <Grid Grid.Row="2"
+                  Background="#202020">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Danger -->
+                <Button Grid.Column="0"
+                        Content="Supprimer"
+                        Margin="16,-3,16,3"
+                        Padding="14,6"
+                        Foreground="#FF6B6B"
+                        Background="#332020"
+                        BorderThickness="0"
+                        Click="Delete_Click"/>
+
+                <!-- Cancel -->
+                <Button Grid.Column="2"
+                        Content="Annuler"
+                        Margin="0,-3,8,3"
+                        Padding="14,6"
+                        Background="#2A2A2A"
+                        Foreground="White"
+                        BorderThickness="0"
+                        Click="Cancel_Click"/>
+
+                <!-- OK -->
+                <Button Grid.Column="3"
+                        Content="OK"
+                        Margin="0,-4,16,4"
+                        Padding="16,6"
+                        Background="#3A7AFE"
+                        Foreground="White"
+                        BorderThickness="0"
+                        Click="Ok_Click"/>
+            </Grid>
+
+        </Grid>
+    </Border>
+</Window>
