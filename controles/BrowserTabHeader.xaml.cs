@@ -18,21 +18,21 @@ namespace MyHomelabBrowser.controles
     /// Logique d'interaction pour BrowserTabHeader.xaml
     /// </summary>
     public partial class BrowserTabHeader : UserControl
-{
+    {
         public event Action<int>? ReorderRequested;
         double _lastReorderX;
         public event Action CloseRequested;
         public event Action? PinRequested;
 
         public BrowserTabHeader()
-    {
-        InitializeComponent();
-        CloseBtn.Click += (_, _) => CloseRequested?.Invoke();
-        PinBtn.Click += (_, _) => PinRequested?.Invoke();
+        {
+            InitializeComponent();
+            CloseBtn.Click += (_, _) => CloseRequested?.Invoke();
+            PinBtn.Click += (_, _) => PinRequested?.Invoke();
         }
 
-    public void SetTitle(string title) => Title.Text = title;
-    public void SetIcon(ImageSource icon) => Icon.Source = icon;
+        public void SetTitle(string title) => Title.Text = title;
+        public void SetIcon(ImageSource icon) => Icon.Source = icon;
         bool _pinned;
         Point _dragStart;
         bool _dragging;

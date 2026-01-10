@@ -77,6 +77,26 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <Style x:Key="SettingsCard" TargetType="Border">
+        <Setter Property="Background" Value="#1E1E1E"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Padding" Value="20"/>
+        <Setter Property="Margin" Value="0,0,0,20"/>
+        <Setter Property="BorderBrush" Value="#2A2A2A"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+
+    <Style x:Key="SettingsTitle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="18"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="Margin" Value="0,0,0,12"/>
+    </Style>
+
+    <Style x:Key="SettingsLabel" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Foreground" Value="#CCCCCC"/>
+    </Style>
 
     <!-- =====================================================
          TABCONTROL (supprime le fond blanc)
@@ -153,5 +173,24 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <!-- =========================
+     SETTINGS PAGE STYLES
+     ========================= -->
+
+
+    <Style x:Key="SettingsSectionTitle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="18"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="Margin" Value="0,0,0,12"/>
+    </Style>
+
+    <Style x:Key="SettingsTextBox" TargetType="TextBox">
+        <Setter Property="Background" Value="#2B2B2B"/>
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="10,6"/>
+    </Style>
+
 
 </ResourceDictionary>

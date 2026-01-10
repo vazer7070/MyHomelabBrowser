@@ -1,7 +1,9 @@
 ﻿using Microsoft.Web.WebView2.Wpf;
+using MyHomelabBrowser.classes;
 using MyHomelabBrowser.controles;
 using System;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -15,47 +17,167 @@ namespace MyHomelabBrowser
 {
     public partial class MainWindow : Window
     {
+
         public MainWindow()
         {
+
             InitializeComponent();
-            CreateTab("https://google.com");
+
             _suspendTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(30)
             };
             _suspendTimer.Tick += (_, _) => AutoSuspendTabs();
             _suspendTimer.Start();
+            _settings = new SettingsService();
+            _settings.SettingsChanged += ApplySettings;
 
+
+
+            CreateTab(_settings.Settings.StartPage);
         }
 
-        public bool IsDockIndicatorVisible =>
-            DockIndicator.Visibility == Visibility.Visible;
+        bool _addressBarEditing;
+
+        readonly SettingsService _settings = new();
+
+        void SyncAddressBarWithTab(TabItem tab)
+        {
+            if (tab?.Tag is WebTabContent webTab &&
+                webTab.Web?.Source != null)
+            {
+                AddressBar.Text = webTab.Web.Source.AbsoluteUri;
+            }
+            else
+            {
+                AddressBar.Text = string.Empty;
+            }
+        }
+
+
+        // ---------------------------
+        // Dock indicator + docking mode
+        // ---------------------------
+        public bool IsDockIndicatorVisible => DockIndicator.Visibility == Visibility.Visible;
+
+        bool _isDocking;
+
+        public void BeginDockingMode() => _isDocking = true;
+
+        public void EndDockingMode()
+        {
+            _isDocking = false;
+            HideDockIndicator();
+        }
+
+        public void ShowDockIndicator() => DockIndicator.Visibility = Visibility.Visible;
+        public void HideDockIndicator() => DockIndicator.Visibility = Visibility.Collapsed;
+
+        // ---------------------------
+        // Suspension
+        // ---------------------------
         DispatcherTimer _suspendTimer;
-        readonly TimeSpan SuspendDelay = TimeSpan.FromMinutes(5);
+        TimeSpan _SuspendDelay = TimeSpan.FromMinutes(5);
 
         // ---------------------------
         // Tabs / WebHost
         // ---------------------------
-
-        void CreateTab(string url)
+        void ApplySettings(BrowserSettings s)
         {
-            var web = new WebView2
+            // suspension
+            _suspendTimer.IsEnabled = s.EnableSuspension;
+            _SuspendDelay = TimeSpan.FromMinutes(s.SuspendDelayMinutes);
+
+        }
+
+
+
+        void OpenSettings()
+        {
+            // Si déjà ouvert -> sélectionner
+            foreach (TabItem t in Tabs.Items)
             {
-                Source = new Uri(url)
-            };
+                if (t.Tag is ViewTabContent)
+                {
+                    Tabs.SelectedItem = t;
+                    SyncWebHostWithSelection();
+                    return;
+                }
+            }
+
+            var view = new SettingsView(_settings);
 
             var header = new BrowserTabHeader();
-            header.SetTitle("Nouvel onglet");
+            header.SetTitle("Paramètres");
 
             var tab = new TabItem
             {
                 Header = header,
-                Tag = new TabState { Web = web }
+                Tag = new ViewTabContent { View = view }
             };
 
             header.CloseRequested += () => CloseTab(tab);
 
+            Tabs.Items.Add(tab);
+            Tabs.SelectedItem = tab;
+            SyncWebHostWithSelection();
+        }
+        void UpdateAddressBarFromTab()
+        {
+            if (_addressBarEditing)
+                return;
+
+            if (Tabs.SelectedItem is not TabItem tab)
+                return;
+
+            if (tab.Tag is WebTabContent webTab)
+            {
+                var uri = webTab.Web.Source;
+                AddressBar.Text = uri?.ToString() ?? "";
+            }
+        }
+
+        void CreateTab(string url)
+        {
             
+            var web = new WebView2
+            {
+                Source = new Uri(url)
+            };
+            var header = new BrowserTabHeader();
+            header.SetTitle("Nouvel onglet");
+
+            var content = new WebTabContent
+            {
+                Web = web,
+                IsPinned = false,
+                IsSuspended = false,
+                LastActivated = DateTime.Now
+            };
+            web.SourceChanged += (_, _) =>
+            {
+                Dispatcher.Invoke(UpdateAddressBarFromTab);
+            };
+            var tab = new TabItem
+            {
+                Header = header,
+                Tag = content
+            };
+            web.NavigationCompleted += (_, _) =>
+            {
+                Dispatcher.Invoke(UpdateAddressBarFromTab);
+                if (Tabs.SelectedItem == tab && web.Source != null)
+                {
+                    AddressBar.Text = web.Source.AbsoluteUri;
+                }
+            };
+
+            
+
+            
+
+            header.CloseRequested += () => CloseTab(tab);
+
             header.DetachRequested += () =>
             {
                 if (_isDocking) return;
@@ -64,12 +186,12 @@ namespace MyHomelabBrowser
 
             header.PinRequested += () =>
             {
-                if (tab.Tag is not TabState state)
-                    return;
-
-                state.IsPinned = !state.IsPinned;
-                ApplyPinState(tab, header, state.IsPinned);
+                if (tab.Tag is not WebTabContent c) return;
+                c.IsPinned = !c.IsPinned;
+                ApplyPinState(tab, header, c.IsPinned);
             };
+
+            header.ReorderRequested += dir => ReorderTab(tab, dir);
 
             web.NavigationCompleted += (_, _) =>
             {
@@ -81,20 +203,14 @@ namespace MyHomelabBrowser
                         header.SetIcon(new BitmapImage(new Uri(web.CoreWebView2.FaviconUri)));
                 }
 
-                // preview (optionnel mais stable)
                 AttachPreview(tab, web);
             };
 
             Tabs.Items.Add(tab);
             Tabs.SelectedItem = tab;
             SyncWebHostWithSelection();
-
-            header.ReorderRequested += dir =>
-            {
-                ReorderTab(tab, dir);
-            };
-
         }
+
         void ReorderTab(TabItem tab, int direction)
         {
             int index = Tabs.Items.IndexOf(tab);
@@ -104,38 +220,34 @@ namespace MyHomelabBrowser
             if (newIndex < 0 || newIndex >= Tabs.Items.Count)
                 return;
 
-            // bloquer devant les pinned
+            // bloquer si on essaie de passer "devant" un pinned
             if (Tabs.Items[newIndex] is TabItem other &&
-                other.Tag is TabState s && s.IsPinned)
+                other.Tag is WebTabContent s && s.IsPinned)
                 return;
 
-            // largeur approximative pour l'animation
+            // animer (optionnel)
             double offset = direction * 160;
 
-            // animer l'onglet déplacé
             if (tab.Header is BrowserTabHeader moving)
                 moving.AnimateReorder(-offset);
 
-            // animer l'onglet croisé
             if (Tabs.Items[newIndex] is TabItem crossed &&
                 crossed.Header is BrowserTabHeader crossedHeader)
                 crossedHeader.AnimateReorder(offset);
 
-            // reorder logique
             Tabs.Items.RemoveAt(index);
             Tabs.Items.Insert(newIndex, tab);
             Tabs.SelectedItem = tab;
         }
 
-
         void MovePinnedTabsToFront()
         {
             var pinned = Tabs.Items.Cast<TabItem>()
-                .Where(t => t.Tag is TabState s && s.IsPinned)
+                .Where(t => t.Tag is WebTabContent s && s.IsPinned)
                 .ToList();
 
             var others = Tabs.Items.Cast<TabItem>()
-                .Where(t => t.Tag is TabState s && !s.IsPinned)
+                .Where(t => t.Tag is not WebTabContent s || !s.IsPinned)
                 .ToList();
 
             Tabs.Items.Clear();
@@ -161,10 +273,7 @@ namespace MyHomelabBrowser
 
             MovePinnedTabsToFront();
         }
-
-
-
-        void SuspendTab(TabItem tab, TabState state)
+        void SuspendTab(TabItem tab, WebTabContent state)
         {
             if (state.IsSuspended)
                 return;
@@ -180,11 +289,13 @@ namespace MyHomelabBrowser
             if (tab.Header is BrowserTabHeader header)
                 header.ShowSuspended(true);
 
-            // 🔄 synchroniser la vue
-            SyncWebHostWithSelection();
+            // 🔑 resync seulement si la sélection a changé
+            if (!wasSelected || !Equals(Tabs.SelectedItem, tab))
+                SyncWebHostWithSelection();
         }
 
-        UIElement CreateSuspendedPlaceholder(TabItem tab, TabState state)
+
+        UIElement CreateSuspendedPlaceholder(TabItem tab, WebTabContent state)
         {
             var panel = new Border
             {
@@ -236,15 +347,13 @@ namespace MyHomelabBrowser
             return panel;
         }
 
-
-
         void AutoSuspendTabs()
         {
             var now = DateTime.Now;
 
             foreach (TabItem tab in Tabs.Items)
             {
-                if (tab.Tag is not TabState state)
+                if (tab.Tag is not WebTabContent state)
                     continue;
 
                 if (state.IsPinned || state.IsSuspended)
@@ -253,10 +362,8 @@ namespace MyHomelabBrowser
                 if (Equals(tab, Tabs.SelectedItem))
                     continue;
 
-                if (now - state.LastActivated > SuspendDelay)
-                {
+                if (now - state.LastActivated > _SuspendDelay)
                     SuspendTab(tab, state);
-                }
             }
         }
 
@@ -272,9 +379,7 @@ namespace MyHomelabBrowser
             }
 
             if (wasSelected)
-            {
                 Tabs.SelectedIndex = Math.Max(0, Tabs.SelectedIndex);
-            }
 
             SyncWebHostWithSelection();
         }
@@ -283,83 +388,139 @@ namespace MyHomelabBrowser
         {
             int index = Tabs.Items.IndexOf(from);
 
-            // priorité : onglet précédent
             if (index > 0)
             {
                 Tabs.SelectedIndex = index - 1;
                 return;
             }
 
-            // sinon suivant
             if (index < Tabs.Items.Count - 1)
             {
                 Tabs.SelectedIndex = index + 1;
                 return;
             }
 
-            // sinon rien
             Tabs.SelectedItem = null;
         }
 
-
         private void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
-            => SyncWebHostWithSelection();
+        {
+            if (Tabs.SelectedItem is TabItem tab)
+            {
+                SyncWebHostWithSelection();   
+                SyncAddressBarWithTab(tab);   
+            }
+        }
+
 
         void SyncWebHostWithSelection()
         {
-            if (Tabs.SelectedItem is not TabItem tab ||
-                tab.Tag is not TabState state)
+            if (Tabs.SelectedItem is not TabItem tab)
             {
                 WebHost.Content = null;
                 return;
             }
 
-            state.LastActivated = DateTime.Now;
-
-            if (state.IsSuspended)
+            switch (tab.Tag)
             {
-                WebHost.Content = CreateSuspendedPlaceholder(tab, state);
-                return;
-            }
+                case WebTabContent webTab:
+                    webTab.LastActivated = DateTime.Now;
 
-            WebHost.Content = state.Web;
+                    if (webTab.IsSuspended)
+                        WebHost.Content = CreateSuspendedPlaceholder(tab, webTab);
+                    else
+                        WebHost.Content = webTab.Web;
+
+                    break;
+
+                case ViewTabContent viewTab:
+                    WebHost.Content = viewTab.View;
+                    UpdateAddressBarFromTab();
+
+                    break;
+
+                default:
+                    WebHost.Content = null;
+                    break;
+            }
         }
 
-
-
-
         // ---------------------------
-        // Navigation
+        // Navigation / Omnibox
         // ---------------------------
 
         private void NewTab_Click(object sender, RoutedEventArgs e)
-            => CreateTab("https://duckduckgo.com");
+            => CreateTab(GetNewTabUrl());
+
 
         private void AddressBar_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key != Key.Enter) return;
             HandleOmnibox(AddressBar.Text);
         }
+
         void NavigateOrSearch(string input)
         {
             if (!input.StartsWith("http", StringComparison.OrdinalIgnoreCase) &&
                 !input.Contains("."))
             {
-                // recherche web
                 Navigate($"https://google.fr/?q={Uri.EscapeDataString(input)}");
                 return;
             }
 
             Navigate(input);
         }
+        IEnumerable<CommandSetting> GetEnabledCommands()
+        {
+            if (!_settings.Settings.EnableCommands)
+                return Enumerable.Empty<CommandSetting>();
+
+            return _settings.Settings.Commands
+                .Where(c => c.Enabled)
+                .OrderBy(c => c.Key);
+        }
+        void ShowCommandSuggestions()
+        {
+            if (CommandList == null)
+                return;
+
+            CommandList.Visibility = Visibility.Visible;
+
+            // plus tard : filtrage commandes / historique ici
+        }
+
+        private void AddressBar_GotFocus(object sender, RoutedEventArgs e)
+        {
+            CommandList.ItemsSource =
+                _settings.Settings.Commands
+                    .Where(c => c.Enabled)
+                    .ToList();
+
+            CommandList.Visibility = Visibility.Visible;
+        }
+
+        private void CommandSuggestions_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (sender is not ListBox list || list.SelectedItem is not string cmd)
+                return;
+
+            AddressBar.Text = ":" + cmd;
+            AddressBar.CaretIndex = AddressBar.Text.Length;
+            list.SelectedItem = null;
+        }
+
         void ExecuteCommand(string cmd)
         {
             cmd = cmd.Trim().ToLowerInvariant();
 
+            if (!IsCommandEnabled(cmd))
+                return;
+
             switch (cmd)
             {
                 case "new":
-                    CreateTab("https://duckduckgo.com");
+                    CreateTab(GetNewTabUrl());
+               
                     break;
 
                 case "close":
@@ -372,48 +533,51 @@ namespace MyHomelabBrowser
                     break;
 
                 case "reload":
-                    if (Tabs.SelectedItem is TabItem t &&
-                        t.Tag is TabState s)
-                        s.Web.Reload();
+                    if (Tabs.SelectedItem is TabItem t && t.Tag is WebTabContent w)
+                        w.Web.Reload();
                     break;
 
                 case "suspend":
-                    if (Tabs.SelectedItem is TabItem y &&
-                        y.Tag is TabState k)
+                    if (Tabs.SelectedItem is TabItem y && y.Tag is WebTabContent k)
                         SuspendTab(y, k);
                     break;
 
                 case "resume":
-                    if (Tabs.SelectedItem is TabItem tadb &&
-                        tadb.Tag is TabState state &&
-                        state.IsSuspended)
+                    if (Tabs.SelectedItem is TabItem rr && rr.Tag is WebTabContent st && st.IsSuspended)
                     {
-                        state.IsSuspended = false;
-                        state.LastActivated = DateTime.Now;
+                        st.IsSuspended = false;
+                        st.LastActivated = DateTime.Now;
 
-                        if (tadb.Header is BrowserTabHeader h)
+                        if (rr.Header is BrowserTabHeader h)
                             h.ShowSuspended(false);
 
                         SyncWebHostWithSelection();
                     }
                     break;
 
-
                 case "suspend inactive":
                     AutoSuspendTabs();
                     break;
-
             }
         }
-        
+        bool IsCommandEnabled(string key)
+        {
+            var settings = _settings.Settings;
+
+            // commandes globalement désactivées
+            if (!settings.EnableCommands)
+                return false;
+
+            var cmd = settings.Commands.FirstOrDefault(c => c.Key == key);
+            return cmd?.Enabled == true;
+        }
 
         void CloseOtherTabs()
         {
             if (Tabs.SelectedItem is not TabItem current)
                 return;
 
-            var toClose = Tabs.Items
-                .Cast<TabItem>()
+            var toClose = Tabs.Items.Cast<TabItem>()
                 .Where(t => t != current)
                 .ToList();
 
@@ -444,27 +608,18 @@ namespace MyHomelabBrowser
 
             input = input.Trim();
 
-            // --------------------
-            // COMMANDES INTERNES
-            // --------------------
             if (input.StartsWith(":"))
             {
                 ExecuteCommand(input[1..]);
                 return;
             }
 
-            // --------------------
-            // RECHERCHE ONGLET
-            // --------------------
             if (input.StartsWith("@"))
             {
                 FocusTab(input[1..]);
                 return;
             }
 
-            // --------------------
-            // URL / RECHERCHE
-            // --------------------
             NavigateOrSearch(input);
         }
 
@@ -473,17 +628,13 @@ namespace MyHomelabBrowser
             if (!url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 url = "https://" + url;
 
-            if (Tabs.SelectedItem is TabItem tab &&
-                tab.Tag is TabState state && state.Web is WebView2 web)
-            {
-                web.Source = new Uri(url);
-            }
+            if (Tabs.SelectedItem is TabItem tab && tab.Tag is WebTabContent state)
+                state.Web.Source = new Uri(url);
         }
 
         // ---------------------------
         // Sidebar
         // ---------------------------
-
         bool sidebarOpen = true;
 
         private void ToggleSidebar_Click(object sender, RoutedEventArgs e)
@@ -501,45 +652,66 @@ namespace MyHomelabBrowser
             ToggleSidebarBtn.Content = sidebarOpen ? "❮" : "❯";
             sidebarOpen = !sidebarOpen;
         }
-
-        private void Tabs_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        private void AddressBar_LostFocus(object sender, RoutedEventArgs e)
         {
-            if (sender is not TabControl tabs)
+            if (!CommandList.IsKeyboardFocusWithin)
+                CommandList.Visibility = Visibility.Collapsed;
+        }
+        private void CommandSuggestions_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter && CommandList.SelectedItem != null)
+            {
+                if (CommandList.SelectedItem is CommandSetting cmd)
+                {
+                    ExecuteCommand(cmd.Key);
+                    CommandList.Visibility = Visibility.Collapsed;
+                    AddressBar.Focus();
+                    e.Handled = true;
+                }
+            }
+
+            if (e.Key == Key.Escape)
+            {
+                CommandList.Visibility = Visibility.Collapsed;
+                AddressBar.Focus();
+                e.Handled = true;
+            }
+        }
+
+        void HideCommandSuggestions()
+        {
+            if (CommandList == null)
                 return;
 
-            if (VisualTreeHelper.GetChild(tabs, 0) is not Grid root)
+            CommandList.Visibility = Visibility.Collapsed;
+        }
+
+        private bool _addressBarSelectAllPending;
+
+        private void AddressBar_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not TextBox tb || tb.IsKeyboardFocusWithin)
                 return;
 
-            var scroll = FindVisualChild<ScrollViewer>(root);
-            if (scroll == null)
-                return;
-
-            scroll.ScrollToHorizontalOffset(
-                scroll.HorizontalOffset - e.Delta
-            );
-
+            _addressBarSelectAllPending = true;
+            tb.Focus();
             e.Handled = true;
         }
 
-        static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        private void AddressBar_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
         {
-            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
-            {
-                var child = VisualTreeHelper.GetChild(parent, i);
-                if (child is T typed)
-                    return typed;
+            if (sender is not TextBox tb)
+                return;
 
-                var found = FindVisualChild<T>(child);
-                if (found != null)
-                    return found;
-            }
-            return null;
+            tb.SelectAll();
+            _addressBarSelectAllPending = false;
+
+            ShowCommandSuggestions();
         }
 
         // ---------------------------
         // Preview (stable)
         // ---------------------------
-
         static void AttachPreview(TabItem tab, WebView2 web)
         {
             if (tab.ToolTip != null) return;
@@ -581,31 +753,10 @@ namespace MyHomelabBrowser
         }
 
         // ---------------------------
-        // Dock indicator + docking mode
+        // Settings button handler
         // ---------------------------
-
-        public void ShowDockIndicator()
-        {
-            DockIndicator.Visibility = Visibility.Visible;
-        }
-
-        public void HideDockIndicator()
-        {
-            DockIndicator.Visibility = Visibility.Collapsed;
-        }
-
-        bool _isDocking;
-
-        public void BeginDockingMode()
-        {
-            _isDocking = true;
-        }
-
-        public void EndDockingMode()
-        {
-            _isDocking = false;
-            HideDockIndicator();
-        }
+        private void OpenSettings_Click(object sender, RoutedEventArgs e)
+            => OpenSettings();
 
         // ---------------------------
         // Detach / Redock
@@ -613,33 +764,26 @@ namespace MyHomelabBrowser
 
         void DetachTab(TabItem tab)
         {
-            if (tab.Tag is not TabState state)
+            if (tab.Tag is not WebTabContent state)
                 return;
 
             var web = state.Web;
             bool wasSelected = Equals(Tabs.SelectedItem, tab);
 
-
             Tabs.Items.Remove(tab);
 
-            // ✅ IMPORTANT : on passe en mode docking dès qu'on a détaché
             BeginDockingMode();
 
             var win = new DetachedWindow(this, web);
 
-            // PAS de Owner
-
-
-            // ✅ sécurité : si on ferme la fenêtre détachée sans redock -> reset
             win.Closed += (_, _) => EndDockingMode();
-
             win.RequestRedock += RedockWebView;
+
             POINT p;
             GetCursorPos(out p);
 
             win.Left = p.X - 100;
             win.Top = p.Y - 10;
-
 
             win.Show();
 
@@ -652,12 +796,17 @@ namespace MyHomelabBrowser
                 SyncWebHostWithSelection();
             }
         }
+        string GetNewTabUrl()
+        {
+            return _settings.Settings.NewTabPage?.Trim() is string url && url.Length > 0
+                ? url
+                : "about:blank";
+        }
 
         void RedockWebView(WebView2 web)
         {
             Dispatcher.Invoke(() =>
             {
-                // ✅ on sort du mode docking dès qu'on redock
                 EndDockingMode();
 
                 var header = new BrowserTabHeader();
@@ -666,10 +815,18 @@ namespace MyHomelabBrowser
                 if (!string.IsNullOrEmpty(web.CoreWebView2?.FaviconUri))
                     header.SetIcon(new BitmapImage(new Uri(web.CoreWebView2.FaviconUri)));
 
+                var state = new WebTabContent
+                {
+                    Web = web,
+                    IsPinned = false,
+                    IsSuspended = false,
+                    LastActivated = DateTime.Now
+                };
+
                 var tab = new TabItem
                 {
                     Header = header,
-                    Tag = new TabState { Web = web }
+                    Tag = state
                 };
 
                 header.CloseRequested += () => CloseTab(tab);
@@ -686,17 +843,18 @@ namespace MyHomelabBrowser
 
                 header.PinRequested += () =>
                 {
-                    if (tab.Tag is not TabState s)
-                        return;
-
-                    s.IsPinned = !s.IsPinned;
-                    ApplyPinState(tab, header, s.IsPinned);
+                    state.IsPinned = !state.IsPinned;
+                    ApplyPinState(tab, header, state.IsPinned);
                 };
+
+                header.ReorderRequested += dir => ReorderTab(tab, dir);
 
                 Tabs.Items.Add(tab);
                 Tabs.SelectedItem = tab;
+                SyncWebHostWithSelection();
             });
         }
+
         [StructLayout(LayoutKind.Sequential)]
         struct POINT
         {
@@ -707,15 +865,22 @@ namespace MyHomelabBrowser
         [DllImport("user32.dll")]
         static extern bool GetCursorPos(out POINT lpPoint);
 
+        // ===============================
+        // CONTENU D’ONGLET (BASE PROPRE)
+        // ===============================
+        abstract class TabContent { }
 
-        class TabState
+        class WebTabContent : TabContent
         {
             public WebView2 Web { get; init; } = null!;
             public bool IsPinned { get; set; }
-
-            public DateTime LastActivated { get; set; } = DateTime.Now;
             public bool IsSuspended { get; set; }
+            public DateTime LastActivated { get; set; } = DateTime.Now;
         }
 
+        class ViewTabContent : TabContent
+        {
+            public UserControl View { get; init; } = null!;
+        }
     }
 }

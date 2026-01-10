@@ -9,11 +9,11 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="44"/>
-            <!-- tab bar -->
+            <!-- TAB BAR -->
             <RowDefinition Height="48"/>
-            <!-- address bar -->
+            <!-- ADDRESS BAR -->
             <RowDefinition Height="*"/>
-            <!-- web content -->
+            <!-- WEB -->
         </Grid.RowDefinitions>
 
         <Grid.ColumnDefinitions>
@@ -22,51 +22,40 @@
         </Grid.ColumnDefinitions>
 
         <!-- =========================
-             TAB BAR (ONGLETS + +)
+             TAB BAR (AU-DESSUS)
              ========================= -->
-        <Grid Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
-              Background="{StaticResource FluentSurface}">
+        <Grid Grid.Row="0"
+              Grid.ColumnSpan="2"
+              Height="44"
+              Background="{StaticResource FluentSurface}"
+              Panel.ZIndex="100">
+
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <!-- TabControl = HEADERS ONLY -->
             <TabControl x:Name="Tabs"
-                        Grid.Column="0"
                         Background="Transparent"
                         BorderThickness="0"
-                        Padding="0"
-                        Margin="0"
                         SelectionChanged="Tabs_SelectionChanged">
 
                 <TabControl.Template>
-                    <ControlTemplate TargetType="{x:Type TabControl}">
-                        <Grid>
-                            <!-- SCROLL DES ONGLET -->
-                            <ScrollViewer x:Name="TabScrollViewer"
-                                          HorizontalScrollBarVisibility="Hidden"
-                                          VerticalScrollBarVisibility="Disabled"
-                                          CanContentScroll="True"
-                                          PanningMode="HorizontalOnly"
-                                          Background="Transparent">
-
-                                <TabPanel x:Name="HeaderPanel"
-                                          IsItemsHost="True"
-                                          Margin="6,6,0,6"
-                                          Background="Transparent"/>
-                            </ScrollViewer>
-                        </Grid>
+                    <ControlTemplate TargetType="TabControl">
+                        <ScrollViewer HorizontalScrollBarVisibility="Hidden"
+                                      VerticalScrollBarVisibility="Disabled">
+                            <TabPanel IsItemsHost="True"
+                                      Margin="6,6,0,6"/>
+                        </ScrollViewer>
                     </ControlTemplate>
                 </TabControl.Template>
 
-                <!-- Style onglets (capsules) -->
+                <!-- STYLE + ANIMATIONS -->
                 <TabControl.ItemContainerStyle>
                     <Style TargetType="TabItem">
                         <Setter Property="MinWidth" Value="160"/>
                         <Setter Property="MaxWidth" Value="260"/>
                         <Setter Property="Height" Value="32"/>
-                        <Setter Property="Background" Value="Transparent"/>
                         <Setter Property="BorderThickness" Value="0"/>
 
                         <Setter Property="Template">
@@ -79,37 +68,29 @@
                                             Margin="4,0"
                                             RenderTransformOrigin="0.5,0.5">
                                         <Border.RenderTransform>
-                                            <ScaleTransform x:Name="Scale" ScaleX="1" ScaleY="1"/>
+                                            <ScaleTransform x:Name="Scale"/>
                                         </Border.RenderTransform>
 
                                         <ContentPresenter ContentSource="Header"
-                                                          VerticalAlignment="Center"
-                                                          HorizontalAlignment="Stretch"/>
+                                                          VerticalAlignment="Center"/>
                                     </Border>
 
                                     <ControlTemplate.Triggers>
-
-                                        <!-- ONGLET ACTIF -->
                                         <Trigger Property="IsSelected" Value="True">
                                             <Trigger.EnterActions>
                                                 <BeginStoryboard>
                                                     <Storyboard>
                                                         <DoubleAnimation Storyboard.TargetName="Scale"
                                                                          Storyboard.TargetProperty="ScaleX"
-                                                                         To="1.03"
+                                                                         To="1.05"
                                                                          Duration="0:0:0.15"/>
                                                         <DoubleAnimation Storyboard.TargetName="Scale"
                                                                          Storyboard.TargetProperty="ScaleY"
-                                                                         To="1.03"
+                                                                         To="1.05"
                                                                          Duration="0:0:0.15"/>
-                                                        <ColorAnimation Storyboard.TargetName="Bd"
-                                                                        Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                                        To="#3A3A3A"
-                                                                        Duration="0:0:0.15"/>
                                                     </Storyboard>
                                                 </BeginStoryboard>
                                             </Trigger.EnterActions>
-
                                             <Trigger.ExitActions>
                                                 <BeginStoryboard>
                                                     <Storyboard>
@@ -121,42 +102,33 @@
                                                                          Storyboard.TargetProperty="ScaleY"
                                                                          To="1"
                                                                          Duration="0:0:0.15"/>
-                                                        <ColorAnimation Storyboard.TargetName="Bd"
-                                                                        Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                                        To="#2A2A2A"
-                                                                        Duration="0:0:0.15"/>
                                                     </Storyboard>
                                                 </BeginStoryboard>
                                             </Trigger.ExitActions>
                                         </Trigger>
 
-                                        <!-- HOVER -->
                                         <Trigger Property="IsMouseOver" Value="True">
                                             <Setter TargetName="Bd"
                                                     Property="Background"
                                                     Value="#353535"/>
                                         </Trigger>
-
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
                             </Setter.Value>
                         </Setter>
                     </Style>
                 </TabControl.ItemContainerStyle>
-
             </TabControl>
 
-            <!-- Bouton + -->
             <Button Grid.Column="1"
                     Content="＋"
                     Width="36"
                     Height="32"
-                    Margin="6,6,10,6"
-                    ToolTip="Nouvel onglet"
+                    Margin="6"
                     Click="NewTab_Click"/>
         </Grid>
 
-        <!-- Dock Indicator -->
+        <!-- DOCK INDICATOR -->
         <Border x:Name="DockIndicator"
                 Grid.Row="0"
                 Grid.ColumnSpan="2"
@@ -167,38 +139,86 @@
                 BorderThickness="2"
                 CornerRadius="8"
                 Visibility="Collapsed"
-                IsHitTestVisible="False"
-                Panel.ZIndex="999"/>
+                Panel.ZIndex="200"/>
 
         <!-- =========================
-             ADDRESS BAR
+             ADDRESS BAR + COMMANDS
              ========================= -->
-        <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-              Background="{StaticResource FluentSurface}">
-            <TextBox x:Name="AddressBar"
-                     Margin="10,6"
-                     Background="#FF484444"
-                     Foreground="White"
-                     BorderThickness="0"
-                     Padding="12,5"
-                     FontSize="14"
-                     VerticalContentAlignment="Center"
-                     KeyDown="AddressBar_KeyDown"
-                     Text=""/>
+        <Grid Grid.Row="1"
+              Grid.ColumnSpan="2"
+              Height="48"
+              Background="{StaticResource FluentSurface}"
+              Panel.ZIndex="90">
+
+            <Grid>
+                <TextBox x:Name="AddressBar"
+                         Margin="10,6"
+                         Padding="12,5"
+                         FontSize="14"
+                         Background="#FF484444"
+                         Foreground="White"
+                         BorderThickness="0"
+                         KeyDown="AddressBar_KeyDown"
+                         PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown"
+                         GotKeyboardFocus="AddressBar_GotKeyboardFocus"
+                         GotFocus="AddressBar_GotFocus"
+                         LostFocus="AddressBar_LostFocus"/>
+
+                <!-- ✅ COMMAND SUGGESTIONS (RESTAURÉ) -->
+                <Border x:Name="CommandSuggestions"
+                        Margin="10,46,10,0"
+                        Background="#1E1E1E"
+                        BorderBrush="#444"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Visibility="Collapsed"
+                        Panel.ZIndex="300"
+                        VerticalAlignment="Top">
+
+                    <ListBox x:Name="CommandList"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Foreground="White"
+                             FontSize="14"
+                             MaxHeight="260"
+                             SelectionChanged="CommandSuggestions_SelectionChanged"
+                             KeyDown="CommandSuggestions_KeyDown">
+
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="140"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Text=":{Binding Key}"
+                                               FontWeight="SemiBold"/>
+
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding Description}"
+                                               Opacity="0.7"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+            </Grid>
         </Grid>
 
         <!-- =========================
-             WEB CONTENT (TOUJOURS VISIBLE)
+             WEB
              ========================= -->
         <ContentControl x:Name="WebHost"
                         Grid.Row="2"
                         Grid.Column="0"
-                        Background="{StaticResource FluentBg}"/>
+                        Background="{StaticResource FluentBg}"
+                        Panel.ZIndex="0"/>
 
         <!-- =========================
-             SIDEBAR (RIGHT) + TOGGLE
+             SIDEBAR
              ========================= -->
-        <Grid Grid.Row="2" Grid.Column="1">
+        <Grid Grid.Row="2" Grid.Column="1" Panel.ZIndex="20">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="24"/>
                 <ColumnDefinition Width="Auto"/>
@@ -209,23 +229,19 @@
                     Content="❮"
                     Width="24"
                     Height="48"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Top"
                     Click="ToggleSidebar_Click"/>
 
             <Border x:Name="Sidebar"
                     Grid.Column="1"
                     Width="56"
-                    Background="#1E1E1E"
-                    HorizontalAlignment="Right">
+                    Background="#1E1E1E">
                 <StackPanel Margin="0,48,0,0">
-                    <Button Content="⚙" Margin="6"/>
+                    <Button Content="⚙" Margin="6" Click="OpenSettings_Click"/>
                     <Button Content="🌐" Margin="6"/>
                     <Button Content="🔒" Margin="6"/>
                     <Button Content="📜" Margin="6"/>
                 </StackPanel>
             </Border>
         </Grid>
-
     </Grid>
 </Window>
