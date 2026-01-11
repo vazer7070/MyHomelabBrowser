@@ -1,6 +1,7 @@
 ﻿<Window x:Class="MyHomelabBrowser.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:classes="clr-namespace:MyHomelabBrowser.classes"
         Title="My Browser"
         Height="850"
         Width="1400"
@@ -9,13 +10,9 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="44"/>
-            <!-- TAB BAR -->
             <RowDefinition Height="48"/>
-            <!-- ADDRESS BAR -->
             <RowDefinition Height="32"/>
-            <!-- FAVORITES BAR -->
             <RowDefinition Height="*"/>
-            <!-- WEB -->
         </Grid.RowDefinitions>
 
         <Grid.ColumnDefinitions>
@@ -121,56 +118,240 @@
                 </TabControl.ItemContainerStyle>
             </TabControl>
 
-            <!-- + / PRIVATE BUTTONS + PRIVATE INDICATOR -->
+            <!-- BOUTONS + INDICATEUR PRIVÉ -->
             <Grid Grid.Column="1"
-      Margin="6"
-      VerticalAlignment="Center">
+                  Margin="6"
+                  VerticalAlignment="Center">
 
-                <!-- BOUTONS (layout normal, inchangé) -->
                 <StackPanel Orientation="Horizontal"
-                VerticalAlignment="Center">
+                            VerticalAlignment="Center">
 
                     <Button Content="＋"
-                Width="36"
-                Height="32"
-                Margin="0,0,4,0"
-                ToolTip="Nouvel onglet"
-                Click="NewTab_Click"/>
+                            Width="36"
+                            Height="32"
+                            Margin="0,0,4,0"
+                            ToolTip="Nouvel onglet"
+                            Click="NewTab_Click"/>
 
                     <Button Content="🕶️"
-                Width="36"
-                Height="32"
-                ToolTip="Nouvel onglet privé"
-                Click="NewPrivateTab_Click"/>
+                            Width="36"
+                            Height="32"
+                            Margin="0,0,4,0"
+                            ToolTip="Nouvel onglet privé"
+                            Click="NewPrivateTab_Click"/>
+
+                    <!-- DOWNLOADS -->
+                    <Button x:Name="DownloadsBtn"
+        Width="36"
+        Height="32"
+        ToolTip="Téléchargements"
+        Click="DownloadsBtn_Click"
+        Cursor="Hand">
+                        <Grid>
+                            <TextBlock Text="⬇"
+                   FontSize="16"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"/>
+
+                            <!-- BADGE -->
+                            <Border x:Name="DownloadsBadge"
+                Background="#22C55E"
+                CornerRadius="8"
+                MinWidth="16"
+                Height="16"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Margin="0,-4,-4,0"
+                Visibility="Collapsed">
+                                <TextBlock x:Name="DownloadsBadgeText"
+                       FontSize="10"
+                       Foreground="White"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
+                    </Button>
+
                 </StackPanel>
 
-                <!-- INDICATEUR PRIVÉ (OVERLAY ABSOLU) -->
+                <!-- INDICATEUR PRIVÉ -->
                 <Border x:Name="PrivateIndicator"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Center"
-            Margin="-150,0,0,0"
-            Height="28"
-            Padding="10,2"
-            Background="#402B1457"
-            CornerRadius="14"
-            Visibility="Collapsed"
-            IsHitTestVisible="False">
-
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Margin="-150,0,0,0"
+                        Height="28"
+                        Padding="10,2"
+                        Background="#402B1457"
+                        CornerRadius="14"
+                        Visibility="Collapsed"
+                        IsHitTestVisible="False">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="🕶️"
-                       Margin="0,0,6,0"
-                       Foreground="#C084FC"/>
+                                   Margin="0,0,6,0"
+                                   Foreground="#C084FC"/>
                         <TextBlock Text="Navigation privée"
-                       Foreground="#C084FC"
-                       FontWeight="SemiBold"
-                       FontSize="12"/>
+                                   Foreground="#C084FC"
+                                   FontWeight="SemiBold"
+                                   FontSize="12"/>
                     </StackPanel>
                 </Border>
 
+                <!-- POPUP DOWNLOADS -->
+                <Popup x:Name="DownloadsPopup"
+                       PlacementTarget="{Binding ElementName=DownloadsBtn}"
+                       Placement="Bottom"
+                       StaysOpen="False"
+                       AllowsTransparency="True"
+                       PopupAnimation="Fade">
+
+                    <Border Width="420"
+                            Margin="0,6,0,0"
+                            Padding="10"
+                            Background="#1E1E1E"
+                            BorderBrush="#444"
+                            BorderThickness="1"
+                            CornerRadius="12">
+
+                        <StackPanel>
+                            <TextBlock Text="Téléchargements"
+                                       FontSize="14"
+                                       FontWeight="SemiBold"
+                                       Foreground="White"
+                                       Margin="0,0,0,8"/>
+                            <Button Content="Effacer les terminés"
+            Margin="10,0,0,0"
+            Padding="6,2"
+            FontSize="12"
+            HorizontalAlignment="Right"
+            Click="ClearCompletedDownloads"/>
+
+                            <ListBox ItemsSource="{Binding Source={x:Static classes:DownloadManager.Instance}, Path=Items}"
+                                     BorderThickness="0"
+                                     Background="Transparent"
+                                     Foreground="White"
+                                     MaxHeight="360">
+
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="10"
+        Margin="0,0,0,8"
+        Background="#262626"
+        CornerRadius="10">
+
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <!-- ================= LEFT ================= -->
+                                                <StackPanel>
+
+                                                    <!-- FICHIER -->
+                                                    <TextBlock Text="{Binding FileName}"
+                       FontWeight="SemiBold"
+                       FontSize="13"
+                       Foreground="White"
+                       TextTrimming="CharacterEllipsis"
+                       Cursor="Hand"
+                       MouseLeftButtonUp="DownloadItem_Open"/>
+
+                                                    <!-- TAILLE / VITESSE -->
+                                                    <TextBlock Text="{Binding SizeText}"
+                       FontSize="12"
+                       Foreground="#BFBFBF"
+                       Margin="0,4,0,0"/>
+
+                                                    <TextBlock Text="{Binding SpeedText}"
+                       FontSize="12"
+                       Foreground="#9CA3AF"
+                       Visibility="{Binding IsInProgress,
+                                    Converter={StaticResource BoolToVisibility}}"/>
+
+                                                    <!-- PROGRESS -->
+                                                    <ProgressBar Height="6"
+                         Margin="0,6,0,0"
+                         Minimum="0"
+                         Maximum="1"
+                         Value="{Binding Progress01, Mode=OneWay}"
+                         Visibility="{Binding IsInProgress,
+                                      Converter={StaticResource BoolToVisibility}}"/>
+
+                                                    <!-- STATUS -->
+                                                    <TextBlock Text="✔ Terminé"
+                       Foreground="#4ADE80"
+                       FontSize="12"
+                       FontWeight="SemiBold"
+                       Margin="0,6,0,0"
+                       Visibility="{Binding IsCompleted,
+                                    Converter={StaticResource BoolToVisibility}}"/>
+
+                                                    <TextBlock Text="✖ Échec"
+                       Foreground="#EF4444"
+                       FontSize="12"
+                       FontWeight="SemiBold"
+                       Margin="0,6,0,0"
+                       Visibility="{Binding IsFailed,
+                                    Converter={StaticResource BoolToVisibility}}"/>
+                                                </StackPanel>
+
+                                                <!-- ================= RIGHT ================= -->
+                                                <StackPanel Grid.Column="1"
+                    Orientation="Horizontal"
+                    VerticalAlignment="Top">
+
+                                                    <!-- PAUSE -->
+                                                    <Button Content="⏸"
+                    Margin="0,0,6,0"
+                    Visibility="{Binding IsInProgress,
+                                 Converter={StaticResource BoolToVisibility}}"
+                    Click="DownloadItem_Pause"/>
+
+                                                    <!-- RETRY -->
+                                                    <Button Content="🔁"
+                    Margin="0,0,6,0"
+                    ToolTip="Réessayer"
+                    Visibility="{Binding IsFailed,
+                                 Converter={StaticResource BoolToVisibility}}"
+                    Click="DownloadItem_ResumeOrRetry"/>
+
+                                                    <!-- ANNULER -->
+                                                    <Button Content="✖"
+                    Margin="0,0,6,0"
+                    Visibility="{Binding IsInProgress,
+                                 Converter={StaticResource BoolToVisibility}}"
+                    Click="DownloadItem_Cancel"/>
+
+                                                    <!-- OUVRIR DOSSIER -->
+                                                    <Button Content="📁"
+                    Margin="0,0,6,0"
+                    Visibility="{Binding IsCompleted,
+                                 Converter={StaticResource BoolToVisibility}}"
+                    Click="DownloadItem_OpenFolder"/>
+
+                                                    <!-- SUPPRIMER DE LA LISTE -->
+                                                    <Button Content="🗑"
+                    ToolTip="Retirer de la liste"
+                    Visibility="{Binding IsCompleted,
+                                 Converter={StaticResource BoolToVisibility}}"
+                    Click="DownloadItem_Remove"/>
+
+                                                    <Button Content="🗑"
+                    ToolTip="Retirer de la liste"
+                    Visibility="{Binding IsFailed,
+                                 Converter={StaticResource BoolToVisibility}}"
+                    Click="DownloadItem_Remove"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+                    </Border>
+                </Popup>
             </Grid>
-
-
-
         </Grid>
 
         <!-- =========================
@@ -189,13 +370,13 @@
                 Panel.ZIndex="200"/>
 
         <!-- =========================
-     ADDRESS BAR
-     ========================= -->
+             ADDRESS BAR
+             ========================= -->
         <Grid Grid.Row="1"
-      Grid.ColumnSpan="2"
-      Height="48"
-      Background="{StaticResource FluentSurface}"
-      Panel.ZIndex="90">
+              Grid.ColumnSpan="2"
+              Height="48"
+              Background="{StaticResource FluentSurface}"
+              Panel.ZIndex="90">
 
             <Grid Margin="10,6">
                 <Grid.ColumnDefinitions>
@@ -203,76 +384,77 @@
                     <ColumnDefinition Width="36"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- ZONE ADRESSE -->
-                <Grid Grid.Column="0">
-
-                    <TextBox x:Name="AddressBar"
-                     Padding="12,5"
-                     FontSize="14"
-                     Background="#FF484444"
-                     Foreground="White"
-                     BorderThickness="0"
-                     KeyDown="AddressBar_KeyDown"
-                     PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown"
-                     GotKeyboardFocus="AddressBar_GotKeyboardFocus"
-                     GotFocus="AddressBar_GotFocus"
-                     LostFocus="AddressBar_LostFocus"/>
-
-                   
-                </Grid>
-
-                <!-- BOUTON FAVORI (ZONE DÉDIÉE, JAMAIS RECOUVERTE) -->
-                <Button x:Name="FavoriteButton"
-                Grid.Column="1"
-                Content="★"
-                Width="28"
-                Height="28"
-                Margin="4,0,0,0"
-                VerticalAlignment="Center"
-                Click="ToggleFavorite_Click"
-                Foreground="Gray"
-                Cursor="Hand"/>
-
-                <!-- COMMANDES / HISTORIQUE -->
-                <Popup x:Name="CommandSuggestionsPopup"
-               PlacementTarget="{Binding ElementName=AddressBar}"
-               Placement="Bottom"
-               StaysOpen="True"
-               AllowsTransparency="True"
-               Focusable="False"
-               PopupAnimation="Fade">
-
-                    <Border Margin="0,6,0,0"
-                    Background="#1E1E1E"
-                    BorderBrush="#444"
-                    BorderThickness="1"
-                    CornerRadius="12">
-
-                        <ListBox x:Name="CommandList"
-                         Background="Transparent"
-                         BorderThickness="0"
-                         Foreground="White"
+                <TextBox x:Name="AddressBar"
+                         Padding="12,5"
                          FontSize="14"
-                         MaxHeight="260"
-                         SelectionChanged="CommandSuggestions_SelectionChanged"
-                         KeyDown="CommandSuggestions_KeyDown"/>
+                         Background="#FF484444"
+                         Foreground="White"
+                         BorderThickness="0"
+                         KeyDown="AddressBar_KeyDown"
+                         PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown"
+                         GotKeyboardFocus="AddressBar_GotKeyboardFocus"
+                         GotFocus="AddressBar_GotFocus"
+                         LostFocus="AddressBar_LostFocus"/>
+
+                <Button x:Name="FavoriteButton"
+                        Grid.Column="1"
+                        Content="★"
+                        Width="28"
+                        Height="28"
+                        Margin="4,0,0,0"
+                        VerticalAlignment="Center"
+                        Click="ToggleFavorite_Click"
+                        Foreground="Gray"
+                        Cursor="Hand"/>
+
+                <Popup x:Name="CommandSuggestionsPopup"
+                       PlacementTarget="{Binding ElementName=AddressBar}"
+                       Placement="Bottom"
+                       StaysOpen="True"
+                       AllowsTransparency="True"
+                       Focusable="False"
+                       PopupAnimation="Fade">
+                    <Border Margin="0,6,0,0"
+                            Background="#1E1E1E"
+                            BorderBrush="#444"
+                            BorderThickness="1"
+                            CornerRadius="12">
+                        <ListBox x:Name="CommandList"
+         Background="Transparent"
+         BorderThickness="0"
+         Foreground="White"
+         FontSize="14"
+         MaxHeight="260"
+         SelectionChanged="CommandSuggestions_SelectionChanged"
+         KeyDown="CommandSuggestions_KeyDown">
+
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="8,6">
+                                        <TextBlock Text="{Binding Primary}"
+                           FontWeight="SemiBold"/>
+
+                                        <TextBlock Text="{Binding Secondary}"
+                           FontSize="12"
+                           Foreground="#9CA3AF"
+                           TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+
+                        </ListBox>
 
                     </Border>
                 </Popup>
             </Grid>
         </Grid>
 
-
-
-        <!-- =========================
-             FAVORITES BAR
-             ========================= -->
+        <!-- FAVORITES BAR -->
         <Border Grid.Row="2"
                 Grid.ColumnSpan="2"
                 Background="#1E1E1E"
                 BorderBrush="#2A2A2A"
                 BorderThickness="0,1,0,1">
-
             <StackPanel x:Name="FavoritesBar"
                         Orientation="Horizontal"
                         Height="32"
@@ -280,17 +462,13 @@
                         Margin="6,0"/>
         </Border>
 
-        <!-- =========================
-             WEB
-             ========================= -->
+        <!-- WEB -->
         <ContentControl x:Name="WebHost"
                         Grid.Row="3"
                         Grid.Column="0"
                         Background="{StaticResource FluentBg}"/>
 
-        <!-- =========================
-             SIDEBAR
-             ========================= -->
+        <!-- SIDEBAR -->
         <Grid Grid.Row="3" Grid.Column="1" Panel.ZIndex="20">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="24"/>
@@ -319,5 +497,77 @@
                 </StackPanel>
             </Border>
         </Grid>
+        <Border x:Name="InternalToast"
+        Width="320"
+        Padding="12"
+        Background="#1F2937"
+        CornerRadius="12"
+        HorizontalAlignment="Right"
+        VerticalAlignment="Bottom"
+        Margin="0,0,20,20"
+        Visibility="Collapsed"
+        Panel.ZIndex="500">
+
+            <StackPanel>
+                <TextBlock x:Name="ToastTitle"
+                   FontWeight="Bold"
+                   Foreground="White"/>
+
+                <TextBlock x:Name="ToastMessage"
+                   Foreground="#D1D5DB"
+                   Margin="0,4,0,0"/>
+
+                <Button Content="Ouvrir le fichier"
+                Margin="0,8,0,0"
+                Click="Toast_OpenFile"/>
+            </StackPanel>
+        </Border>
+        <ItemsControl x:Name="ToastHost"
+              HorizontalAlignment="Right"
+              VerticalAlignment="Bottom"
+              Margin="0,0,20,20"
+              Panel.ZIndex="500">
+
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Vertical"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border Background="#1F2937"
+                    CornerRadius="12"
+                    Padding="12"
+                    Margin="0,0,0,10"
+                    Width="320"
+                    Opacity="0"
+                    RenderTransformOrigin="1,0.5">
+
+                        <Border.RenderTransform>
+                            <TranslateTransform X="40"/>
+                        </Border.RenderTransform>
+
+                        <StackPanel>
+                            <TextBlock Text="{Binding Title}"
+                               FontWeight="Bold"
+                               Foreground="White"/>
+
+                            <TextBlock Text="{Binding Message}"
+                               Foreground="#D1D5DB"
+                               Margin="0,4,0,0"/>
+
+                            <Button Content="Ouvrir le fichier"
+                            Margin="0,8,0,0"
+                            HorizontalAlignment="Left"
+                            Click="Toast_OpenFile"
+                            Tag="{Binding}"/>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+
     </Grid>
 </Window>

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 
 namespace MyHomelabBrowser.classes
@@ -24,6 +25,12 @@ namespace MyHomelabBrowser.classes
         public bool EnableSuspension { get; set; } = true;
         public int SuspendDelayMinutes { get; set; } = 5;
 
+        public string DownloadFolder { get; set; }
+    = Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+    "Downloads");
+
+
         // --------------------
         // FUTUR
         // --------------------
@@ -39,6 +46,7 @@ namespace MyHomelabBrowser.classes
                 EnableSuspension = EnableSuspension,
                 SuspendDelayMinutes = SuspendDelayMinutes,
                 EnableCommands = EnableCommands,
+                DownloadFolder = DownloadFolder,
                 Commands = Commands
                     .Select(c => new CommandSetting
                     {

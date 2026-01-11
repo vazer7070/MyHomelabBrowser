@@ -2,7 +2,9 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:MyHomelabBrowser"
+             xmlns:classes="clr-namespace:MyHomelabBrowser.classes"
              StartupUri="MainWindow.xaml">
+
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -15,6 +17,11 @@
                 <ResourceDictionary Source="Themes/Fluent.xaml"/>
 
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- 🔽 CONVERTERS GLOBAUX -->
+            <classes:BoolToVisibility x:Key="BoolToVisibility"/>
+
+            <!-- 🔽 BRUSHES EXISTANTS -->
             <SolidColorBrush x:Key="PrivateSurfaceBrush" Color="#241632"/>
             <SolidColorBrush x:Key="PrivateAddressBrush" Color="#2D1B3F"/>
             <SolidColorBrush x:Key="NormalSurfaceBrush" Color="#1E1E1E"/>

@@ -1,6 +1,7 @@
 ﻿using MyHomelabBrowser.classes;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -30,6 +31,45 @@ namespace MyHomelabBrowser.controles
             Refresh();
         }
 
+        private void OpenEntry_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is HistoryItemVM vm)
+            {
+                _navigate(vm.Entry.Url, true);
+                e.Handled = true;
+            }
+        }
+
+
+        private void HistoryItem_Click(object sender, MouseButtonEventArgs e)
+        {
+            // 🚫 si on clique sur le bouton delete → ne pas naviguer
+            if (FindParent<Button>(e.OriginalSource as DependencyObject) != null)
+                return;
+
+            if (sender is not ListViewItem item)
+                return;
+
+            if (item.DataContext is not HistoryItemVM vm)
+                return;
+
+            _navigate(vm.Entry.Url, true);
+            e.Handled = true;
+        }
+
+        static T? FindParent<T>(DependencyObject child) where T : DependencyObject
+        {
+            while (child != null)
+            {
+                if (child is T t)
+                    return t;
+
+                child = VisualTreeHelper.GetParent(child);
+            }
+            return null;
+        }
+
+
         void Refresh(string? filter = null)
         {
             IEnumerable<HistoryEntry> list = _all
@@ -49,11 +89,11 @@ namespace MyHomelabBrowser.controles
 
             var view = CollectionViewSource.GetDefaultView(vms);
             view.GroupDescriptions.Clear();
-            view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(HistoryItemVM.Group)));
+            view.GroupDescriptions.Add(
+                new PropertyGroupDescription(nameof(HistoryItemVM.Group)));
 
             HistoryList.ItemsSource = view;
         }
-
 
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
             => Refresh(SearchBox.Text);
@@ -69,12 +109,7 @@ namespace MyHomelabBrowser.controles
 
         private void ClearAll_Click(object sender, RoutedEventArgs e)
         {
-            if (MessageBox.Show(
-                "Effacer tout l’historique ?",
-                "Confirmation",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning) != MessageBoxResult.Yes)
-                return;
+           
 
             _all.Clear();
             Refresh();
@@ -100,6 +135,7 @@ namespace MyHomelabBrowser.controles
                 return Entry.VisitedAt.ToString("dd/MM/yyyy");
             }
         }
+
         public string Group
         {
             get
@@ -136,7 +172,4 @@ namespace MyHomelabBrowser.controles
             Entry = entry;
         }
     }
-
-
-
 }

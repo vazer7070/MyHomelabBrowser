@@ -75,6 +75,38 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ===== TÉLÉCHARGEMENTS ===== -->
+                <Border Style="{StaticResource SettingsCard}">
+                    <StackPanel>
+                        <TextBlock Text="Téléchargements"
+                                   Style="{StaticResource SettingsTitle}"/>
+
+                        <TextBlock Text="Dossier de téléchargement"
+                                   Style="{StaticResource SettingsLabel}"/>
+
+                        <StackPanel Orientation="Horizontal">
+                            <TextBox Height="36"
+                                     Padding="12,0"
+                                     VerticalContentAlignment="Center"
+                                     Background="#2B2B2B"
+                                     Foreground="#CCCCCC"
+                                     BorderThickness="0"
+                                     IsReadOnly="True"
+                                     Text="{Binding DownloadFolder}"/>
+
+                            <Button Content="Parcourir…"
+                                    Margin="10,0,0,0"
+                                    Padding="16,6"
+                                    Click="PickDownloadFolder_Click"/>
+                        </StackPanel>
+
+                        <TextBlock Text="Les fichiers téléchargés seront enregistrés automatiquement dans ce dossier."
+                                   Foreground="#9E9E9E"
+                                   FontSize="12"
+                                   Margin="0,6,0,0"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- ===== COMMANDES ===== -->
                 <Border Style="{StaticResource SettingsCard}">
                     <StackPanel>
@@ -95,12 +127,10 @@
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
 
-                                        <!-- Actif -->
                                         <CheckBox Grid.Column="0"
                                                   IsChecked="{Binding Enabled}"
                                                   VerticalAlignment="Center"/>
 
-                                        <!-- Command key -->
                                         <Border Grid.Column="1"
                                                 Background="#2A2A2A"
                                                 CornerRadius="6"
@@ -113,7 +143,6 @@
                                                        VerticalAlignment="Center"/>
                                         </Border>
 
-                                        <!-- Description -->
                                         <TextBlock Grid.Column="2"
                                                    Text="{Binding Description}"
                                                    Foreground="#BFBFBF"

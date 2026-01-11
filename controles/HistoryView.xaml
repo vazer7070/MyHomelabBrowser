@@ -34,10 +34,22 @@
 
         <!-- ===== LIST ===== -->
         <ListView x:Name="HistoryList"
-                  Grid.Row="1"
-                  Background="Transparent"
-                  BorderThickness="0"
-                  SelectionMode="Single">
+          Grid.Row="1"
+          Background="Transparent"
+          BorderThickness="0"
+          SelectionMode="Single">
+
+            <!-- 🔥 clic sur toute la ligne -->
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="Padding" Value="0"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <EventSetter Event="PreviewMouseLeftButtonUp"
+                         Handler="HistoryItem_Click"/>
+                </Style>
+            </ListView.ItemContainerStyle>
+
 
             <!-- ===== GROUP HEADERS ===== -->
             <ListView.GroupStyle>
@@ -57,6 +69,7 @@
             <ListView.ItemTemplate>
                 <DataTemplate>
                     <Grid Margin="0,6">
+
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="32"/>
                             <ColumnDefinition Width="*"/>
@@ -72,10 +85,22 @@
 
                         <!-- title + url -->
                         <StackPanel Grid.Column="1">
-                            <TextBlock Text="{Binding Title}"
-                                       Foreground="White"
-                                       FontWeight="SemiBold"
-                                       TextTrimming="CharacterEllipsis"/>
+                            <Button Content="{Binding Title}"
+        Click="OpenEntry_Click"
+        Cursor="Hand"
+        Background="Transparent"
+        BorderThickness="0"
+        Padding="0"
+        HorizontalAlignment="Left"
+        Foreground="White"
+        FontWeight="SemiBold">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <ContentPresenter/>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+
                             <TextBlock Text="{Binding Url}"
                                        Foreground="#AAAAAA"
                                        FontSize="12"

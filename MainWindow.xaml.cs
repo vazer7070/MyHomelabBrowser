@@ -4,6 +4,7 @@ using MyHomelabBrowser.classes;
 using MyHomelabBrowser.controles;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -52,6 +53,8 @@ namespace MyHomelabBrowser
         CoreWebView2Environment? _privateEnvironment;
         CoreWebView2Environment? _normalEnvironment;
 
+        readonly ObservableCollection<ToastItem> _toasts = new();
+
         string _lastHistoryUrl = "";
         DateTime _lastHistoryAt = DateTime.MinValue;
 
@@ -75,6 +78,8 @@ namespace MyHomelabBrowser
             _suspendTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
             _suspendTimer.Tick += (_, _) => AutoSuspendTabs();
             _suspendTimer.Start();
+            ToastHost.ItemsSource = _toasts;
+
 
             _settings = new SettingsService();
             _settings.SettingsChanged += ApplySettings;
@@ -87,7 +92,7 @@ namespace MyHomelabBrowser
             // initial UI refresh (safe even if XAML not ready yet)
             RefreshFavoritesBar();
             UpdateFavoriteButton();
-
+            UpdateDownloadsBadge();
 
 
             // start page
@@ -205,6 +210,104 @@ namespace MyHomelabBrowser
             }
         }
 
+        DownloadItem? _lastToastItem;
+        private void Toast_OpenFile(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is ToastItem t)
+                DownloadManager.Instance.OpenFile(t.Download);
+        }
+
+        void AnimateToastOut(FrameworkElement el, Action onDone)
+        {
+            var sb = new Storyboard();
+
+            var fade = new DoubleAnimation
+            {
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(200)
+            };
+
+            fade.Completed += (_, _) => onDone();
+
+            Storyboard.SetTarget(fade, el);
+            Storyboard.SetTargetProperty(fade, new PropertyPath("Opacity"));
+
+            sb.Children.Add(fade);
+            sb.Begin();
+        }
+
+
+        void AnimateToastIn(FrameworkElement el)
+        {
+            var sb = new Storyboard();
+
+            // Fade in
+            var fade = new DoubleAnimation
+            {
+                From = 0,
+                To = 1,
+                Duration = TimeSpan.FromMilliseconds(220)
+            };
+            Storyboard.SetTarget(fade, el);
+            Storyboard.SetTargetProperty(fade, new PropertyPath("Opacity"));
+
+            // Slide in
+            var slide = new DoubleAnimation
+            {
+                From = 40,
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(220),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            Storyboard.SetTarget(slide, el);
+            Storyboard.SetTargetProperty(
+                slide,
+                new PropertyPath("(UIElement.RenderTransform).(TranslateTransform.X)")
+            );
+
+            sb.Children.Add(fade);
+            sb.Children.Add(slide);
+
+            sb.Begin();
+        }
+
+
+        public void ShowToast(string title, string message, DownloadItem item)
+        {
+            var toast = new ToastItem
+            {
+                Title = title,
+                Message = message,
+                Download = item
+            };
+
+            _toasts.Insert(0, toast);
+
+            Dispatcher.BeginInvoke(() =>
+            {
+                var container = (FrameworkElement)ToastHost.ItemContainerGenerator
+                    .ContainerFromItem(toast);
+
+                if (container == null) return;
+
+                AnimateToastIn(container);
+
+                var timer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(4)
+                };
+
+                timer.Tick += (_, _) =>
+                {
+                    timer.Stop();
+                    AnimateToastOut(container, () => _toasts.Remove(toast));
+                };
+
+                timer.Start();
+            }, DispatcherPriority.Loaded);
+        }
+
+        
 
         void UpdateAddressBarFromTab()
         {
@@ -274,6 +377,8 @@ namespace MyHomelabBrowser
         void CreateTab(string url)
         {
             var web = new WebView2 { Source = new Uri(url) };
+            DownloadHook.Attach(web, isPrivate: false);
+
 
             var header = new BrowserTabHeader();
             header.SetTitle("Nouvel onglet");
@@ -355,6 +460,9 @@ namespace MyHomelabBrowser
             var web = new WebView2(); // pas de Source ici, pas d'Ensure ici (on ne bloque pas)
 
             var header = new BrowserTabHeader();
+            DownloadHook.Attach(web, isPrivate: true);
+
+
             header.SetTitle("Privé");
             header.SetPrivate(true);
 
@@ -1003,8 +1111,22 @@ namespace MyHomelabBrowser
 
         void CloseTab(TabItem tab)
         {
+            bool wasPrivate =
+                tab.Tag is WebTabContent w && w.IsPrivate;
+
             bool wasSelected = Equals(Tabs.SelectedItem, tab);
+
             Tabs.Items.Remove(tab);
+
+            
+            if (wasPrivate && !HasAnyPrivateTab())
+            {
+               
+                DownloadManager.Instance.ClearPrivateDownloads();
+
+                
+                UpdateDownloadsBadge();
+            }
 
             if (Tabs.Items.Count == 0)
             {
@@ -1017,6 +1139,7 @@ namespace MyHomelabBrowser
 
             SyncWebHostWithSelection();
         }
+
 
         void SelectFallbackTab(TabItem from)
         {
@@ -1075,27 +1198,74 @@ namespace MyHomelabBrowser
             if (CommandList == null)
                 return;
 
-            if (CommandSuggestionsPopup != null)
-                CommandSuggestionsPopup.IsOpen = true;
+            CommandSuggestionsPopup.IsOpen = true;
 
-            var text = AddressBar.Text?.Trim() ?? "";
+            var items = new List<OmniboxItem>();
 
-            var commands = _settings.Settings.Commands
-                .Where(c => c.Enabled && c.Key.StartsWith(text.TrimStart(':')))
-                .Select(c => new { Type = "cmd", c.Key, c.Description });
+            // =========================
+            // COMMANDES
+            // =========================
+            if (_addressBarEditing)
+            {
+                var query = AddressBar.Text?.Trim() ?? "";
 
-            var history = _history
-                .Where(h => h.Title.Contains(text, StringComparison.OrdinalIgnoreCase)
-                         || h.Url.Contains(text, StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(h => h.VisitedAt)
-                .Take(5)
-                .Select(h => new { Type = "history", Entry = h });
+                if (query.StartsWith(":"))
+                {
+                    var cmd = query[1..];
 
-            CommandList.ItemsSource = commands.Cast<object>()
-                .Concat(history)
-                .ToList();
+                    items.AddRange(
+                        _settings.Settings.Commands
+                            .Where(c => c.Enabled &&
+                                        c.Key.StartsWith(cmd, StringComparison.OrdinalIgnoreCase))
+                            .Select(c => new OmniboxItem
+                            {
+                                Type = OmniboxItemType.Command,
+                                Primary = ":" + c.Key,
+                                Secondary = c.Description,
+                                Command = c
+                            })
+                    );
+                }
+            }
 
+            // =========================
+            // HISTORIQUE GLOBAL (🔥)
+            // =========================
+            IEnumerable<HistoryEntry> history = _history
+                .OrderByDescending(h => h.VisitedAt);
+
+            // ❗ filtrer UNIQUEMENT si l'utilisateur tape
+            if (_addressBarEditing)
+            {
+                var q = AddressBar.Text?.Trim();
+
+                if (!string.IsNullOrWhiteSpace(q) &&
+                    !q.StartsWith(":") &&
+                    !q.StartsWith("@") &&
+                    !q.StartsWith("*"))
+                {
+                    history = history.Where(h =>
+                        h.Title.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                        h.Url.Contains(q, StringComparison.OrdinalIgnoreCase));
+                }
+            }
+
+            items.AddRange(
+                history.Take(10).Select(h => new OmniboxItem
+                {
+                    Type = OmniboxItemType.History,
+                    Primary = h.Title,
+                    Secondary = h.Url,
+                    History = h
+                })
+            );
+
+            CommandList.ItemsSource = items;
         }
+
+
+
+
 
         void HideCommandSuggestions()
         {
@@ -1116,28 +1286,30 @@ namespace MyHomelabBrowser
 
         private void CommandSuggestions_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (sender is not ListBox list || list.SelectedItem == null)
+            if (sender is not ListBox list || list.SelectedItem is not OmniboxItem item)
                 return;
 
-            // ---- COMMANDE ----
-            if (list.SelectedItem is CommandSetting cmd)
-            {
-                AddressBar.Text = ":" + cmd.Key;
-                AddressBar.CaretIndex = AddressBar.Text.Length;
-                list.SelectedItem = null;
-                AddressBar.Focus();
-                return;
-            }
+            list.SelectedItem = null;
+            HideCommandSuggestions();
 
-            // ---- HISTORIQUE ----
-            if (list.SelectedItem is HistoryEntry h)
+            switch (item.Type)
             {
-                Navigate(h.Url, fromHistory: true);
-                list.SelectedItem = null;
-                HideCommandSuggestions();
-                return;
+                case OmniboxItemType.Command:
+                    if (item.Command != null)
+                    {
+                        AddressBar.Text = ":" + item.Command.Key;
+                        AddressBar.CaretIndex = AddressBar.Text.Length;
+                        AddressBar.Focus();
+                    }
+                    break;
+
+                case OmniboxItemType.History:
+                    if (item.History != null)
+                        Navigate(item.History.Url, fromHistory: true);
+                    break;
             }
         }
+
 
 
         void ExecuteCommand(string cmd)
@@ -1344,9 +1516,18 @@ namespace MyHomelabBrowser
 
             _navigatingFromHistory = fromHistory;
 
-            if (Tabs.SelectedItem is TabItem tab && tab.Tag is WebTabContent state)
+            // 🔹 Si l’onglet courant est un WebView → naviguer dedans
+            if (Tabs.SelectedItem is TabItem tab &&
+                tab.Tag is WebTabContent state)
+            {
                 state.Web.Source = new Uri(url);
+                return;
+            }
+
+            // 🔹 Sinon (History, Settings, etc.) → nouvel onglet
+            CreateTab(url);
         }
+
 
 
         // ---------------------------
@@ -1531,13 +1712,83 @@ namespace MyHomelabBrowser
         }
 
 
-        
 
 
 
 
+        public  void UpdateDownloadsBadge()
+        {
+            var count = DownloadManager.Instance.Items
+                .Count(d => d.IsInProgress);
 
-        void ApplyPrivateTheme(bool isPrivate)
+            if (count > 0)
+            {
+                DownloadsBadge.Visibility = Visibility.Visible;
+                DownloadsBadgeText.Text = count.ToString();
+            }
+            else
+            {
+                DownloadsBadge.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void ClearCompletedDownloads(object sender, RoutedEventArgs e)
+        {
+            var toRemove = DownloadManager.Instance.Items
+                .Where(d => d.IsCompleted)
+                .ToList();
+
+            foreach (var d in toRemove)
+                DownloadManager.Instance.Remove(d);
+
+            UpdateDownloadsBadge();
+        }
+
+
+        private void DownloadsBtn_Click(object sender, RoutedEventArgs e)
+    {
+        DownloadsPopup.IsOpen = !DownloadsPopup.IsOpen;
+    }
+
+    private void DownloadItem_Open(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
+            DownloadManager.Instance.OpenFile(it);
+    }
+        private void DownloadItem_Remove(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
+                DownloadManager.Instance.Remove(it);
+            UpdateDownloadsBadge();
+        }
+
+
+        private void DownloadItem_OpenFolder(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
+            DownloadManager.Instance.OpenContainingFolder(it);
+    }
+
+    private void DownloadItem_Pause(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
+            DownloadManager.Instance.Pause(it);
+    }
+
+    private void DownloadItem_ResumeOrRetry(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
+            DownloadManager.Instance.Retry(it);
+    }
+
+    private void DownloadItem_Cancel(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
+            DownloadManager.Instance.Cancel(it);
+    }
+
+
+    void ApplyPrivateTheme(bool isPrivate)
         {
             Resources["FluentSurface"] =
                 isPrivate
@@ -1550,9 +1801,17 @@ namespace MyHomelabBrowser
                     : new SolidColorBrush(Color.FromRgb(72, 68, 68));
         }
 
+        bool HasAnyPrivateTab()
+        {
+            return Tabs.Items
+                .OfType<TabItem>()
+                .Any(t => t.Tag is WebTabContent w && w.IsPrivate);
+        }
 
         void RedockWebView(WebView2 web)
         {
+            DownloadHook.Attach(web, isPrivate: false);
+
             Dispatcher.Invoke(() =>
             {
                 EndDockingMode();

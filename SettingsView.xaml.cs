@@ -1,5 +1,6 @@
 ﻿using MyHomelabBrowser.classes;
 using System;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Animation;
@@ -11,8 +12,8 @@ namespace MyHomelabBrowser
         readonly SettingsService _service;
         BrowserSettings _original;
         BrowserSettings _working;
-        public event Action? OpenHistoryRequested;
 
+        public event Action? OpenHistoryRequested;
 
         public SettingsView(SettingsService service)
         {
@@ -24,7 +25,12 @@ namespace MyHomelabBrowser
             _working = _service.Settings.Clone();
 
             DataContext = _working;
+
+            // 🔽 synchro initiale du DownloadManager
+            if (!string.IsNullOrWhiteSpace(_working.DownloadFolder))
+                DownloadManager.Instance.DownloadFolder = _working.DownloadFolder;
         }
+
         private void OpenHistory_Click(object sender, RoutedEventArgs e)
         {
             OpenHistoryRequested?.Invoke();
@@ -34,6 +40,10 @@ namespace MyHomelabBrowser
         {
             _working = _original.Clone();
             DataContext = _working;
+
+            // 🔽 rollback dossier downloads
+            if (!string.IsNullOrWhiteSpace(_working.DownloadFolder))
+                DownloadManager.Instance.DownloadFolder = _working.DownloadFolder;
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)
@@ -44,9 +54,44 @@ namespace MyHomelabBrowser
             _working = _service.Settings.Clone();
             DataContext = _working;
 
+            // 🔽 applique définitivement le dossier de téléchargement
+            if (!string.IsNullOrWhiteSpace(_working.DownloadFolder))
+                DownloadManager.Instance.DownloadFolder = _working.DownloadFolder;
+
             ShowSaveFeedback();
         }
 
+        // ===============================
+        // DOWNLOAD FOLDER PICKER
+        // ===============================
+        private void PickDownloadFolder_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new Microsoft.Win32.OpenFolderDialog
+            {
+                Title = "Choisir le dossier de téléchargement",
+                InitialDirectory = string.IsNullOrWhiteSpace(_working.DownloadFolder)
+                    ? Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                        "Downloads")
+                    : _working.DownloadFolder
+            };
+
+            if (dlg.ShowDialog() != true)
+                return;
+
+            var path = dlg.FolderName;
+
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+
+            _working.DownloadFolder = path;
+            DownloadManager.Instance.DownloadFolder = path;
+        }
+
+
+        // ===============================
+        // UI FEEDBACK
+        // ===============================
         void ShowSaveFeedback()
         {
             SaveFeedback.Opacity = 1;
@@ -63,7 +108,7 @@ namespace MyHomelabBrowser
 
         private void TextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-
+            // conservé volontairement (aucune régression)
         }
     }
 }

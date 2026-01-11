@@ -9,5 +9,9 @@ namespace MyHomelabBrowser;
 /// </summary>
 public partial class App : Application
 {
+    
+
+
+
 }
 
