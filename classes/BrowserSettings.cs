@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
+using System.Linq;
 
 namespace MyHomelabBrowser.classes
 {
@@ -25,28 +25,50 @@ namespace MyHomelabBrowser.classes
         public bool EnableSuspension { get; set; } = true;
         public int SuspendDelayMinutes { get; set; } = 5;
 
+        // --------------------
+        // Téléchargements
+        // --------------------
         public string DownloadFolder { get; set; }
-    = Path.Combine(
-    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-    "Downloads");
+            = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "Downloads");
 
+        // ====================
+        // 🔥 FLASH / LEGACY
+        // ====================
+        public bool EnableFlashSupport { get; set; } = false;
+
+        // Si true → tenter Ruffle avant Basilisk
+        public bool PreferRuffle { get; set; } = true;
+
+        // Chemin vers basilisk.exe
+        public string BasiliskPath { get; set; } = "";
+
+        // Logs / overlay / debug
+        public bool FlashDebugEnabled { get; set; } = false;
 
         // --------------------
-        // FUTUR
+        // Clone (CRITIQUE)
         // --------------------
-        // public bool EnableProfiles { get; set; }
-        // public bool EnableWorkspaces { get; set; }
-
         public BrowserSettings Clone()
         {
             return new BrowserSettings
             {
                 StartPage = StartPage,
                 NewTabPage = NewTabPage,
+
                 EnableSuspension = EnableSuspension,
                 SuspendDelayMinutes = SuspendDelayMinutes,
+
                 EnableCommands = EnableCommands,
                 DownloadFolder = DownloadFolder,
+
+                // 🔥 Flash
+                EnableFlashSupport = EnableFlashSupport,
+                PreferRuffle = PreferRuffle,
+                BasiliskPath = BasiliskPath,
+                FlashDebugEnabled = FlashDebugEnabled,
+
                 Commands = Commands
                     .Select(c => new CommandSetting
                     {
@@ -57,7 +79,5 @@ namespace MyHomelabBrowser.classes
                     .ToList()
             };
         }
-
     }
-
 }

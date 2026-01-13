@@ -1,6 +1,9 @@
-﻿using MyHomelabBrowser.classes;
+﻿using Microsoft.Win32;
+using MyHomelabBrowser.classes;
+using MyHomelabBrowser.classes.Flash;
 using System;
 using System.IO;
+using System.Linq; // ✅ MANQUANT
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Animation;
@@ -29,6 +32,9 @@ namespace MyHomelabBrowser
             // 🔽 synchro initiale du DownloadManager
             if (!string.IsNullOrWhiteSpace(_working.DownloadFolder))
                 DownloadManager.Instance.DownloadFolder = _working.DownloadFolder;
+
+            // 🔥 charger la whitelist Flash au démarrage
+            RefreshFlashRules();
         }
 
         private void OpenHistory_Click(object sender, RoutedEventArgs e)
@@ -44,6 +50,9 @@ namespace MyHomelabBrowser
             // 🔽 rollback dossier downloads
             if (!string.IsNullOrWhiteSpace(_working.DownloadFolder))
                 DownloadManager.Instance.DownloadFolder = _working.DownloadFolder;
+
+            // 🔁 rollback visuel whitelist
+            RefreshFlashRules();
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)
@@ -58,6 +67,9 @@ namespace MyHomelabBrowser
             if (!string.IsNullOrWhiteSpace(_working.DownloadFolder))
                 DownloadManager.Instance.DownloadFolder = _working.DownloadFolder;
 
+            // 🔁 refresh whitelist après save
+            RefreshFlashRules();
+
             ShowSaveFeedback();
         }
 
@@ -66,7 +78,7 @@ namespace MyHomelabBrowser
         // ===============================
         private void PickDownloadFolder_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new Microsoft.Win32.OpenFolderDialog
+            var dlg = new OpenFolderDialog
             {
                 Title = "Choisir le dossier de téléchargement",
                 InitialDirectory = string.IsNullOrWhiteSpace(_working.DownloadFolder)
@@ -88,6 +100,52 @@ namespace MyHomelabBrowser
             DownloadManager.Instance.DownloadFolder = path;
         }
 
+        // ===============================
+        // FLASH WHITELIST
+        // ===============================
+        void RefreshFlashRules()
+        {
+            FlashLegacyList.ItemsSource =
+                FlashDomainRules.GetAll()
+                    .Where(kv => kv.Value == FlashRuleMode.Legacy)
+                    .Select(kv => kv.Key)
+                    .OrderBy(x => x)
+                    .ToList();
+        }
+
+        private void RemoveFlashRule_Click(object sender, RoutedEventArgs e)
+        {
+            if (FlashLegacyList.SelectedItem is not string host)
+                return;
+
+            // URI factice suffisante pour supprimer par host
+            FlashDomainRules.RemoveRule(new Uri("https://" + host));
+
+            RefreshFlashRules();
+        }
+
+        // ===============================
+        // BASILISK PICKER
+        // ===============================
+        private void PickBasiliskPath_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new OpenFileDialog
+            {
+                Title = "Choisir basilisk.exe",
+                Filter = "Basilisk (basilisk.exe)|basilisk.exe|Tous les fichiers|*.*",
+                InitialDirectory = string.IsNullOrWhiteSpace(_working.BasiliskPath)
+                    ? Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)
+                    : Path.GetDirectoryName(_working.BasiliskPath)
+            };
+
+            if (dlg.ShowDialog() != true)
+                return;
+
+            if (!File.Exists(dlg.FileName))
+                return;
+
+            _working.BasiliskPath = dlg.FileName;
+        }
 
         // ===============================
         // UI FEEDBACK

@@ -16,6 +16,10 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using MyHomelabBrowser.classes.Flash;
+using System.Diagnostics;
+
+
 
 namespace MyHomelabBrowser
 {
@@ -53,7 +57,12 @@ namespace MyHomelabBrowser
         CoreWebView2Environment? _privateEnvironment;
         CoreWebView2Environment? _normalEnvironment;
 
+        LegacyLauncher _legacyLauncher;
+
         readonly ObservableCollection<ToastItem> _toasts = new();
+
+        public FlashDecisionService? FlashService { get; set; }
+        public FlashMode FlashMode { get; set; } = FlashMode.None;
 
         string _lastHistoryUrl = "";
         DateTime _lastHistoryAt = DateTime.MinValue;
@@ -63,6 +72,7 @@ namespace MyHomelabBrowser
 
         string HistoryPath => Path.Combine(AppDataDir, "history.json");
         string FavoritesPath => Path.Combine(AppDataDir, "favorites.json");
+
 
         static readonly JsonSerializerOptions JsonOpts = new()
         {
@@ -82,12 +92,15 @@ namespace MyHomelabBrowser
 
 
             _settings = new SettingsService();
+            _legacyLauncher = new LegacyLauncher(_settings);
             _settings.SettingsChanged += ApplySettings;
             PreviewMouseDown += OnGlobalMouseDown;
 
             // load persisted data (safe)
             LoadHistory();
             LoadFavorites();
+
+           
 
             // initial UI refresh (safe even if XAML not ready yet)
             RefreshFavoritesBar();
@@ -98,6 +111,108 @@ namespace MyHomelabBrowser
             // start page
             CreateTab(_settings.Settings.StartPage);
         }
+        void UpdateFlashModeButton(WebTabContent content)
+        {
+            if (content?.Web?.Source == null)
+            {
+                FlashModeBtn.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            if (!content.FlashRequired)
+            {
+                FlashModeBtn.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            var uri = content.Web.Source;
+            var rule = FlashDomainRules.GetRule(uri);
+
+            FlashModeBtn.Visibility = Visibility.Visible;
+
+            FlashModeBtn.Content =
+                content.FlashMode == FlashMode.Legacy
+                    ? "⚡ Legacy"
+                    : rule == FlashRuleMode.Legacy
+                        ? "⚡ Legacy"
+                        : "⚡ Auto";
+
+            bool legacyAvailable = _legacyLauncher.CanLaunch();
+
+            FlashModeBtn.IsEnabled =
+                content.FlashMode != FlashMode.Legacy || legacyAvailable;
+
+            FlashModeBtn.ToolTip =
+                !legacyAvailable && content.FlashMode == FlashMode.Legacy
+                    ? "Basilisk n’est pas configuré"
+                    : "Changer le mode Flash pour ce site";
+
+           Dispatcher.BeginInvoke(
+    DispatcherPriority.Background,
+    () => FlashModeBtn.InvalidateVisual()
+);
+
+        }
+
+
+
+
+
+
+        private void FlashModeBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (Tabs.SelectedItem is not TabItem tab ||
+                tab.Tag is not WebTabContent content ||
+                content.Web.Source == null)
+                return;
+
+            var uri = content.Web.Source;
+
+            // overlay UNIQUE pour l’onglet courant
+            var overlay = content.FlashOverlay;
+            if (overlay == null)
+                return;
+
+
+            // ===============================
+            // CAS 1 : ON ÉTAIT EN LEGACY → RETOUR AUTO
+            // ===============================
+            if (FlashDomainRules.GetRule(uri) == FlashRuleMode.Legacy)
+            {
+                FlashDomainRules.RemoveRule(uri);
+
+                content.FlashMode = FlashMode.None;
+                content.IsLegacyExternal = false;
+
+                overlay.TryShow("Retour au mode automatique…");
+
+                // 🔁 recharge → HandleFlashAsync décidera quoi faire
+                Navigate(uri.AbsoluteUri);
+                return;
+            }
+
+            // ===============================
+            // CAS 2 : DEMANDE LEGACY
+            // ===============================
+            if (!_legacyLauncher.CanLaunch())
+            {
+                overlay.ShowBlocked(
+                    "Impossible d’activer Flash Legacy : Basilisk n’est pas configuré.");
+                overlay.OpenSettingsRequested += OpenSettings;
+                return;
+            }
+
+            // ⚡ règle utilisateur uniquement
+            FlashDomainRules.SetRule(uri, FlashRuleMode.Legacy);
+
+            overlay.TryShow("Mode Flash Legacy forcé. Rechargement…");
+
+            // 🔁 recharge → HandleFlashAsync lancera Legacy proprement
+            Navigate(uri.AbsoluteUri);
+        }
+
+
+
 
         // ---------------------------
         // Settings apply
@@ -109,19 +224,28 @@ namespace MyHomelabBrowser
 
             RefreshCommandSuggestions();
         }
-        async Task InitPrivateWebViewAsync(WebView2 web, BrowserTabHeader header, TabItem tab, string url)
+        async Task InitPrivateWebViewAsync(
+    WebView2 web,
+    BrowserTabHeader header,
+    TabItem tab,
+    string url,
+    FlashUxOverlay overlay,
+    FlashDecisionService flashService,
+    WebTabContent content)
         {
             try
             {
                 await InitWebViewEnvironmentsAsync();
-
-                // Important : EnsureCoreWebView2Async peut être long -> on l'attend ici sans bloquer le clic
                 await web.EnsureCoreWebView2Async(_privateEnvironment);
+                AttachNewWindowHandling(web);
 
-                // events privés
-                web.SourceChanged += (_, _) => Dispatcher.Invoke(UpdateAddressBarFromTab);
+                web.SourceChanged += (_, _) =>
+                    Dispatcher.Invoke(UpdateAddressBarFromTab);
 
-                web.NavigationCompleted += (_, _) =>
+                // ===============================
+                // NAVIGATION COMPLETED (PRIVÉ)
+                // ===============================
+                web.NavigationCompleted += async (_, _) =>
                 {
                     Dispatcher.Invoke(UpdateAddressBarFromTab);
                     UpdateFavoriteButton();
@@ -129,28 +253,39 @@ namespace MyHomelabBrowser
                     if (web.CoreWebView2 != null)
                     {
                         header.SetTitle(web.CoreWebView2.DocumentTitle);
-
                         if (!string.IsNullOrEmpty(web.CoreWebView2.FaviconUri))
                             header.SetIcon(new BitmapImage(new Uri(web.CoreWebView2.FaviconUri)));
                     }
 
                     AttachPreview(tab, web);
+
+                    // 🔥 FLASH — LOGIQUE UNIQUE, CENTRALISÉE
+                    await HandleFlashAsync(web, content, header, overlay);
                 };
 
                 web.Source = new Uri(url);
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.ToString(), "Erreur onglet privé", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(
+                    ex.ToString(),
+                    "Erreur onglet privé",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
 
-                // optionnel : fermer l'onglet privé si init KO
                 Dispatcher.Invoke(() =>
                 {
                     Tabs.Items.Remove(tab);
-                    if (Tabs.Items.Count == 0) Close();
+                    if (Tabs.Items.Count == 0)
+                        Close();
                 });
             }
         }
+
+
+
+
+
 
         async Task InitWebViewEnvironmentsAsync()
         {
@@ -379,19 +514,25 @@ namespace MyHomelabBrowser
             var web = new WebView2 { Source = new Uri(url) };
             DownloadHook.Attach(web, isPrivate: false);
 
-
             var header = new BrowserTabHeader();
             header.SetTitle("Nouvel onglet");
+
+            var overlay = new FlashUxOverlay(this);
+            var flashService = new FlashDecisionService(web, _settings, _legacyLauncher);
 
             var content = new WebTabContent
             {
                 Web = web,
                 IsPinned = false,
                 IsSuspended = false,
-                LastActivated = DateTime.Now
+                LastActivated = DateTime.Now,
+                FlashService = flashService,
+                FlashMode = FlashMode.None,
+                FlashOverlay = overlay
             };
 
-            web.SourceChanged += (_, _) => Dispatcher.Invoke(UpdateAddressBarFromTab);
+            web.SourceChanged += (_, _) =>
+                Dispatcher.Invoke(UpdateAddressBarFromTab);
 
             var tab = new TabItem
             {
@@ -399,7 +540,36 @@ namespace MyHomelabBrowser
                 Tag = content
             };
 
-            // 1) addressbar + history + fav update
+            // ===============================
+            // PRÉ-DÉTECTION RAPIDE (AVANT DOM)
+            // ===============================
+            web.CoreWebView2InitializationCompleted += (_, e) =>
+            {
+                if (!e.IsSuccess || web.CoreWebView2 == null)
+                    return;
+
+                web.CoreWebView2.NavigationStarting += (_, nav) =>
+                {
+                    try
+                    {
+                        var uri = new Uri(nav.Uri);
+                        AttachNewWindowHandling(web);
+
+                        Dispatcher.Invoke(() =>
+                        {
+                            // intention Flash (pas décision)
+                            content.FlashRequired = true;
+                            UpdateFlashModeButton(content);
+                            overlay.TryShow("Vérification Flash en cours…");
+                        });
+                    }
+                    catch { }
+                };
+            };
+
+            // ---------------------------
+            // Address bar + history + fav
+            // ---------------------------
             web.NavigationCompleted += (_, _) =>
             {
                 Dispatcher.Invoke(UpdateAddressBarFromTab);
@@ -413,41 +583,60 @@ namespace MyHomelabBrowser
                 UpdateFavoriteButton();
             };
 
-            header.CloseRequested += () => CloseTab(tab);
-
-            header.DetachRequested += () =>
-            {
-                if (_isDocking) return;
-                DetachTab(tab);
-            };
-
-            header.PinRequested += () =>
-            {
-                if (tab.Tag is not WebTabContent c) return;
-                c.IsPinned = !c.IsPinned;
-                ApplyPinState(tab, header, c.IsPinned);
-            };
-
-            header.ReorderRequested += dir => ReorderTab(tab, dir);
-
-            // 2) title / icon / preview
-            web.NavigationCompleted += (_, _) =>
+            // ---------------------------
+            // Title / icon / preview + FLASH
+            // ---------------------------
+            web.NavigationCompleted += async (_, _) =>
             {
                 if (web.CoreWebView2 != null)
                 {
                     header.SetTitle(web.CoreWebView2.DocumentTitle);
-
                     if (!string.IsNullOrEmpty(web.CoreWebView2.FaviconUri))
                         header.SetIcon(new BitmapImage(new Uri(web.CoreWebView2.FaviconUri)));
                 }
 
                 AttachPreview(tab, web);
+
+                // 🔥 LOGIQUE FLASH UNIQUE
+                await HandleFlashAsync(web, content, header, overlay);
+
+                var hideTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(2)
+                };
+                hideTimer.Tick += (_, _) =>
+                {
+                    hideTimer.Stop();
+                    overlay.Hide();
+                };
+                hideTimer.Start();
             };
+
+            // ---------------------------
+            // Header actions
+            // ---------------------------
+            header.CloseRequested += () => CloseTab(tab);
+            header.DetachRequested += () =>
+            {
+                if (_isDocking) return;
+                DetachTab(tab);
+            };
+            header.PinRequested += () =>
+            {
+                content.IsPinned = !content.IsPinned;
+                ApplyPinState(tab, header, content.IsPinned);
+            };
+            header.ReorderRequested += dir => ReorderTab(tab, dir);
 
             Tabs.Items.Add(tab);
             Tabs.SelectedItem = tab;
             SyncWebHostWithSelection();
         }
+
+
+
+
+
         private void NewPrivateTab_Click(object sender, RoutedEventArgs e)
         {
             // on ne bloque jamais l'UI sur EnsureCoreWebView2Async
@@ -457,22 +646,26 @@ namespace MyHomelabBrowser
 
         void CreatePrivateTab(string url)
         {
-            var web = new WebView2(); // pas de Source ici, pas d'Ensure ici (on ne bloque pas)
-
-            var header = new BrowserTabHeader();
+            var web = new WebView2(); // pas de Source ici
             DownloadHook.Attach(web, isPrivate: true);
 
-
+            var header = new BrowserTabHeader();
             header.SetTitle("Privé");
             header.SetPrivate(true);
+
+            var overlay = new FlashUxOverlay(this);
+            var flashService = new FlashDecisionService(web, _settings, _legacyLauncher);
+
 
             var content = new WebTabContent
             {
                 Web = web,
-                IsPrivate = true,
                 IsPinned = false,
                 IsSuspended = false,
-                LastActivated = DateTime.Now
+                LastActivated = DateTime.Now,
+                FlashService = flashService,
+                FlashMode = FlashMode.None,
+                FlashOverlay = overlay
             };
 
             var tab = new TabItem
@@ -482,21 +675,147 @@ namespace MyHomelabBrowser
             };
 
             header.CloseRequested += () => CloseTab(tab);
-
-            header.DetachRequested += () =>
-            {
-                if (_isDocking) return;
-                DetachTab(tab);
-            };
+            header.DetachRequested += () => { if (_isDocking) return; DetachTab(tab); };
 
             Tabs.Items.Add(tab);
             Tabs.SelectedItem = tab;
             SyncWebHostWithSelection();
 
-            // init async après coup (sans bloquer)
-            _ = InitPrivateWebViewAsync(web, header, tab, url);
+            _ = InitPrivateWebViewAsync(web, header, tab, url, overlay, flashService, content);
         }
 
+        public bool CanUseFlashOrLegacy(Uri uri, bool flashDetected, out string reason)
+        {
+            reason = "";
+
+            // Pas de Flash → aucune contrainte
+            if (!flashDetected)
+                return true;
+
+            var s = _settings.Settings;
+
+            if (!s.EnableFlashSupport)
+            {
+                reason = "Le support Flash est désactivé dans les paramètres.";
+                return false;
+            }
+
+            var rule = FlashDomainRules.GetRule(uri);
+
+            bool legacyRequired =
+                rule == FlashRuleMode.Legacy ||
+                (rule == FlashRuleMode.Auto && !s.PreferRuffle);
+
+            if (legacyRequired && !_legacyLauncher.CanLaunch())
+            {
+                reason = "Ce site nécessite Flash réel, mais Basilisk n’est pas configuré.";
+                return false;
+            }
+
+            return true;
+        }
+
+
+
+
+        UIElement CreateLegacyPlaceholder(TabItem tab, WebTabContent state)
+        {
+            var panel = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(30, 30, 30)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(60, 60, 60)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                Margin = new Thickness(40),
+                Padding = new Thickness(30)
+            };
+
+            var stack = new StackPanel
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = "🧩 Mode Legacy (Flash réel)",
+                FontSize = 24,
+                Foreground = Brushes.White,
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = state.LegacyUrl ?? "",
+                FontSize = 13,
+                Margin = new Thickness(0, 8, 0, 18),
+                Foreground = new SolidColorBrush(Color.FromRgb(180, 180, 180)),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 900
+            });
+
+            var btnRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+
+            var reopen = new Button
+            {
+                Content = "Ré-ouvrir Basilisk",
+                Margin = new Thickness(0, 0, 10, 0),
+                Padding = new Thickness(12, 8, 12, 8)
+            };
+
+            reopen.Click += (_, _) =>
+            {
+                if (string.IsNullOrWhiteSpace(state.LegacyUrl))
+                    return;
+
+                var uri = new Uri(state.LegacyUrl);
+                var profile = LegacyProfileManager.GetProfileForDomain(uri.Host);
+                var p = _legacyLauncher.Launch(state.LegacyUrl, profile);
+                state.LegacyPid = p?.Id;
+
+                if (tab.Header is BrowserTabHeader h)
+                    h.SetTitle("Legacy Flash");
+            };
+
+            var tryRuffle = new Button
+            {
+                Content = "Tenter Ruffle ici",
+                Padding = new Thickness(12, 8, 12, 8)
+            };
+
+            tryRuffle.Click += async (_, _) =>
+            {
+                state.IsLegacyExternal = false;
+                state.FlashMode = FlashMode.None;
+
+                // recharge l’URL dans WebView2
+                if (!string.IsNullOrWhiteSpace(state.LegacyUrl))
+                    state.Web.Source = new Uri(state.LegacyUrl);
+
+                // resync affichage
+                SyncWebHostWithSelection();
+
+                // si Flash, inject Ruffle
+                if (state.FlashService != null)
+                {
+                    var hasFlash = await state.FlashService.DetectFlashDomAsync();
+                    if (hasFlash)
+                    {
+                        state.FlashMode = FlashMode.Ruffle;
+                        await RuffleInjector.InjectAsync(state.Web);
+                    }
+                }
+            };
+
+            btnRow.Children.Add(reopen);
+            btnRow.Children.Add(tryRuffle);
+
+            stack.Children.Add(btnRow);
+            panel.Child = stack;
+
+            return panel;
+        }
 
 
         void AnimatePrivateTransition()
@@ -518,44 +837,75 @@ namespace MyHomelabBrowser
             {
                 WebHost.Content = null;
                 PrivateIndicator.Visibility = Visibility.Collapsed;
+                FlashModeBtn.Visibility = Visibility.Collapsed;
                 return;
             }
 
             if (tab.Tag is WebTabContent webTab)
             {
-                // indicateur texte
+                // ---------------------------
+                // Indicateurs / thème
+                // ---------------------------
                 PrivateIndicator.Visibility =
                     webTab.IsPrivate ? Visibility.Visible : Visibility.Collapsed;
+
                 ApplyPrivateTheme(webTab.IsPrivate);
                 AnimatePrivateTransition();
-                // UI barre d’adresse
+
                 AddressBar.Background = webTab.IsPrivate
-                    ? new SolidColorBrush(Color.FromRgb(70, 40, 90))   // privé
-                    : new SolidColorBrush(Color.FromRgb(72, 68, 68)); // normal
+                    ? new SolidColorBrush(Color.FromRgb(70, 40, 90))
+                    : new SolidColorBrush(Color.FromRgb(72, 68, 68));
 
                 webTab.LastActivated = DateTime.Now;
 
-                WebHost.Content = webTab.IsSuspended
-                    ? CreateSuspendedPlaceholder(tab, webTab)
-                    : webTab.Web;
+                // ---------------------------
+                // Contenu principal
+                // ---------------------------
+                WebHost.Content =
+                    webTab.IsLegacyExternal ? CreateLegacyPlaceholder(tab, webTab) :
+                    webTab.IsSuspended ? CreateSuspendedPlaceholder(tab, webTab) :
+                    webTab.Web;
+
+                // ---------------------------
+                // 🔥 FLASH UI
+                // ---------------------------
+                UpdateFlashModeButton(webTab);
+
+                // ⚠️ UTILISER L’OVERLAY EXISTANT
+                if (webTab.FlashRequired && !webTab.IsLegacyExternal)
+                {
+                    var overlay = webTab.FlashOverlay;
+                    if (overlay != null)
+                    {
+                        overlay.InvalidateLayout();
+                        overlay.TryShow("Ce site nécessite Flash. Choisissez un mode.");
+                    }
+                }
             }
             else if (tab.Tag is ViewTabContent viewTab)
             {
                 PrivateIndicator.Visibility = Visibility.Collapsed;
                 ApplyPrivateTheme(false);
                 AnimatePrivateTransition();
+
                 AddressBar.Background = new SolidColorBrush(Color.FromRgb(72, 68, 68));
                 WebHost.Content = viewTab.View;
+
                 UpdateAddressBarFromTab();
+
+                FlashModeBtn.Visibility = Visibility.Collapsed;
             }
             else
             {
                 WebHost.Content = null;
                 PrivateIndicator.Visibility = Visibility.Collapsed;
+                FlashModeBtn.Visibility = Visibility.Collapsed;
             }
 
             UpdateFavoriteButton();
         }
+
+
 
 
 
@@ -1625,30 +1975,36 @@ namespace MyHomelabBrowser
         }
 
         // ---------------------------
-        // Preview (stable)
+        // Preview (stable, SANS CRASH)
         // ---------------------------
         static void AttachPreview(TabItem tab, WebView2 web)
         {
-            if (tab.ToolTip != null) return;
+            if (tab.ToolTip != null)
+                return;
 
-            var preview = new Image
-            {
-                Width = 320,
-                Height = 200,
-                Stretch = Stretch.UniformToFill
-            };
-
-            tab.ToolTip = new Border
+            var border = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(32, 32, 32)),
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(6),
-                Child = preview
+                Width = 320,
+                Height = 200
             };
+
+            tab.ToolTip = border;
 
             tab.MouseEnter += async (_, _) =>
             {
-                if (web.CoreWebView2 == null) return;
+                if (web.CoreWebView2 == null)
+                    return;
+
+                // ⚠️ Image TOUJOURS recréée (clé du fix)
+                var preview = new Image
+                {
+                    Width = 320,
+                    Height = 200,
+                    Stretch = Stretch.UniformToFill
+                };
 
                 using var stream = new MemoryStream();
                 await web.CoreWebView2.CapturePreviewAsync(
@@ -1657,15 +2013,21 @@ namespace MyHomelabBrowser
                 );
 
                 stream.Position = 0;
+
                 var bmp = new BitmapImage();
                 bmp.BeginInit();
                 bmp.StreamSource = stream;
                 bmp.CacheOption = BitmapCacheOption.OnLoad;
                 bmp.EndInit();
+                bmp.Freeze(); // 🔒 thread-safe + perf
 
                 preview.Source = bmp;
+
+                // 🔁 remplacement SAFE (pas de parent fantôme)
+                border.Child = preview;
             };
         }
+
 
         // ---------------------------
         // Settings button handler
@@ -1712,11 +2074,120 @@ namespace MyHomelabBrowser
         }
 
 
+        async Task HandleFlashAsync(
+     WebView2 web,
+     WebTabContent content,
+     BrowserTabHeader header,
+     FlashUxOverlay overlay)
+        {
+            if (web.Source == null || content.FlashService == null)
+                return;
+
+            var uri = web.Source;
+
+            // ===============================
+            // 1️⃣ HEURISTIQUE RAPIDE (SILENCIEUSE)
+            // ===============================
+            bool flashSuspected =
+                await content.FlashService.DetectFlashRequirementAsync();
+
+            content.FlashRequired = flashSuspected;
+
+            // 👉 bouton OK, PAS d’overlay
+            Dispatcher.Invoke(() => UpdateFlashModeButton(content));
+
+            // ===============================
+            // 2️⃣ DÉTECTION DOM RÉELLE (SEULE SOURCE DE VÉRITÉ)
+            // ===============================
+            bool hasFlashDom =
+                await content.FlashService.DetectFlashDomAsync();
+
+            if (!hasFlashDom)
+                return; // ⛔ PAS DE FLASH → RIEN
+
+            content.FlashRequired = true;
+
+            // ===============================
+            // 3️⃣ VÉRIFICATION CAPACITÉ
+            // ===============================
+            if (!CanUseFlashOrLegacy(uri, hasFlashDom, out var reason))
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    overlay.ShowBlocked(reason);
+                });
+
+                overlay.OpenSettingsRequested += OpenSettings;
+                return;
+            }
+
+            // ===============================
+            // 4️⃣ DÉCISION
+            // ===============================
+            var mode = content.FlashService.DecideInitialMode(uri);
+            content.FlashMode = mode;
+
+            // -------------------------------
+            // LEGACY
+            // -------------------------------
+            if (mode == FlashMode.Legacy)
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    overlay.TryShow("Flash réel requis → ouverture en mode Legacy…");
+                });
+
+                var profile = LegacyProfileManager.GetProfileForDomain(uri.Host);
+                var p = _legacyLauncher.Launch(uri.AbsoluteUri, profile);
+
+                content.IsLegacyExternal = true;
+                content.LegacyUrl = uri.AbsoluteUri;
+                content.LegacyPid = p?.Id;
+
+                header.SetTitle("Legacy Flash");
+                SyncWebHostWithSelection();
+                return;
+            }
+
+            // -------------------------------
+            // RUFFLE
+            // -------------------------------
+            Dispatcher.Invoke(() =>
+            {
+                overlay.TryShow("Flash détecté → émulation Ruffle…");
+            });
+
+            content.FlashMode = FlashMode.Ruffle;
+
+            await RuffleInjector.InjectAsync(web);
+
+            content.RuffleMonitor?.Stop();
+            content.RuffleMonitor = new RuffleMonitor(web);
+
+            content.RuffleMonitor.FailureDetected += _ =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    overlay.TryShow("Ruffle a échoué → bascule en mode Legacy…");
+
+                    var profile = LegacyProfileManager.GetProfileForDomain(uri.Host);
+                    var p = _legacyLauncher.Launch(uri.AbsoluteUri, profile);
+
+                    content.IsLegacyExternal = true;
+                    content.LegacyUrl = uri.AbsoluteUri;
+                    content.LegacyPid = p?.Id;
+                    content.FlashMode = FlashMode.Legacy;
+
+                    header.SetTitle("Legacy Flash");
+                    SyncWebHostWithSelection();
+                });
+            };
+
+            content.RuffleMonitor.Start();
+        }
 
 
-
-
-        public  void UpdateDownloadsBadge()
+        public void UpdateDownloadsBadge()
         {
             var count = DownloadManager.Instance.Items
                 .Count(d => d.IsInProgress);
@@ -1807,6 +2278,19 @@ namespace MyHomelabBrowser
                 .OfType<TabItem>()
                 .Any(t => t.Tag is WebTabContent w && w.IsPrivate);
         }
+        void AttachNewWindowHandling(WebView2 web)
+        {
+            web.CoreWebView2.NewWindowRequested += (s, e) =>
+            {
+                e.Handled = true;
+
+                Dispatcher.Invoke(() =>
+                {
+                    // ouverture DANS UN NOUVEL ONGLET
+                    CreateTab(e.Uri);
+                });
+            };
+        }
 
         void RedockWebView(WebView2 web)
         {
@@ -1884,7 +2368,26 @@ namespace MyHomelabBrowser
             public bool IsSuspended { get; set; }
             public bool IsPrivate { get; set; }
             public DateTime LastActivated { get; set; } = DateTime.Now;
+
+            // FLASH
+            public FlashDecisionService? FlashService { get; set; }
+            public FlashMode FlashMode { get; set; } = FlashMode.None;
+            public bool FlashRequired { get; set; }
+
+
+            // Legacy proxy
+            public bool IsLegacyExternal { get; set; }
+            public string? LegacyUrl { get; set; }
+            public int? LegacyPid { get; set; }
+
+            // Ruffle monitor (PLUS DE ref)
+            public RuffleMonitor? RuffleMonitor { get; set; }
+
+            public FlashUxOverlay? FlashOverlay { get; set; }
         }
+
+
+
 
         class ViewTabContent : TabContent
         {

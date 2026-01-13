@@ -406,6 +406,14 @@
                         Click="ToggleFavorite_Click"
                         Foreground="Gray"
                         Cursor="Hand"/>
+                <Button x:Name="FlashModeBtn"
+        Content="⚡ Auto"
+        Visibility="Collapsed"
+        Margin="6,0,0,0"
+        Click="FlashModeBtn_Click"
+        ToolTip="Forcer ou libérer le mode Flash pour ce site"/>
+
+
 
                 <Popup x:Name="CommandSuggestionsPopup"
                        PlacementTarget="{Binding ElementName=AddressBar}"

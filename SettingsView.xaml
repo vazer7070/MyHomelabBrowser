@@ -106,6 +106,90 @@
                                    Margin="0,6,0,0"/>
                     </StackPanel>
                 </Border>
+                <!-- ========================= -->
+                <!-- FLASH / LEGACY SETTINGS -->
+                <!-- ========================= -->
+
+                <Border Style="{StaticResource SettingsCard}">
+                    <StackPanel>
+
+                        <TextBlock Text="Flash / Legacy"
+                   Style="{StaticResource SettingsTitle}"/>
+
+                        <CheckBox Content="Activer le support Flash (Ruffle / Legacy)"
+                  IsChecked="{Binding EnableFlashSupport}"
+                  Margin="0,6"/>
+
+                        <CheckBox Content="Tenter Ruffle avant Basilisk"
+                  IsChecked="{Binding PreferRuffle}"
+                  IsEnabled="{Binding EnableFlashSupport}"
+                  Margin="0,4"/>
+
+                        <CheckBox Content="Mode debug Flash (logs / overlay)"
+                  IsChecked="{Binding FlashDebugEnabled}"
+                  IsEnabled="{Binding EnableFlashSupport}"
+                  Margin="0,4"/>
+
+                        <!-- Basilisk -->
+                        <TextBlock Text="Navigateur Legacy (Basilisk)"
+                   Style="{StaticResource SettingsLabel}"
+                   Margin="0,10,0,4"/>
+
+                        <StackPanel Orientation="Horizontal"
+                    IsEnabled="{Binding EnableFlashSupport}">
+
+                            <TextBox Height="36"
+                     Width="420"
+                     Padding="12,0"
+                     VerticalContentAlignment="Center"
+                     Background="#2B2B2B"
+                     Foreground="#CCCCCC"
+                     BorderThickness="0"
+                     IsReadOnly="True"
+                     Text="{Binding BasiliskPath}"
+                     ToolTip="Chemin vers basilisk.exe"/>
+
+                            <Button Content="Parcourir…"
+                    Margin="10,0,0,0"
+                    Padding="16,6"
+                    Click="PickBasiliskPath_Click"/>
+                        </StackPanel>
+
+                        <TextBlock Text="Utilisé uniquement si un site nécessite Flash réel (MMO anciens)"
+                   Foreground="#9E9E9E"
+                   FontSize="12"
+                   Margin="0,6,0,0"/>
+
+                        <!-- ===================== -->
+                        <!-- WHITELIST LEGACY -->
+                        <!-- ===================== -->
+
+                        <Separator Margin="0,16,0,12"/>
+
+                        <TextBlock Text="Sites forcés en mode Legacy"
+                   Style="{StaticResource SettingsLabel}"/>
+
+                        <TextBlock Text="Ces sites seront toujours ouverts avec Basilisk, même si Ruffle est disponible."
+                   Foreground="#9E9E9E"
+                   FontSize="12"
+                   Margin="0,0,0,8"/>
+
+                        <ListBox x:Name="FlashLegacyList"
+                 Height="120"
+                 Background="#2B2B2B"
+                 Foreground="#E0E0E0"
+                 BorderThickness="0"/>
+
+                        <Button Content="Supprimer le site sélectionné"
+                Margin="0,8,0,0"
+                Padding="14,6"
+                HorizontalAlignment="Left"
+                Click="RemoveFlashRule_Click"/>
+
+                    </StackPanel>
+                </Border>
+
+
 
                 <!-- ===== COMMANDES ===== -->
                 <Border Style="{StaticResource SettingsCard}">
