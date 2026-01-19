@@ -1,0 +1,30 @@
+﻿<Window x:Class="MyHomelabBrowser.FlashConsoleWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Flash Console"
+        Width="800" Height="400"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize"
+        Topmost="True">
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <DockPanel Grid.Row="0" Margin="0,0,0,8">
+            <Button x:Name="ClearBtn" Content="Clear" Width="80" Margin="0,0,8,0"/>
+            <TextBlock Text="Logs Flash / Ruffle / Legacy" VerticalAlignment="Center"/>
+        </DockPanel>
+
+        <TextBox x:Name="ConsoleBox"
+                 Grid.Row="1"
+                 IsReadOnly="True"
+                 TextWrapping="Wrap"
+                 VerticalScrollBarVisibility="Auto"
+                 HorizontalScrollBarVisibility="Disabled"
+                 FontFamily="Consolas"
+                 FontSize="12"/>
+    </Grid>
+</Window>

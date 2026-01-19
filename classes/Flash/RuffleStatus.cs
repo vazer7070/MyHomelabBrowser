@@ -27,15 +27,15 @@ namespace MyHomelabBrowser.classes.Flash
                 using var doc = JsonDocument.Parse(raw);
                 var r = doc.RootElement;
 
-                bool exists = r.TryGetProperty("exists", out var ex) && ex.GetBoolean();
+                bool exists = r.TryGetProperty("exists", out var ex) && ex.ValueKind == JsonValueKind.True;
                 if (!exists) return new RuffleStatus { Exists = false };
 
                 var status = new RuffleStatus
                 {
                     Exists = true,
-                    Started = r.TryGetProperty("started", out var st) && st.GetBoolean(),
-                    InjectedAt = r.TryGetProperty("injectedAt", out var ia) ? ia.GetInt64() : 0,
-                    LastFrameAt = r.TryGetProperty("lastFrameAt", out var lf) ? lf.GetInt64() : 0
+                    Started = r.TryGetProperty("started", out var st) && st.ValueKind == JsonValueKind.True,
+                    InjectedAt = GetInt64Safe(r, "injectedAt"),
+                    LastFrameAt = GetInt64Safe(r, "lastFrameAt")
                 };
 
                 if (r.TryGetProperty("errors", out var errs) && errs.ValueKind == JsonValueKind.Array)
@@ -51,6 +51,25 @@ namespace MyHomelabBrowser.classes.Flash
             {
                 return new RuffleStatus { Exists = false };
             }
+        }
+
+        private static long GetInt64Safe(JsonElement root, string propertyName)
+        {
+            if (!root.TryGetProperty(propertyName, out var el))
+                return 0;
+
+            if (el.ValueKind == JsonValueKind.Number && el.TryGetInt64(out var n))
+                return n;
+
+            if (el.ValueKind == JsonValueKind.String)
+            {
+                var s = el.GetString();
+                if (long.TryParse(s, out var n2))
+                    return n2;
+            }
+
+            // null / undefined / true/false / object => 0
+            return 0;
         }
     }
 }

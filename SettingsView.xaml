@@ -129,6 +129,10 @@
                   IsChecked="{Binding FlashDebugEnabled}"
                   IsEnabled="{Binding EnableFlashSupport}"
                   Margin="0,4"/>
+                        <Button Content="Ouvrir console Flash"
+        Click="OpenFlashConsole_Click"
+        Margin="0,8,0,0"/>
+
 
                         <!-- Basilisk -->
                         <TextBlock Text="Navigateur Legacy (Basilisk)"

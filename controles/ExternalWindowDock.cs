@@ -92,6 +92,7 @@ namespace MyHomelabBrowser.controles
 
         public void Attach(IntPtr hwnd)
         {
+
             if (hwnd == IntPtr.Zero) return;
 
             if (_hwnd != IntPtr.Zero && _hwnd != hwnd)

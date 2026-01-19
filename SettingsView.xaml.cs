@@ -3,7 +3,6 @@ using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Flash;
 using System;
 using System.IO;
-using System.Linq; // ✅ MANQUANT
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Animation;
@@ -15,6 +14,7 @@ namespace MyHomelabBrowser
         readonly SettingsService _service;
         BrowserSettings _original;
         BrowserSettings _working;
+        public bool FlashDebugEnabled { get; set; } = false;
 
         public event Action? OpenHistoryRequested;
 
@@ -198,7 +198,23 @@ namespace MyHomelabBrowser
             RefreshFlashRules();
         }
 
-        
+        private FlashConsoleWindow? _flashConsole;
+
+        private void OpenFlashConsole_Click(object sender, RoutedEventArgs e)
+        {
+            if (_flashConsole == null || !_flashConsole.IsVisible)
+            {
+                _flashConsole = new FlashConsoleWindow
+                {
+                    Owner = Window.GetWindow(this)
+                };
+                _flashConsole.Show();
+                return;
+            }
+
+            _flashConsole.Activate();
+        }
+
 
         private static string NormalizeHost(string input)
         {

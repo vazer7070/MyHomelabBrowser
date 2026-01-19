@@ -135,6 +135,9 @@ namespace MyHomelabBrowser.classes.Flash
         // ======================================================
         public async Task<bool> DetectFlashRequirementAsync()
         {
+            if (!_settings.Settings.EnableFlashSupport)
+                return false;
+
             if (_web.CoreWebView2 == null)
                 return false;
 

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using WpfWebView2 = Microsoft.Web.WebView2.Wpf.WebView2;
@@ -44,6 +45,8 @@ namespace MyHomelabBrowser.classes.Flash
                 if (DateTime.UtcNow - _startedAt > _startTimeout)
                 {
                     FailureDetected?.Invoke("Ruffle status absent (timeout)");
+                    FlashDebugConsole.Log("RuffleMonitor failure: " + "timeout");
+
                     Stop();
                 }
                 return;
@@ -52,6 +55,8 @@ namespace MyHomelabBrowser.classes.Flash
             if (!st.Started && DateTime.UtcNow - _startedAt > _startTimeout)
             {
                 FailureDetected?.Invoke("Ruffle n'a pas démarré (timeout)");
+                FlashDebugConsole.Log("RuffleMonitor failure: " + "timeout");
+
                 Stop();
                 return;
             }
@@ -62,6 +67,7 @@ namespace MyHomelabBrowser.classes.Flash
                 if (DateTime.UtcNow - lastFrame > _freezeTimeout)
                 {
                     FailureDetected?.Invoke("Ruffle freeze détecté");
+                    FlashDebugConsole.Log("RuffleMonitor failure: " + "freeze");
                     Stop();
                     return;
                 }
@@ -75,6 +81,7 @@ namespace MyHomelabBrowser.classes.Flash
                     e.Contains("load-failed", StringComparison.OrdinalIgnoreCase))
                 {
                     FailureDetected?.Invoke("Erreur Ruffle: " + e);
+                    FlashDebugConsole.Log("RuffleMonitor failure: " + e);
                     Stop();
                     return;
                 }

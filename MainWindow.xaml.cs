@@ -276,39 +276,7 @@ namespace MyHomelabBrowser
                     view.AttachExternalWindow(top);
                 }, DispatcherPriority.Loaded);
 
-                await Dispatcher.InvokeAsync(() =>
-                {
-                    view.ShowOverlay(true);
-                    view.SetStatus("⏳ Dock en cours…");
-                }, DispatcherPriority.Loaded);
-
-                for (int i = 0; i < 30; i++) // ~3s
-                {
-                    await Task.Delay(100);
-
-                    await Dispatcher.InvokeAsync(() =>
-                    {
-                        var host = view.GetHost();
-                        host?.RefreshLayout();
-                    }, DispatcherPriority.Loaded);
-
-                    // ✅ si le host a bien un handle + un hwnd docké, on considère OK
-                    var ok = false;
-                    await Dispatcher.InvokeAsync(() =>
-                    {
-                        var host = view.GetHost();
-                        ok = host != null && host.HostHandle != IntPtr.Zero && host.DockedHwnd != IntPtr.Zero;
-                    });
-
-                    if (ok)
-                        break;
-                }
-
-                await Dispatcher.InvokeAsync(() =>
-                {
-                    view.ShowOverlay(false);
-                }, DispatcherPriority.Loaded);
-
+                // NE PAS HIDe la top-level : c’est celle qu’on embed en child
 
 
                 header.SetTitle(url.Host);
@@ -2652,7 +2620,8 @@ namespace MyHomelabBrowser
                 return;
 
             var uri = web.Source;
-            
+            FlashDbg($"HandleFlashAsync ENTER url={uri}");
+
             // ✅ règle user
             var rule = FlashDomainRules.GetRule(uri);
             bool forcedLegacy = (rule == FlashRuleMode.Legacy);
@@ -2733,51 +2702,14 @@ namespace MyHomelabBrowser
             // =======================================================
             // ✅ CAS 0 : LEGACY FORCÉ -> BYPASS TOTAL + même pipeline
             // =======================================================
-            if (forcedLegacy)
-            {
-                // Basilisk pas configuré
-                if (!_legacyLauncher.CanLaunch())
+          
+                if (forcedLegacy)
                 {
-                    Dispatcher.Invoke(() =>
-                    {
-                        if (!IsActiveTab(content)) return;
-                        overlay.BindHost(content.HostGrid);
-                        overlay.ShowBlocked("Flash réel requis, mais Basilisk n’est pas configuré.");
-                        overlay.SetActions("Configurer", OpenSettings);
-                    });
+                    LaunchLegacySameWayAsFallback();
                     return;
                 }
 
-                // ✅ on ne fait PAS de dock overlay : on utilise le tab BasiliskHostView (dock réel)
-                await Dispatcher.InvokeAsync(() =>
-                {
-                    if (!IsActiveTab(content)) return;
-                    overlay.Hide();
-                });
-
-                // ✅ ouvre l’onglet Basilisk interne (embed)
-                bool ok = await OpenLegacyBasiliskTabAsync(uri);
-
-                await Dispatcher.InvokeAsync(() =>
-                {
-                    if (!IsActiveTab(content)) return;
-
-                    if (ok)
-                    {
-                        // ✅ ferme l'onglet flash source pour éviter 2 onglets
-                        if (Tabs.SelectedItem is TabItem currentTab && ReferenceEquals(currentTab.Tag, content))
-                            CloseTab(currentTab);
-                    }
-                    else
-                    {
-                        overlay.BindHost(content.HostGrid);
-                        overlay.ShowBlocked("Impossible de lancer Basilisk.");
-                        overlay.SetActions("Réessayer", () => Navigate(uri.AbsoluteUri), "Paramètres", OpenSettings);
-                    }
-                });
-
-                return;
-            }
+            
 
 
             // ===============================
@@ -3250,6 +3182,11 @@ namespace MyHomelabBrowser
             }
         }
 
+        private void FlashDbg(string msg)
+        {
+            if (_settings.Settings.FlashDebugEnabled)
+                MyHomelabBrowser.classes.Flash.FlashDebugConsole.Log(msg);
+        }
 
 
 

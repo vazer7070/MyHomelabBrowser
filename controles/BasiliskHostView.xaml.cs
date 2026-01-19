@@ -53,6 +53,8 @@ namespace MyHomelabBrowser.controles
 
         public void AttachExternalWindow(IntPtr hwnd)
         {
+            MessageBox.Show("BasiliskHostView.AttachExternalWindow called");
+
             if (hwnd == IntPtr.Zero) return;
 
             if (!IsLoaded)
