@@ -1,6 +1,7 @@
 ﻿using Microsoft.Web.WebView2.Wpf;
 using MyHomelabBrowser.classes;
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace MyHomelabBrowser.classes.Flash
@@ -26,13 +27,13 @@ namespace MyHomelabBrowser.classes.Flash
         // ======================================================
         public FlashMode DecideInitialMode(Uri uri)
         {
-            var s = _settings.Settings;
-
-            if (!s.EnableFlashSupport)
+            if (uri == null)
                 return FlashMode.None;
 
-            var rule = FlashDomainRules.GetRule(uri);
+            // ✅ 1) règle exacte OU parent-domain (suffix match)
+            var rule = GetRuleWithSubdomainFallback(uri);
 
+            // ✅ 2) règles explicites (prioritaires)
             if (rule == FlashRuleMode.Disabled)
                 return FlashMode.None;
 
@@ -42,13 +43,49 @@ namespace MyHomelabBrowser.classes.Flash
                     : FlashMode.None;
 
             if (rule == FlashRuleMode.Ruffle)
-                return FlashMode.None;
+                return FlashMode.None; // Ruffle-only -> donc pas de legacy
 
-            // Auto
+            // ✅ 3) AUTO
+            var s = _settings.Settings;
+
+            // si l'utilisateur ne préfère pas Ruffle -> Legacy direct si dispo
             if (!s.PreferRuffle && _legacy.CanLaunch())
                 return FlashMode.Legacy;
 
             return FlashMode.None;
+        }
+
+        // ===================================================
+        // ✅ helper: applique rule pour sous-domaines aussi
+        // ===================================================
+        private static FlashRuleMode GetRuleWithSubdomainFallback(Uri uri)
+        {
+            var host = uri.Host?.Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(host))
+                return FlashRuleMode.Auto;
+
+            // ✅ 1) règle exacte
+            var direct = FlashDomainRules.GetRule(new Uri("https://" + host));
+            if (direct != FlashRuleMode.Auto)
+                return direct;
+
+            // ✅ 2) fallback suffix : play13.ministryofwar.com -> ministryofwar.com
+            var parts = host.Split('.');
+            if (parts.Length < 2)
+                return FlashRuleMode.Auto;
+
+            // ex: parts = [play13, ministryofwar, com]
+            // i=1 -> ministryofwar.com
+            for (int i = 1; i < parts.Length; i++)
+            {
+                var parent = string.Join(".", parts.Skip(i));
+                var parentRule = FlashDomainRules.GetRule(new Uri("https://" + parent));
+
+                if (parentRule != FlashRuleMode.Auto)
+                    return parentRule;
+            }
+
+            return FlashRuleMode.Auto;
         }
 
         // ======================================================
@@ -95,7 +132,6 @@ namespace MyHomelabBrowser.classes.Flash
 
         // ======================================================
         // DÉTECTION RAPIDE / HEURISTIQUE (UX IMMÉDIATE)
-        // 👉 C’est CELLE-CI qu’on appelle en premier
         // ======================================================
         public async Task<bool> DetectFlashRequirementAsync()
         {
@@ -125,9 +161,9 @@ namespace MyHomelabBrowser.classes.Flash
         text.includes('shockwave') ||
         text.includes('adobe flash') ||
         text.includes('flash player') ||
-        text.includes('播放器') ||      // lecteur
-        text.includes('需要') ||        // nécessite
-        text.includes('安装')           // installer
+        text.includes('播放器') ||
+        text.includes('需要') ||
+        text.includes('安装')
     )
         return true;
 

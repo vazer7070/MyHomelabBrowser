@@ -56,11 +56,35 @@ namespace MyHomelabBrowser.classes.Flash
 
         public static FlashRuleMode GetRule(Uri uri)
         {
-            var host = uri.Host.ToLowerInvariant();
-            return _rules.TryGetValue(host, out var mode)
-                ? mode
-                : FlashRuleMode.Auto;
+            if (uri == null)
+                return FlashRuleMode.Auto;
+
+            var host = uri.Host?.Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(host))
+                return FlashRuleMode.Auto;
+
+            // ✅ 1) match exact
+            if (_rules.TryGetValue(host, out var direct))
+                return direct;
+
+            // ✅ 2) match parent domains (sous-domaines)
+            // ex: play13.ministryofwar.com -> ministryofwar.com
+            var parts = host.Split('.');
+            if (parts.Length < 2)
+                return FlashRuleMode.Auto;
+
+            // On enlève les labels de gauche 1 par 1
+            for (int i = 1; i <= parts.Length - 2; i++)
+            {
+                var parent = string.Join(".", parts, i, parts.Length - i);
+
+                if (_rules.TryGetValue(parent, out var inherited))
+                    return inherited;
+            }
+
+            return FlashRuleMode.Auto;
         }
+
 
         public static void SetRule(Uri uri, FlashRuleMode mode)
         {

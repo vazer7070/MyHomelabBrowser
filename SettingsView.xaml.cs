@@ -118,11 +118,13 @@ namespace MyHomelabBrowser
             if (FlashLegacyList.SelectedItem is not string host)
                 return;
 
-            // URI factice suffisante pour supprimer par host
             FlashDomainRules.RemoveRule(new Uri("https://" + host));
 
             RefreshFlashRules();
         }
+
+
+
 
         // ===============================
         // BASILISK PICKER
@@ -131,8 +133,8 @@ namespace MyHomelabBrowser
         {
             var dlg = new OpenFileDialog
             {
-                Title = "Choisir basilisk.exe",
-                Filter = "Basilisk (basilisk.exe)|basilisk.exe|Tous les fichiers|*.*",
+                Title = "Choisir Basilisk-Portable.exe",
+                Filter = "Basilisk (Basilisk-Portable.exe)|Basilisk-Portable.exe|Tous les fichiers|*.*",
                 InitialDirectory = string.IsNullOrWhiteSpace(_working.BasiliskPath)
                     ? Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)
                     : Path.GetDirectoryName(_working.BasiliskPath)
@@ -145,7 +147,11 @@ namespace MyHomelabBrowser
                 return;
 
             _working.BasiliskPath = dlg.FileName;
+
+            DataContext = null;
+            DataContext = _working;
         }
+
 
         // ===============================
         // UI FEEDBACK
@@ -164,9 +170,62 @@ namespace MyHomelabBrowser
             SaveFeedback.BeginAnimation(OpacityProperty, anim);
         }
 
+        private void AddFlashRule_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new AddLegacySiteDialog
+            {
+                Owner = Window.GetWindow(this)
+            };
+
+            if (dlg.ShowDialog() != true)
+                return;
+
+            var raw = dlg.ResultDomain ?? "";
+            var host = NormalizeHost(raw);
+
+            if (!IsValidHost(host))
+            {
+                MessageBox.Show(
+                    "Domaine invalide.\nExemple : ministryofwar.com",
+                    "Erreur",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning
+                );
+                return;
+            }
+
+            FlashDomainRules.SetRule(new Uri("https://" + host), FlashRuleMode.Legacy);
+            RefreshFlashRules();
+        }
+
+        
+
+        private static string NormalizeHost(string input)
+        {
+            string s = input.Trim().ToLowerInvariant();
+
+            s = s.Replace("https://", "").Replace("http://", "");
+            s = s.Split('/')[0];
+
+            if (s.StartsWith("*."))
+                s = s.Substring(2);
+
+            return s;
+        }
+
+        private static bool IsValidHost(string host)
+        {
+            if (string.IsNullOrWhiteSpace(host)) return false;
+            if (host.Contains(" ")) return false;
+            if (!host.Contains(".")) return false;
+            if (host.StartsWith(".")) return false;
+            if (host.EndsWith(".")) return false;
+            return true;
+        }
+
         private void TextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-            // conservé volontairement (aucune régression)
+
         }
     }
 }

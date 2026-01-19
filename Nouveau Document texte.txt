@@ -1,0 +1,54 @@
+    private async Task<(IntPtr top, int realPid)> WaitForAnyTopWindowFromProcessFamilyAsync(
+Process rootProc,
+int timeoutMs = 15000)
+    {
+        MessageBox.Show("WaitForAnyTopWindowFromProcessFamilyAsync called for PID=" + rootProc.Id);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        int rootPid = rootProc.Id;
+
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            // 1) PID candidat = rootPid (minimum)
+            int bestPid = rootPid;
+
+            // 2) essaie de trouver une top-level window pour rootPid
+            var hwnd = FindAnyTopLevelWindowForPid(bestPid);
+            if (hwnd != IntPtr.Zero)
+                return (hwnd, bestPid);
+
+            // 3) si tu as déjà un code qui récupère la "famille" de PID, garde-le,
+            // sinon on fait simple: on retente juste rootPid jusqu'au timeout.
+            await Task.Delay(100);
+        }
+        MessageBox.Show("WaitForAnyTopWindowFromProcessFamilyAsync TIMEOUT for PID=" + rootProc.Id);
+        return (IntPtr.Zero, 0);
+    }
+
+    private static IntPtr FindAnyTopLevelWindowForPid(int pid)
+    {
+        IntPtr found = IntPtr.Zero;
+        MessageBox.Show("FindAnyTopLevelWindowForPid called for PID=" + pid);
+        EnumWindows((hWnd, lParam) =>
+        {
+            GetWindowThreadProcessId(hWnd, out int winPid);
+            if (winPid != pid)
+                return true;
+
+            if (!IsWindowVisible(hWnd))
+                return true;
+            MessageBox.Show("IsWindowVisible passed for HWND=0x" + hWnd.ToInt64().ToString("X"));
+            // ignore fenêtres sans titre (optionnel, mais souvent utile)
+            int len = GetWindowTextLength(hWnd);
+            if (len <= 0)
+                return true;
+
+            found = hWnd;
+            return false;
+        }, IntPtr.Zero);
+        MessageBox.Show("FindAnyTopLevelWindowForPid found HWND=0x" + found.ToInt64().ToString("X") + " for PID=" + pid);
+        return found;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowTextLength(IntPtr hWnd);

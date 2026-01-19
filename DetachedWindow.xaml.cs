@@ -125,8 +125,12 @@ namespace MyHomelabBrowser
                         main.HideDockIndicator();
                         main.EndDockingMode();
 
+                        
+                        Host.Content = null;
+
                         RequestRedock?.Invoke(_web);
                         Close();
+
                     }
                 });
             }
