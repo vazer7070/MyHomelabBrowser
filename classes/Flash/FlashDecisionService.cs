@@ -24,11 +24,14 @@ namespace MyHomelabBrowser.classes.Flash
 
         // ======================================================
         // DÉCISION AVANT NAVIGATION (RÈGLES + SETTINGS)
-        // ======================================================
-        public FlashMode DecideInitialMode(Uri uri)
+        public FlashMode DecideInitialMode(Uri uri, bool forceLegacyOnce)
         {
             if (uri == null)
                 return FlashMode.None;
+
+            // ✅ PRIORITÉ : forçage Legacy une fois (manuel)
+            if (forceLegacyOnce)
+                return _legacy.CanLaunch() ? FlashMode.Legacy : FlashMode.None;
 
             // ✅ 1) règle exacte OU parent-domain (suffix match)
             var rule = GetRuleWithSubdomainFallback(uri);
@@ -54,6 +57,7 @@ namespace MyHomelabBrowser.classes.Flash
 
             return FlashMode.None;
         }
+
 
         // ===================================================
         // ✅ helper: applique rule pour sous-domaines aussi

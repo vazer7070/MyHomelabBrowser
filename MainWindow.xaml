@@ -6,7 +6,39 @@
         Height="850"
         Width="1400"
         Background="{StaticResource FluentBg}">
-
+    <Window.Resources>
+        <Style x:Key="NavIconButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="#262626"
+                                CornerRadius="10"
+                                Padding="6">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#353535"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#404040"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="44"/>
@@ -142,32 +174,32 @@
 
                     <!-- DOWNLOADS -->
                     <Button x:Name="DownloadsBtn"
-        Width="36"
-        Height="32"
-        ToolTip="Téléchargements"
-        Click="DownloadsBtn_Click"
-        Cursor="Hand">
+                            Width="36"
+                            Height="32"
+                            ToolTip="Téléchargements"
+                            Click="DownloadsBtn_Click"
+                            Cursor="Hand">
                         <Grid>
                             <TextBlock Text="⬇"
-                   FontSize="16"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"/>
+                                       FontSize="16"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
 
                             <!-- BADGE -->
                             <Border x:Name="DownloadsBadge"
-                Background="#22C55E"
-                CornerRadius="8"
-                MinWidth="16"
-                Height="16"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Top"
-                Margin="0,-4,-4,0"
-                Visibility="Collapsed">
+                                    Background="#22C55E"
+                                    CornerRadius="8"
+                                    MinWidth="16"
+                                    Height="16"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Top"
+                                    Margin="0,-4,-4,0"
+                                    Visibility="Collapsed">
                                 <TextBlock x:Name="DownloadsBadgeText"
-                       FontSize="10"
-                       Foreground="White"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"/>
+                                           FontSize="10"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
                             </Border>
                         </Grid>
                     </Button>
@@ -219,11 +251,11 @@
                                        Foreground="White"
                                        Margin="0,0,0,8"/>
                             <Button Content="Effacer les terminés"
-            Margin="10,0,0,0"
-            Padding="6,2"
-            FontSize="12"
-            HorizontalAlignment="Right"
-            Click="ClearCompletedDownloads"/>
+                                    Margin="10,0,0,0"
+                                    Padding="6,2"
+                                    FontSize="12"
+                                    HorizontalAlignment="Right"
+                                    Click="ClearCompletedDownloads"/>
 
                             <ListBox ItemsSource="{Binding Source={x:Static classes:DownloadManager.Instance}, Path=Items}"
                                      BorderThickness="0"
@@ -234,9 +266,9 @@
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <Border Padding="10"
-        Margin="0,0,0,8"
-        Background="#262626"
-        CornerRadius="10">
+                                                Margin="0,0,0,8"
+                                                Background="#262626"
+                                                CornerRadius="10">
 
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
@@ -249,98 +281,98 @@
 
                                                     <!-- FICHIER -->
                                                     <TextBlock Text="{Binding FileName}"
-                       FontWeight="SemiBold"
-                       FontSize="13"
-                       Foreground="White"
-                       TextTrimming="CharacterEllipsis"
-                       Cursor="Hand"
-                       MouseLeftButtonUp="DownloadItem_Open"/>
+                                                               FontWeight="SemiBold"
+                                                               FontSize="13"
+                                                               Foreground="White"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Cursor="Hand"
+                                                               MouseLeftButtonUp="DownloadItem_Open"/>
 
                                                     <!-- TAILLE / VITESSE -->
                                                     <TextBlock Text="{Binding SizeText}"
-                       FontSize="12"
-                       Foreground="#BFBFBF"
-                       Margin="0,4,0,0"/>
+                                                               FontSize="12"
+                                                               Foreground="#BFBFBF"
+                                                               Margin="0,4,0,0"/>
 
                                                     <TextBlock Text="{Binding SpeedText}"
-                       FontSize="12"
-                       Foreground="#9CA3AF"
-                       Visibility="{Binding IsInProgress,
-                                    Converter={StaticResource BoolToVisibility}}"/>
+                                                               FontSize="12"
+                                                               Foreground="#9CA3AF"
+                                                               Visibility="{Binding IsInProgress,
+                                                                            Converter={StaticResource BoolToVisibility}}"/>
 
                                                     <!-- PROGRESS -->
                                                     <ProgressBar Height="6"
-                         Margin="0,6,0,0"
-                         Minimum="0"
-                         Maximum="1"
-                         Value="{Binding Progress01, Mode=OneWay}"
-                         Visibility="{Binding IsInProgress,
-                                      Converter={StaticResource BoolToVisibility}}"/>
+                                                                 Margin="0,6,0,0"
+                                                                 Minimum="0"
+                                                                 Maximum="1"
+                                                                 Value="{Binding Progress01, Mode=OneWay}"
+                                                                 Visibility="{Binding IsInProgress,
+                                                                              Converter={StaticResource BoolToVisibility}}"/>
 
                                                     <!-- STATUS -->
                                                     <TextBlock Text="✔ Terminé"
-                       Foreground="#4ADE80"
-                       FontSize="12"
-                       FontWeight="SemiBold"
-                       Margin="0,6,0,0"
-                       Visibility="{Binding IsCompleted,
-                                    Converter={StaticResource BoolToVisibility}}"/>
+                                                               Foreground="#4ADE80"
+                                                               FontSize="12"
+                                                               FontWeight="SemiBold"
+                                                               Margin="0,6,0,0"
+                                                               Visibility="{Binding IsCompleted,
+                                                                            Converter={StaticResource BoolToVisibility}}"/>
 
                                                     <TextBlock Text="✖ Échec"
-                       Foreground="#EF4444"
-                       FontSize="12"
-                       FontWeight="SemiBold"
-                       Margin="0,6,0,0"
-                       Visibility="{Binding IsFailed,
-                                    Converter={StaticResource BoolToVisibility}}"/>
+                                                               Foreground="#EF4444"
+                                                               FontSize="12"
+                                                               FontWeight="SemiBold"
+                                                               Margin="0,6,0,0"
+                                                               Visibility="{Binding IsFailed,
+                                                                            Converter={StaticResource BoolToVisibility}}"/>
                                                 </StackPanel>
 
                                                 <!-- ================= RIGHT ================= -->
                                                 <StackPanel Grid.Column="1"
-                    Orientation="Horizontal"
-                    VerticalAlignment="Top">
+                                                            Orientation="Horizontal"
+                                                            VerticalAlignment="Top">
 
                                                     <!-- PAUSE -->
                                                     <Button Content="⏸"
-                    Margin="0,0,6,0"
-                    Visibility="{Binding IsInProgress,
-                                 Converter={StaticResource BoolToVisibility}}"
-                    Click="DownloadItem_Pause"/>
+                                                            Margin="0,0,6,0"
+                                                            Visibility="{Binding IsInProgress,
+                                                                         Converter={StaticResource BoolToVisibility}}"
+                                                            Click="DownloadItem_Pause"/>
 
                                                     <!-- RETRY -->
                                                     <Button Content="🔁"
-                    Margin="0,0,6,0"
-                    ToolTip="Réessayer"
-                    Visibility="{Binding IsFailed,
-                                 Converter={StaticResource BoolToVisibility}}"
-                    Click="DownloadItem_ResumeOrRetry"/>
+                                                            Margin="0,0,6,0"
+                                                            ToolTip="Réessayer"
+                                                            Visibility="{Binding IsFailed,
+                                                                         Converter={StaticResource BoolToVisibility}}"
+                                                            Click="DownloadItem_ResumeOrRetry"/>
 
                                                     <!-- ANNULER -->
                                                     <Button Content="✖"
-                    Margin="0,0,6,0"
-                    Visibility="{Binding IsInProgress,
-                                 Converter={StaticResource BoolToVisibility}}"
-                    Click="DownloadItem_Cancel"/>
+                                                            Margin="0,0,6,0"
+                                                            Visibility="{Binding IsInProgress,
+                                                                         Converter={StaticResource BoolToVisibility}}"
+                                                            Click="DownloadItem_Cancel"/>
 
                                                     <!-- OUVRIR DOSSIER -->
                                                     <Button Content="📁"
-                    Margin="0,0,6,0"
-                    Visibility="{Binding IsCompleted,
-                                 Converter={StaticResource BoolToVisibility}}"
-                    Click="DownloadItem_OpenFolder"/>
+                                                            Margin="0,0,6,0"
+                                                            Visibility="{Binding IsCompleted,
+                                                                         Converter={StaticResource BoolToVisibility}}"
+                                                            Click="DownloadItem_OpenFolder"/>
 
                                                     <!-- SUPPRIMER DE LA LISTE -->
                                                     <Button Content="🗑"
-                    ToolTip="Retirer de la liste"
-                    Visibility="{Binding IsCompleted,
-                                 Converter={StaticResource BoolToVisibility}}"
-                    Click="DownloadItem_Remove"/>
+                                                            ToolTip="Retirer de la liste"
+                                                            Visibility="{Binding IsCompleted,
+                                                                         Converter={StaticResource BoolToVisibility}}"
+                                                            Click="DownloadItem_Remove"/>
 
                                                     <Button Content="🗑"
-                    ToolTip="Retirer de la liste"
-                    Visibility="{Binding IsFailed,
-                                 Converter={StaticResource BoolToVisibility}}"
-                    Click="DownloadItem_Remove"/>
+                                                            ToolTip="Retirer de la liste"
+                                                            Visibility="{Binding IsFailed,
+                                                                         Converter={StaticResource BoolToVisibility}}"
+                                                            Click="DownloadItem_Remove"/>
                                                 </StackPanel>
                                             </Grid>
                                         </Border>
@@ -372,80 +404,165 @@
         <!-- =========================
              ADDRESS BAR
              ========================= -->
+        <!-- =========================
+     ADDRESS BAR
+     ========================= -->
         <Grid Grid.Row="1"
-              Grid.ColumnSpan="2"
-              Height="48"
-              Background="{StaticResource FluentSurface}"
-              Panel.ZIndex="90">
+      Grid.ColumnSpan="2"
+      Height="48"
+      Background="{StaticResource FluentSurface}"
+      Panel.ZIndex="90">
 
             <Grid Margin="10,6">
                 <Grid.ColumnDefinitions>
+                    <!-- ✅ LEFT NAV -->
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- ✅ ADDRESS -->
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="36"/>
+                    <!-- ✅ RIGHT BUTTONS -->
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
+                <!-- =========================
+             LEFT : Back + Refresh
+             ========================= -->
+                <StackPanel Grid.Column="0"
+                    Orientation="Horizontal"
+                    VerticalAlignment="Center"
+                    Margin="0,0,10,0">
+
+                    <!-- Back -->
+                    <Button x:Name="BackBtn"
+                    Width="28"
+                    Height="28"
+                    Margin="0,0,6,0"
+                    ToolTip="Précédent"
+                    Click="BackBtn_Click"
+                    PreviewMouseLeftButtonDown="BackBtn_PreviewMouseLeftButtonDown"
+                    PreviewMouseLeftButtonUp="BackBtn_PreviewMouseLeftButtonUp"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Style="{StaticResource NavIconButtonStyle}"
+                    Cursor="Hand">
+                        <Viewbox Width="16" Height="16">
+                            <Path Fill="#D1D5DB"
+                          Data="M 15 2 L 7 8 L 15 14 L 15 11 L 9.5 8 L 15 5 Z"/>
+                        </Viewbox>
+                    </Button>
+
+                    <!-- Refresh -->
+                    <Button x:Name="RefreshBtn"
+                    Width="28"
+                    Height="28"
+                    ToolTip="Actualiser"
+                    Click="RefreshBtn_Click"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Style="{StaticResource NavIconButtonStyle}"
+                    Cursor="Hand">
+                        <Viewbox Width="16" Height="16">
+                            <Path Fill="#D1D5DB"
+                          Data="M 12 4 A 5 5 0 1 0 14 8 H 12 A 3 3 0 1 1 10 5.2 V 3 L 14 5.5 L 10 8 V 6.2 A 4 4 0 1 0 12 4 Z"/>
+                        </Viewbox>
+                    </Button>
+
+                </StackPanel>
+
+                <!-- =========================
+             AddressBar
+             ========================= -->
                 <TextBox x:Name="AddressBar"
-                         Padding="12,5"
-                         FontSize="14"
-                         Background="#FF484444"
-                         Foreground="White"
-                         BorderThickness="0"
-                         KeyDown="AddressBar_KeyDown"
-                         PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown"
-                         GotKeyboardFocus="AddressBar_GotKeyboardFocus"
-                         GotFocus="AddressBar_GotFocus"
-                         LostFocus="AddressBar_LostFocus"/>
+                 Grid.Column="1"
+                 Padding="12,5"
+                 FontSize="14"
+                 Background="#FF484444"
+                 Foreground="White"
+                 BorderThickness="0"
+                 KeyDown="AddressBar_KeyDown"
+                 TextChanged="AddressBar_TextChanged"
+                 PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown"
+                 GotKeyboardFocus="AddressBar_GotKeyboardFocus"
+                 GotFocus="AddressBar_GotFocus"
+                 LostFocus="AddressBar_LostFocus"/>
 
-                <Button x:Name="FavoriteButton"
-                        Grid.Column="1"
-                        Content="★"
-                        Width="28"
-                        Height="28"
-                        Margin="4,0,0,0"
-                        VerticalAlignment="Center"
-                        Click="ToggleFavorite_Click"
-                        Foreground="Gray"
-                        Cursor="Hand"/>
-                <Button x:Name="FlashModeBtn"
-        Content="⚡ Auto"
-        Visibility="Collapsed"
-        Margin="6,0,0,0"
-        Click="FlashModeBtn_Click"
-        ToolTip="Forcer ou libérer le mode Flash pour ce site"/>
+                <!-- =========================
+             RIGHT : Fav + Legacy + FlashModeBtn
+             ========================= -->
+                <StackPanel Grid.Column="2"
+                    Orientation="Horizontal"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Right"
+                    Margin="8,0,0,0">
 
+                    <!-- ⭐ Favori -->
+                    <Button x:Name="FavoriteButton"
+                    Content="★"
+                    Width="28"
+                    Height="28"
+                    Margin="0,0,6,0"
+                    VerticalAlignment="Center"
+                    Click="ToggleFavorite_Click"
+                    Foreground="Gray"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Cursor="Hand"/>
 
+                    <!-- ⚡ Legacy manuel -->
+                    <Button x:Name="ManualLegacyButton"
+                    Content="⚡"
+                    Width="28"
+                    Height="28"
+                    VerticalAlignment="Center"
+                    Click="ManualLegacyButton_Click"
+                    Foreground="#9CA3AF"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    ToolTip="Forcer Flash Legacy (Basilisk) sur cette page"
+                    Cursor="Hand"/>
 
+                    <!-- Flash mode -->
+                    <Button x:Name="FlashModeBtn"
+                    Content="⚡ Auto"
+                    Visibility="Collapsed"
+                    Margin="6,0,0,0"
+                    Click="FlashModeBtn_Click"
+                    ToolTip="Forcer ou libérer le mode Flash pour ce site"/>
+                </StackPanel>
+
+                <!-- =========================
+             ✅ CommandSuggestionsPopup + CommandList (PAS TOUCHÉS)
+             ========================= -->
                 <Popup x:Name="CommandSuggestionsPopup"
-                       PlacementTarget="{Binding ElementName=AddressBar}"
-                       Placement="Bottom"
-                       StaysOpen="True"
-                       AllowsTransparency="True"
-                       Focusable="False"
-                       PopupAnimation="Fade">
+               PlacementTarget="{Binding ElementName=AddressBar}"
+               Placement="Bottom"
+               StaysOpen="True"
+               AllowsTransparency="True"
+               Focusable="False"
+               PopupAnimation="Fade">
                     <Border Margin="0,6,0,0"
-                            Background="#1E1E1E"
-                            BorderBrush="#444"
-                            BorderThickness="1"
-                            CornerRadius="12">
+                    Background="#1E1E1E"
+                    BorderBrush="#444"
+                    BorderThickness="1"
+                    CornerRadius="12">
                         <ListBox x:Name="CommandList"
-         Background="Transparent"
-         BorderThickness="0"
-         Foreground="White"
-         FontSize="14"
-         MaxHeight="260"
-         SelectionChanged="CommandSuggestions_SelectionChanged"
-         KeyDown="CommandSuggestions_KeyDown">
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Foreground="White"
+                         FontSize="14"
+                         MaxHeight="260"
+                         SelectionChanged="CommandSuggestions_SelectionChanged"
+                         KeyDown="CommandSuggestions_KeyDown">
 
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <StackPanel Margin="8,6">
                                         <TextBlock Text="{Binding Primary}"
-                           FontWeight="SemiBold"/>
+                                           FontWeight="SemiBold"/>
 
                                         <TextBlock Text="{Binding Secondary}"
-                           FontSize="12"
-                           Foreground="#9CA3AF"
-                           TextTrimming="CharacterEllipsis"/>
+                                           FontSize="12"
+                                           Foreground="#9CA3AF"
+                                           TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
@@ -454,8 +571,10 @@
 
                     </Border>
                 </Popup>
+
             </Grid>
         </Grid>
+
 
         <!-- FAVORITES BAR -->
         <Border Grid.Row="2"
@@ -505,36 +624,38 @@
                 </StackPanel>
             </Border>
         </Grid>
+
         <Border x:Name="InternalToast"
-        Width="320"
-        Padding="12"
-        Background="#1F2937"
-        CornerRadius="12"
-        HorizontalAlignment="Right"
-        VerticalAlignment="Bottom"
-        Margin="0,0,20,20"
-        Visibility="Collapsed"
-        Panel.ZIndex="500">
+                Width="320"
+                Padding="12"
+                Background="#1F2937"
+                CornerRadius="12"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                Margin="0,0,20,20"
+                Visibility="Collapsed"
+                Panel.ZIndex="500">
 
             <StackPanel>
                 <TextBlock x:Name="ToastTitle"
-                   FontWeight="Bold"
-                   Foreground="White"/>
+                           FontWeight="Bold"
+                           Foreground="White"/>
 
                 <TextBlock x:Name="ToastMessage"
-                   Foreground="#D1D5DB"
-                   Margin="0,4,0,0"/>
+                           Foreground="#D1D5DB"
+                           Margin="0,4,0,0"/>
 
                 <Button Content="Ouvrir le fichier"
-                Margin="0,8,0,0"
-                Click="Toast_OpenFile"/>
+                        Margin="0,8,0,0"
+                        Click="Toast_OpenFile"/>
             </StackPanel>
         </Border>
+
         <ItemsControl x:Name="ToastHost"
-              HorizontalAlignment="Right"
-              VerticalAlignment="Bottom"
-              Margin="0,0,20,20"
-              Panel.ZIndex="500">
+                      HorizontalAlignment="Right"
+                      VerticalAlignment="Bottom"
+                      Margin="0,0,20,20"
+                      Panel.ZIndex="500">
 
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
@@ -545,12 +666,12 @@
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <Border Background="#1F2937"
-                    CornerRadius="12"
-                    Padding="12"
-                    Margin="0,0,0,10"
-                    Width="320"
-                    Opacity="0"
-                    RenderTransformOrigin="1,0.5">
+                            CornerRadius="12"
+                            Padding="12"
+                            Margin="0,0,0,10"
+                            Width="320"
+                            Opacity="0"
+                            RenderTransformOrigin="1,0.5">
 
                         <Border.RenderTransform>
                             <TranslateTransform X="40"/>
@@ -558,24 +679,23 @@
 
                         <StackPanel>
                             <TextBlock Text="{Binding Title}"
-                               FontWeight="Bold"
-                               Foreground="White"/>
+                                       FontWeight="Bold"
+                                       Foreground="White"/>
 
                             <TextBlock Text="{Binding Message}"
-                               Foreground="#D1D5DB"
-                               Margin="0,4,0,0"/>
+                                       Foreground="#D1D5DB"
+                                       Margin="0,4,0,0"/>
 
                             <Button Content="Ouvrir le fichier"
-                            Margin="0,8,0,0"
-                            HorizontalAlignment="Left"
-                            Click="Toast_OpenFile"
-                            Tag="{Binding}"/>
+                                    Margin="0,8,0,0"
+                                    HorizontalAlignment="Left"
+                                    Click="Toast_OpenFile"
+                                    Tag="{Binding}"/>
                         </StackPanel>
                     </Border>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
-
 
     </Grid>
 </Window>
