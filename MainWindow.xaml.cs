@@ -2,6 +2,7 @@
 using Microsoft.Web.WebView2.Wpf;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Flash;
+using MyHomelabBrowser.classes.Session;
 using MyHomelabBrowser.controles;
 using System;
 using System.Collections.Generic;
@@ -10,7 +11,9 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -51,7 +54,8 @@ namespace MyHomelabBrowser
         // ---------------------------
         DispatcherTimer _suspendTimer;
         TimeSpan _SuspendDelay = TimeSpan.FromMinutes(5);
-
+        private string? _latestVersionText;
+        private string? _latestChangelogText;
         // ---------------------------
         // History / Favorites (persisted)
         // ---------------------------
@@ -74,6 +78,11 @@ namespace MyHomelabBrowser
         private bool _oauthFinishing = false;
         LegacyLauncher _legacyLauncher;
         private Uri _oauthReturnUri;
+
+        private UpdateService? _updates;
+        private bool _isUpdateCheckRunning;
+        private Dictionary<string, List<string>>? _changelogMap;
+        private Velopack.UpdateInfo? _pendingUpdateInfo;
 
         readonly ObservableCollection<ToastItem> _toasts = new();
 
@@ -123,7 +132,7 @@ namespace MyHomelabBrowser
         [DllImport("user32.dll")]
         static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
 
-
+        Image? _sslIcon;
 
 
         public MainWindow()
@@ -136,11 +145,48 @@ namespace MyHomelabBrowser
             _suspendTimer.Start();
             ToastHost.ItemsSource = _toasts;
 
+            RuntimeLogBuffer.Init();
+
+            Loaded += async (_, _) =>
+            {
+                await RestoreSessionIfAnyAsync();
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(1500);
+
+                        if (_updates == null)
+                            return;
+
+                        var info = await _updates.CheckAsync();
+                        if (info == null)
+                            return;
+
+                        await _updates.DownloadAsync(info);
+                        _updates.ApplyAndRestart(info);
+                    }
+                    catch
+                    {
+                    }
+                });
+            };
 
             _settings = new SettingsService();
             _legacyLauncher = new LegacyLauncher(_settings);
             _settings.SettingsChanged += ApplySettings;
+            _legacyLauncher.OnDebug += FlashDbg;
             PreviewMouseDown += OnGlobalMouseDown;
+
+            try
+            {
+                _updates = new UpdateService();
+            }
+            catch
+            {
+                _updates = null; 
+            }
 
             // load persisted data (safe)
             LoadHistory();
@@ -157,6 +203,85 @@ namespace MyHomelabBrowser
             // start page
             CreateTab(_settings.Settings.StartPage);
         }
+        private static string FormatChangelogJson(string json, string currentVersionText)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                return "";
+
+
+            // Format attendu :
+            // { "0.6.60": ["...", "..."], "0.6.61": ["..."] }
+            var dict = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(json);
+
+
+            if (dict == null || dict.Count == 0)
+                return "";
+
+
+            // Version actuelle
+            Version currentVersion = new Version(0, 0, 0);
+            if (!string.IsNullOrWhiteSpace(currentVersionText))
+            {
+                Version.TryParse(currentVersionText, out currentVersion);
+            }
+
+
+            // On parse + on garde uniquement > currentVersion
+            var filtered = dict
+            .Select(kv => new
+            {
+                VersionText = kv.Key,
+                Items = kv.Value ?? new List<string>(),
+                Parsed = Version.TryParse(kv.Key, out var v) ? v : null
+            })
+            .Where(x => x.Parsed != null && x.Parsed > currentVersion)
+            .OrderByDescending(x => x.Parsed)
+            .ToList();
+
+
+            if (filtered.Count == 0)
+                return "Aucun changement (vous êtes déjà à jour).";
+
+
+            var sb = new StringBuilder();
+
+
+            foreach (var v in filtered)
+            {
+                sb.AppendLine($"Version {v.VersionText}");
+                sb.AppendLine(new string('-', 10 + v.VersionText.Length));
+
+
+                if (v.Items.Count == 0)
+                {
+                    sb.AppendLine("• (Aucun détail)");
+                }
+                else
+                {
+                    foreach (var line in v.Items)
+                    {
+                        if (!string.IsNullOrWhiteSpace(line))
+                            sb.AppendLine("• " + line.Trim());
+                    }
+                }
+
+
+                sb.AppendLine();
+            }
+
+
+            return sb.ToString().TrimEnd();
+        }
+        
+
+       
+        private static string GetAppVersion()
+        {
+            var v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+            if (v == null) return "?";
+            return $"{v.Major}.{v.Minor}.{v.Build}";
+        }
+
         private async Task<OAuthPopupWindow> GetOrCreateOAuthPopupAsync()
         {
             await InitWebViewEnvironmentsAsync();
@@ -528,6 +653,9 @@ namespace MyHomelabBrowser
             var uri = content.Web.Source;
             var rule = FlashDomainRules.GetRule(uri);
 
+            if (rule == FlashRuleMode.Legacy && content.FlashMode != FlashMode.Legacy)
+                content.FlashMode = FlashMode.Legacy;
+
             bool flashRequired = content.FlashRequired;
             bool shouldBeVisible = flashRequired;
 
@@ -553,23 +681,8 @@ namespace MyHomelabBrowser
 
         void SetFlashButton(bool visible, FlashMode mode = FlashMode.Ruffle, WebTabContent content = null)
         {
-            FlashModeBtn.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-
-            if (!visible || content == null)
-                return;
-
-            FlashModeBtn.Content = mode == FlashMode.Legacy ? "⚡ Legacy" : "⚡ Auto";
-
-            bool legacyAvailable = _legacyLauncher.CanLaunch();
-
-            FlashModeBtn.IsEnabled =
-                content.FlashMode != FlashMode.Legacy || legacyAvailable;
-
-            FlashModeBtn.ToolTip =
-                !legacyAvailable && content.FlashMode == FlashMode.Legacy
-                    ? "Basilisk n’est pas configuré"
-                    : "Changer le mode Flash pour ce site";
-
+            
+            FlashModeBtn.Visibility = Visibility.Collapsed;
         }
 
 
@@ -589,18 +702,15 @@ namespace MyHomelabBrowser
 
 
             // ===============================
-            // CAS 1 : ON ÉTAIT EN LEGACY → RETOUR AUTO
+            // CAS 1 : ON ÉTAIT EN LEGACY (MODE) → RETOUR AUTO
             // ===============================
-            if (FlashDomainRules.GetRule(uri) == FlashRuleMode.Legacy)
+            if (content.FlashMode == FlashMode.Legacy)
             {
-                FlashDomainRules.RemoveRule(uri);
-
+                FlashDomainRules.RemoveRule(uri); // optionnel si tu veux "retour auto définitif"
                 content.FlashMode = FlashMode.None;
                 content.IsLegacyExternal = false;
 
                 overlay.TryShow("Retour au mode automatique…");
-
-                // 🔁 recharge → HandleFlashAsync décidera quoi faire
                 Navigate(uri.AbsoluteUri);
                 return;
             }
@@ -656,161 +766,140 @@ namespace MyHomelabBrowser
             RefreshCommandSuggestions();
         }
         async Task InitPrivateWebViewAsync(
-    WebView2 web,
-    BrowserTabHeader header,
-    TabItem tab,
-    string url,
-    FlashUxOverlay overlay,
-    FlashDecisionService flashService,
-    WebTabContent content)
+       WebView2 web,
+       BrowserTabHeader header,
+       TabItem tab,
+       string url,
+       FlashUxOverlay overlay,
+       FlashDecisionService flashService,
+       WebTabContent content)
         {
             try
             {
                 await InitWebViewEnvironmentsAsync();
                 await web.EnsureCoreWebView2Async(_privateEnvironment);
 
-                web.CoreWebView2.NewWindowRequested += async (_, ev) =>
-                {
-                    var uri = ev.Uri ?? "";
-                    if (string.IsNullOrWhiteSpace(uri))
-                        return;
+                if (web.CoreWebView2 == null)
+                    return;
 
-                    FlashDbg($"NewWindowRequested URI = {uri}");
+                // ✅ User-Agent Chrome réel (comme normal)
+                web.CoreWebView2.Settings.UserAgent =
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-                    // ✅ async => deferral obligatoire
-                    var def = ev.GetDeferral();
+                // ✅ NewWindowRequested PRIVÉ : même comportement que normal
+                web.CoreWebView2.NewWindowRequested -= PrivateWeb_NewWindowRequested;
+                web.CoreWebView2.NewWindowRequested += PrivateWeb_NewWindowRequested;
 
-                    try
-                    {
-                        // ✅ Ce qui DOIT être une vraie popup (opener/callback)
-                        bool isOAuthPopup =
-                            uri.Contains("accounts.google.com", StringComparison.OrdinalIgnoreCase) ||
-                            uri.Contains("gameforge.com/service/external-auth", StringComparison.OrdinalIgnoreCase) ||
-                            uri.Contains("oauth", StringComparison.OrdinalIgnoreCase) ||
-                            uri.Contains("openid", StringComparison.OrdinalIgnoreCase);
-
-                        if (uri.Contains("gameforge.com/service/external-auth", StringComparison.OrdinalIgnoreCase) &&
-     uri.EndsWith("/message", StringComparison.OrdinalIgnoreCase))
-                        {
-                            ev.Handled = false; // laisse WebView2 gérer
-                                                // ✅ surtout ne pas return ici
-                        }
-                        else if (isOAuthPopup)
-                        {
-                            ev.Handled = true;
-                            _oauthReturnWeb = web;
-
-                            var popup = await GetOrCreateOAuthPopupAsync();
-
-                            if (!popup.IsVisible)
-                                popup.Show();
-
-                            if (popup.Web?.CoreWebView2 == null)
-                            {
-                                FlashDbg("[OAuth] popup CoreWebView2 NULL");
-                                return;
-                            }
-
-                            ev.NewWindow = popup.Web.CoreWebView2;
-                            return;
-                        }
-                        else
-                        {
-                            ev.Handled = true;
-                            Dispatcher.Invoke(() => CreateTab(uri));
-                        }
-
-
-                        if (isOAuthPopup)
-                        {
-                            ev.Handled = true;
-
-                            // ✅ une popup réutilisable, même profil env
-                            var popup = await GetOrCreateOAuthPopupAsync();
-
-                            if (!popup.IsVisible)
-                                popup.Show();
-
-                            if (popup.Web?.CoreWebView2 == null)
-                            {
-                                FlashDbg("[OAuth] popup CoreWebView2 NULL");
-                                return;
-                            }
-
-                            // ✅ LE POINT CLÉ : on lie la fenêtre à WebView2
-                            ev.NewWindow = popup.Web.CoreWebView2;
-                            return;
-                        }
-
-                        // ✅ Autres popups => onglet
-                        ev.Handled = true;
-                        Dispatcher.Invoke(() => CreateTab(uri));
-                    }
-                    catch (Exception ex)
-                    {
-                        FlashDbg("[NewWindowRequested] " + ex);
-                    }
-                    finally
-                    {
-                        def.Complete();
-                    }
-                };
-
-
-
-
-
+                // ✅ Sync UI url
                 web.SourceChanged += (_, _) =>
                     Dispatcher.BeginInvoke(UpdateAddressBarFromTab);
 
-                // ===============================
-                // NAVIGATION COMPLETED (PRIVÉ)
-                // ===============================
+                // ✅ NavigationCompleted privé : UI / history / flash (comme normal)
                 web.NavigationCompleted += async (_, _) =>
                 {
                     _ = Dispatcher.BeginInvoke(UpdateAddressBarFromTab);
 
-                    if (web.Source != null)
+                    if (!content.IsPrivate && web.Source != null)
                         AddHistoryEntry(web);
 
                     _ = Dispatcher.BeginInvoke(UpdateFavoriteButton);
 
                     if (web.CoreWebView2 != null)
                     {
-                        string title = web.CoreWebView2.DocumentTitle;
-                        string fav = web.CoreWebView2.FaviconUri;
-
-                        _ = Dispatcher.BeginInvoke(() =>
+                        try
                         {
-                            header.SetTitle(title);
-
-                            if (!string.IsNullOrEmpty(fav))
-                                header.SetIcon(new BitmapImage(new Uri(fav)));
-                        });
+                            var title = web.CoreWebView2.DocumentTitle;
+                            await Dispatcher.BeginInvoke(() =>
+                            {
+                                if (tab.Header is BrowserTabHeader h)
+                                    h.SetTitle(string.IsNullOrWhiteSpace(title) ? "Onglet privé" : title);
+                            });
+                        }
+                        catch { }
                     }
 
                     await HandleFlashAsync(web, content, header, overlay);
 
-                    _ = Dispatcher.BeginInvoke(UpdateNavButtonsFast);
+                    // refresh UI immédiat
+                    SyncWebHostWithSelection();
+                    UpdateManualLegacyButton();
+                    UpdateNavButtons();
                 };
 
-                // ⚠️ PAS d’AddHistoryEntry ici (la navigation n’a pas commencé)
-                web.Source = new Uri(url);
+                // ✅ Go !
+                if (!string.IsNullOrWhiteSpace(url))
+                    web.Source = new Uri(url);
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
-                    ex.ToString(),
-                    "Erreur onglet privé",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                FlashDbg("[InitPrivateWebViewAsync] " + ex);
+            }
 
-                Dispatcher.Invoke(() =>
+            // ======================================================
+            // ✅ Handler privé isolé (évite les doublons)
+            // ======================================================
+            async void PrivateWeb_NewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs ev)
+            {
+                var uri = ev.Uri ?? "";
+
+                FlashDbg($"[Private] NewWindowRequested URI = {uri}");
+
+                var def = ev.GetDeferral();
+
+                try
                 {
-                    Tabs.Items.Remove(tab);
-                    if (Tabs.Items.Count == 0)
-                        Close();
-                });
+                    // ✅ WebView2 appelle parfois NewWindowRequested avec about:blank
+                    bool isBlank = string.IsNullOrWhiteSpace(uri) ||
+                                   uri.Equals("about:blank", StringComparison.OrdinalIgnoreCase);
+
+                    // ✅ popup d'auth / popup "réelle" (détection générique, sans domaines)
+                    bool looksLikePopup =
+                        ev.NewWindow != null ||      // WebView2 veut une vraie fenêtre
+                        isBlank ||                   // souvent utilisé comme "pont" par les auth flows
+                        !ev.IsUserInitiated;         // souvent non user initiated (js window.open)
+
+                    // ✅ Si ça ressemble à une popup → on la route vers OAuthPopupWindow
+                    if (looksLikePopup)
+                    {
+                        ev.Handled = true;
+                        _oauthReturnWeb = web;
+
+                        var popup = await GetOrCreateOAuthPopupAsync();
+
+                        if (!popup.IsVisible)
+                            popup.Show();
+
+                        if (popup.Web?.CoreWebView2 == null)
+                        {
+                            FlashDbg("[Private OAuth] popup CoreWebView2 NULL -> fallback default");
+                            ev.Handled = false;
+                            return;
+                        }
+
+                        ev.NewWindow = popup.Web.CoreWebView2;
+                        return;
+                    }
+
+                    // ✅ Sinon : comportement standard -> nouvel onglet privé
+                    if (!isBlank)
+                    {
+                        ev.Handled = true;
+                        Dispatcher.Invoke(() => CreatePrivateTab(uri));
+                        return;
+                    }
+
+                    // ✅ fallback : laisser WebView2 gérer
+                    ev.Handled = false;
+                }
+                catch (Exception ex)
+                {
+                    FlashDbg("[Private NewWindowRequested] " + ex);
+                    ev.Handled = false;
+                }
+                finally
+                {
+                    def.Complete();
+                }
             }
         }
 
@@ -882,6 +971,21 @@ namespace MyHomelabBrowser
                 !CommandSuggestionsPopup.IsMouseOver)
             {
                 HideCommandSuggestions();
+            }
+
+            // ✅ Focus clavier Basilisk quand on clique dans la zone dockée
+            if (Tabs.SelectedItem is TabItem tab &&
+                tab.Tag is WebTabContent wt &&
+                wt.IsLegacyExternal &&
+                wt.LegacyHost != null &&
+                wt.LegacyHwnd != IntPtr.Zero)
+            {
+                // option 1 : focus seulement si la souris est sur la zone Basilisk
+                if (wt.LegacyHost.IsMouseOver)
+                {
+                    var embed = wt.LegacyEmbedHwnd != IntPtr.Zero ? wt.LegacyEmbedHwnd : wt.LegacyHwnd;
+                    FocusLegacyEmbedded(embed, wt.LegacyTopHwnd);
+                }
             }
         }
 
@@ -986,6 +1090,7 @@ namespace MyHomelabBrowser
 
         void UpdateAddressBarFromTab()
         {
+
             // ✅ si l'utilisateur est en train de taper, on ne touche à rien
             if (_addressBarEditing)
                 return;
@@ -1009,6 +1114,14 @@ namespace MyHomelabBrowser
                     // ✅ surtout : ferme le popup si une navigation a modifié l'url
                     CommandSuggestionsPopup.IsOpen = false;
                 }
+
+                // 🔒 SSL icon (toujours sync même si l'URL n'a pas changé visuellement)
+                UpdateSslIconFromUrl(newText);
+            }
+            else
+            {
+                // Pas un onglet WebView (Settings / History / etc.)
+                UpdateSslIconFromUrl("");
             }
 
             UpdateFavoriteButton();
@@ -1035,11 +1148,193 @@ namespace MyHomelabBrowser
         // ---------------------------
         // Tabs / WebHost
         // ---------------------------
-        void OpenSettings()
+        static readonly BitmapImage _sslOk = new(new Uri("pack://application:,,,/MyHomelabBrowser;component/Assets/ssl_ok.png"));
+        static readonly BitmapImage _sslBad = new(new Uri("pack://application:,,,/MyHomelabBrowser;component/Assets/ssl_bad.png"));
+
+        void UpdateSslIconFromUrl(string? url)
         {
+            try
+            {
+                if (SslIcon == null)
+                    return;
+
+                if (string.IsNullOrWhiteSpace(url) ||
+                    url.StartsWith("about:", StringComparison.OrdinalIgnoreCase))
+                {
+                    SslIcon.Source = null;
+                    ToolTipService.SetToolTip(SslIcon, "Aucune page");
+                    return;
+                }
+
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+                {
+                    SslIcon.Source = null;
+                    ToolTipService.SetToolTip(SslIcon, "URL invalide");
+                    return;
+                }
+
+                bool isHttps = uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase);
+
+                SslIcon.Source = isHttps ? _sslOk : _sslBad;
+                ToolTipService.SetToolTip(SslIcon,
+                    isHttps ? "Connexion sécurisée (HTTPS)" : "Connexion non sécurisée (HTTP)");
+
+                // Optionnel : teinte légère de la barre
+                if (AddressBarBorder != null)
+                    AddressBarBorder.Background = isHttps
+                        ? new SolidColorBrush(Color.FromRgb(72, 68, 68))
+                        : new SolidColorBrush(Color.FromRgb(90, 50, 50));
+            }
+            catch
+            {
+                // jamais casser l'UI
+            }
+        }
+        private BrowserSessionState BuildSessionState()
+        {
+            var state = new BrowserSessionState();
+            state.SelectedIndex = Tabs.SelectedIndex;
+
+            foreach (var item in Tabs.Items)
+            {
+                if (item is not TabItem tab)
+                    continue;
+
+                // ✅ On ne sauvegarde que les WebTabContent (pas Settings/History)
+                if (tab.Tag is not WebTabContent wt)
+                    continue;
+
+                string url = "";
+
+                // legacy
+                if (wt.IsLegacyExternal && !string.IsNullOrWhiteSpace(wt.LegacyUrl))
+                    url = wt.LegacyUrl;
+                else if (wt.Web?.Source != null)
+                    url = wt.Web.Source.AbsoluteUri;
+
+                state.Tabs.Add(new TabState
+                {
+                    Url = url,
+                    IsPinned = wt.IsPinned,
+                    IsPrivate = wt.IsPrivate,
+
+                    IsLegacy = wt.IsLegacyExternal,
+                    LegacyUrl = wt.LegacyUrl
+                });
+            }
+
+            return state;
+        }
+        private void SaveSessionForUpdateRestart()
+        {
+            var state = BuildSessionState();
+            SessionPersistence.Save(state);
+        }
+        private async Task RestoreSessionIfAnyAsync()
+        {
+            var s = MyHomelabBrowser.classes.Session.SessionPersistence.Load();
+            if (s == null || s.Tabs.Count == 0)
+                return;
+
+            // évite boucle infinie si crash au restore
+            MyHomelabBrowser.classes.Session.SessionPersistence.Clear();
+
+            // Ici: on ferme tout (à toi selon ton code)
+            Tabs.Items.Clear();
+
+            foreach (var t in s.Tabs)
+            {
+                // ✅ ouvre onglet normal / privé
+                if (t.IsPrivate)
+                    CreatePrivateTab(string.IsNullOrWhiteSpace(t.Url) ? GetNewTabUrl() : t.Url);
+                else
+                    CreateTab(string.IsNullOrWhiteSpace(t.Url) ? GetNewTabUrl() : t.Url);
+
+                // ✅ si legacy, relance Basilisk
+                if (Tabs.SelectedItem is TabItem tab &&
+                    tab.Tag is WebTabContent wt &&
+                    tab.Header is BrowserTabHeader h)
+                {
+                    wt.IsPinned = t.IsPinned;
+                    ApplyPinState(tab, h, t.IsPinned);
+
+                    if (t.IsLegacy && Uri.TryCreate(t.LegacyUrl ?? t.Url, UriKind.Absolute, out var u))
+                    {
+                        // relance Basilisk
+                        _ = LaunchLegacyIntoInternalTabAsync(wt, u, h);
+                    }
+                }
+            }
+
+            if (s.SelectedIndex >= 0 && s.SelectedIndex < Tabs.Items.Count)
+            {
+                Tabs.SelectedIndex = s.SelectedIndex;
+                SyncWebHostWithSelection();
+            }
+
+            await Task.CompletedTask;
+        }
+        void OpenReportIssueView(ReportIssueOptions options)
+        {
+            // ===============================
+            // 🔍 CONTEXTE NAVIGATION ACTUEL
+            // ===============================
+            WebTabContent? wt = null;
+
+            // 1️⃣ priorité ABSOLUE : onglet sélectionné SI c’est un WebTabContent
+            if (Tabs.SelectedItem is TabItem selected &&
+                selected.Tag is WebTabContent webTab)
+            {
+                wt = webTab;
+            }
+            else
+            {
+                // 2️⃣ fallback : dernier onglet Web existant
+                wt = Tabs.Items
+                    .OfType<TabItem>()
+                    .Select(t => t.Tag)
+                    .OfType<WebTabContent>()
+                    .LastOrDefault();
+            }
+
+            if (wt != null)
+            {
+                string url =
+                    wt.IsLegacyExternal && !string.IsNullOrWhiteSpace(wt.LegacyUrl)
+                        ? wt.LegacyUrl
+                        : wt.Web?.Source?.AbsoluteUri ?? "inconnu";
+
+                string title =
+                    wt.IsLegacyExternal
+                        ? "Legacy (Basilisk)"
+                        : wt.Web?.CoreWebView2?.DocumentTitle ?? "inconnu";
+
+                string flashMode =
+                    wt.IsLegacyExternal ? "legacy" :
+                    wt.FlashMode == FlashMode.Ruffle ? "ruffle" :
+                    wt.FlashMode == FlashMode.Legacy ? "legacy" :
+                    "auto";
+
+                options.Context = new BrowserContext
+                {
+                    IsPrivate = wt.IsPrivate,
+                    IsLegacy = wt.IsLegacyExternal,
+                    CurrentUrl = url,
+                    PageTitle = title,
+                    FlashMode = flashMode
+                };
+            }
+            else
+            {
+                options.Context = null;
+            }
+
+            // ===============================
+            // 🔁 ANTI DOUBLON
+            // ===============================
             foreach (TabItem t in Tabs.Items)
             {
-                if (t.Tag is ViewTabContent)
+                if (t.Tag is ViewTabContent v && v.View is ReportIssueView)
                 {
                     Tabs.SelectedItem = t;
                     SyncWebHostWithSelection();
@@ -1047,8 +1342,203 @@ namespace MyHomelabBrowser
                 }
             }
 
+            // ===============================
+            // 🆕 ONGLET REPORT
+            // ===============================
+            var view = new ReportIssueView(options);
+
+            view.CloseRequested += () =>
+            {
+                var tabToClose = Tabs.Items
+                    .OfType<TabItem>()
+                    .FirstOrDefault(t => t.Tag is ViewTabContent vc && vc.View == view);
+
+                if (tabToClose != null)
+                    CloseTab(tabToClose);
+            };
+
+            var header = new BrowserTabHeader();
+            header.SetTitle("Signaler un problème");
+
+            var tab = new TabItem
+            {
+                Header = header,
+                Tag = new ViewTabContent { View = view }
+            };
+
+            Tabs.Items.Add(tab);
+            Tabs.SelectedItem = tab;
+            SyncWebHostWithSelection();
+        }
+        void OpenSettings()
+        {
+            // ✅ Si déjà ouvert : sélectionner UNIQUEMENT l'onglet Settings
+            foreach (TabItem t in Tabs.Items)
+            {
+                if (t.Tag is ViewTabContent v && v.View is SettingsView)
+                {
+                    Tabs.SelectedItem = t;
+                    SyncWebHostWithSelection();
+                    return;
+                }
+            }
+
+            // ✅ Sinon créer Settings
             var view = new SettingsView(_settings);
+
+            // ✅ history
             view.OpenHistoryRequested += OpenHistory;
+            view.OpenReportIssueRequested += OpenReportIssueView;
+            // ✅ init UI update dès l'ouverture Settings (pas à chaque clic)
+            view.SetCurrentVersion(GetAppVersion());
+            view.SetLatestVersion("(non vérifiée)");
+            view.SetUpdateStatus("Prêt");
+            view.SetUpdateBusy(false);
+            view.SetChangelogAvailable(false);
+            view.SetInstallAvailable(false);
+
+            _latestVersionText = null;
+            _latestChangelogText = null;
+            _pendingUpdateInfo = null;
+
+            // ✅ updates (Velopack) - bouton Vérifier
+            view.CheckUpdatesRequested += async () =>
+            {
+                if (_updates == null)
+                    return;
+
+                if (_isUpdateCheckRunning)
+                    return;
+
+                _isUpdateCheckRunning = true;
+
+                view.SetUpdateBusy(true);
+                view.SetUpdateStatus("Recherche de mise à jour...");
+                view.SetLatestVersion("(en cours...)");
+                view.SetChangelogAvailable(false);
+                view.SetInstallAvailable(false);
+
+                _pendingUpdateInfo = null;
+                _latestVersionText = null;
+                _latestChangelogText = null;
+
+                try
+                {
+                    var info = await _updates.CheckAsync();
+
+                    // ✅ pas de maj
+                    if (info == null)
+                    {
+                        view.SetLatestVersion(GetAppVersion());
+                        view.SetUpdateStatus("À jour ✅");
+                        return;
+                    }
+
+                    // ✅ maj trouvée
+                    _pendingUpdateInfo = info;
+
+                    _latestVersionText = info.TargetFullRelease.Version.ToString();
+                    view.SetLatestVersion(_latestVersionText);
+
+                    view.SetUpdateStatus("Mise à jour disponible ✅");
+
+                    // ✅ changelog (optionnel)
+                    try
+                    {
+                        using var http = new System.Net.Http.HttpClient();
+                        _latestChangelogText = await http.GetStringAsync(
+                            "https://github.com/vazer7070/PommeBrowser-release/releases/latest/download/changelog.json"
+                        );
+
+                        view.SetChangelogAvailable(!string.IsNullOrWhiteSpace(_latestChangelogText));
+                    }
+                    catch
+                    {
+                        _latestChangelogText = null;
+                        view.SetChangelogAvailable(false);
+                    }
+
+                    // ✅ activer Installer
+                    view.SetInstallAvailable(true);
+                }
+                catch (Exception ex)
+                {
+                    view.SetUpdateStatus("Erreur pendant la vérification ❌");
+                    MessageBox.Show("Erreur mise à jour :\n" + ex.Message, "Mise à jour");
+                }
+                finally
+                {
+                    _isUpdateCheckRunning = false;
+                    view.SetUpdateBusy(false);
+                }
+            };
+
+            // ✅ updates (Velopack) - bouton Installer
+            view.InstallUpdateRequested += async () =>
+            {
+                if (_updates == null)
+                    return;
+
+                if (_pendingUpdateInfo == null)
+                    return;
+
+                if (_isUpdateCheckRunning)
+                    return;
+
+                _isUpdateCheckRunning = true;
+
+                view.SetUpdateBusy(true);
+                view.SetInstallAvailable(false);
+                view.SetUpdateStatus("Téléchargement...");
+
+                try
+                {
+                    // ✅ sauvegarde onglets + legacy avant restart
+                    SaveSessionForUpdateRestart();
+
+                    await _updates.DownloadAsync(_pendingUpdateInfo);
+
+                    view.SetUpdateStatus("Installation... redémarrage...");
+                    _updates.ApplyAndRestart(_pendingUpdateInfo);
+                }
+                catch (Exception ex)
+                {
+                    view.SetUpdateStatus("Erreur pendant l'installation ❌");
+                    MessageBox.Show("Erreur mise à jour :\n" + ex.Message, "Mise à jour");
+                }
+                finally
+                {
+                    _isUpdateCheckRunning = false;
+                    view.SetUpdateBusy(false);
+                }
+            };
+
+            view.ChangelogRequested += () =>
+            {
+                if (string.IsNullOrWhiteSpace(_latestChangelogText))
+                    return;
+
+                var current = GetAppVersion(); // ex: 0.6.60
+
+                string niceText;
+                try
+                {
+                    niceText = FormatChangelogJson(_latestChangelogText, current);
+                }
+                catch
+                {
+                    niceText = _latestChangelogText; // fallback brut
+                }
+
+                // Tu peux garder _latestVersionText en titre si tu veux
+                var titleVersion = string.IsNullOrWhiteSpace(_latestVersionText) ? "Dernière version" : _latestVersionText;
+
+                var win = new ChangelogWindow(titleVersion, niceText)
+                {
+                    Owner = this
+                };
+                win.ShowDialog();
+            };
 
             var header = new BrowserTabHeader();
             header.SetTitle("Paramètres");
@@ -1065,6 +1555,7 @@ namespace MyHomelabBrowser
             Tabs.SelectedItem = tab;
             SyncWebHostWithSelection();
         }
+
 
 
 
@@ -1257,20 +1748,6 @@ namespace MyHomelabBrowser
                 web.Source = new Uri(url);
         }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         private void NewPrivateTab_Click(object sender, RoutedEventArgs e)
         {
             // on ne bloque jamais l'UI sur EnsureCoreWebView2Async
@@ -1299,7 +1776,8 @@ namespace MyHomelabBrowser
                 LastActivated = DateTime.Now,
                 FlashService = flashService,
                 FlashMode = FlashMode.None,
-                FlashOverlay = overlay
+                FlashOverlay = overlay,
+                IsPrivate = true
             };
             // 🔒 Initialisation STABLE du host
             content.HostGrid.Children.Add(web);
@@ -2712,6 +3190,7 @@ namespace MyHomelabBrowser
 
                 // 🔥 Reset état Flash pour la nouvelle page
                 state.FlashRequired = false;
+                state.FlashChecked = false; 
                 state.FlashMode = FlashMode.None;
 
                 UpdateFlashModeButton(state);
@@ -3020,7 +3499,7 @@ namespace MyHomelabBrowser
         {
             if (web.Source == null || content.FlashService == null)
                 return;
-
+            
             var uri = web.Source;
             FlashDbg($"HandleFlashAsync ENTER url={uri}");
 
@@ -3029,7 +3508,7 @@ namespace MyHomelabBrowser
             bool forcedLegacy =
     (rule == FlashRuleMode.Legacy) ||
     content.ForceLegacyOnce;
-
+            
             if (content.ForceLegacyOnce)
                 content.ForceLegacyOnce = false;
             // =======================================================
@@ -3038,10 +3517,10 @@ namespace MyHomelabBrowser
             // Si aucune règle explicite et pas de legacy forcé,
             // on ne fait pas de heuristique/DOM flash (trop coûteux)
             if (!forcedLegacy &&
-                rule == FlashRuleMode.Disabled &&
-                content.FlashRequired == false)
+     rule == FlashRuleMode.Auto &&
+     content.FlashChecked &&
+     !content.FlashRequired)
             {
-                // on évite tout overlay inutile sur sites modernes
                 Dispatcher.Invoke(() =>
                 {
                     if (IsActiveTab(content))
@@ -3049,7 +3528,6 @@ namespace MyHomelabBrowser
 
                     UpdateFlashModeButton(content);
                 });
-
                 return;
             }
 
@@ -3077,7 +3555,7 @@ namespace MyHomelabBrowser
                 _retryUri = uri;
                 _retryHeader = header;
                 _retryOverlay = overlay;
-
+                System.Diagnostics.Debug.WriteLine("[FLASH] >>> OPEN LEGACY NOW");
                 Dispatcher.Invoke(() =>
                 {
                     if (!IsActiveTab(content)) return;
@@ -3135,13 +3613,13 @@ namespace MyHomelabBrowser
                     LaunchLegacySameWayAsFallback();
                     return;
                 }
-
-            // ✅ PERF : sur sites modernes, on ne scanne jamais le DOM Flash
+            // ✅ PERF : on skip seulement si on a déjà check ce site (FlashChecked)
+            // ET qu’on a conclu qu’il n’y a pas besoin de Flash.
             if (!forcedLegacy &&
                 rule == FlashRuleMode.Auto &&
+                content.FlashChecked &&
                 !content.FlashRequired)
             {
-                // rien à faire
                 return;
             }
 
@@ -3150,25 +3628,37 @@ namespace MyHomelabBrowser
             // ===============================
             // 1️⃣ HEURISTIQUE RAPIDE
             // ===============================
-            bool flashSuspected =
-                await content.FlashService.DetectFlashRequirementAsync();
+            bool flashSuspected = await content.FlashService.DetectFlashRequirementAsync();
 
             if (Tabs.SelectedItem is not TabItem t1 ||
                 !ReferenceEquals(t1.Tag, content))
                 return;
 
+            // ✅ on a check au moins une fois pour cette page
+            content.FlashChecked = true;
             content.FlashRequired = flashSuspected;
 
             Dispatcher.Invoke(() => UpdateFlashModeButton(content));
-            Dispatcher.Invoke(() =>
-            {
-                if (!IsActiveTab(content)) return;
 
-                if (flashSuspected)
-                    overlay.TryShow("Flash suspecté… analyse…");
-                else
-                    overlay.Hide();
-            });
+            // ✅ si suspecté -> on part en Legacy via pipeline stable, et on stop ici
+            if (flashSuspected)
+            {
+                await Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (!IsActiveTab(content))
+                        return;
+
+                    if (content.FlashMode == FlashMode.Legacy)
+                        return;
+
+                    content.FlashMode = FlashMode.Legacy;
+                    UpdateFlashModeButton(content);
+
+                    LaunchLegacySameWayAsFallback();
+                }));
+
+                return;
+            }
 
             // ===============================
             // 2️⃣ DÉTECTION DOM RÉELLE
@@ -3716,6 +4206,33 @@ namespace MyHomelabBrowser
         [DllImport("user32.dll")]
         private static extern IntPtr GetWindow(IntPtr hWnd, int uCmd);
 
+        [DllImport("user32.dll")] static extern IntPtr SetFocus(IntPtr hWnd);
+        [DllImport("user32.dll")] static extern IntPtr SetActiveWindow(IntPtr hWnd);
+        [DllImport("user32.dll")] static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+        [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+
+        void FocusLegacyEmbedded(IntPtr embedHwnd, IntPtr topHwnd)
+        {
+            if (embedHwnd == IntPtr.Zero) return;
+
+            uint thisThread = GetCurrentThreadId();
+            uint targetThread = (uint)GetWindowThreadProcessId(embedHwnd, out _);
+
+            // ✅ indispensable dans beaucoup de cas (threads différents)
+            AttachThreadInput(thisThread, targetThread, true);
+            try
+            {
+                // Top utile pour activation; focus sur embed pour clavier
+                if (topHwnd != IntPtr.Zero)
+                    SetActiveWindow(topHwnd);
+
+                SetFocus(embedHwnd);
+            }
+            finally
+            {
+                AttachThreadInput(thisThread, targetThread, false);
+            }
+        }
         protected override void OnClosing(CancelEventArgs e)
         {
             try
@@ -3760,6 +4277,7 @@ namespace MyHomelabBrowser
             {
                 var profile = LegacyProfileManager.GetProfileForDomain(uri.Host)
                               + "_" + Guid.NewGuid().ToString("N");
+
                 var p = _legacyLauncher.Launch(uri.AbsoluteUri, profile);
                 content.LegacyProc = p;
 
@@ -3772,6 +4290,7 @@ namespace MyHomelabBrowser
                     await Dispatcher.InvokeAsync(SyncWebHostWithSelection);
                     return false;
                 }
+
                 // ✅ attendre fenêtre top-level Basilisk
                 var (top, realPid) = await WaitForAnyTopWindowFromProcessFamilyAsync(p, timeoutMs: 15000);
                 if (top == IntPtr.Zero)
@@ -3783,32 +4302,41 @@ namespace MyHomelabBrowser
                     await Dispatcher.InvokeAsync(SyncWebHostWithSelection);
                     return false;
                 }
-                // ✅ set handles
+
+                // ✅ handles (ok hors UI)
                 content.LegacyPid = realPid;
                 content.LegacyTopHwnd = top;
 
-                // ✅ ton dock overlay MoveWindow(PointToScreen) doit viser la TOP-LEVEL
-                content.LegacyHwnd = top;
-
-                // ✅ dock host
-                content.LegacyHost ??= new MyHomelabBrowser.controles.ExternalWindowDock();
-
-                // ✅ applique toolwindow/owner sur la TOP window
-                content.LegacyHost.SetTopLevel(top);
-
-                // ✅ on bind la TOP (coords écran OK)
+                // ✅ enfant embed (focus/clavier)
                 var embed = FindBestEmbedChild(top);
-                content.LegacyHost.Bind(embed != IntPtr.Zero ? embed : top);
+                var target = embed != IntPtr.Zero ? embed : top;
 
+                content.LegacyHwnd = target;
+                content.LegacyEmbedHwnd = target;
+
+                // ✅ dock host : création OBLIGATOIRE sur UI thread STA
+                if (content.LegacyHost == null)
+                {
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        content.LegacyHost = new MyHomelabBrowser.controles.ExternalWindowDock();
+                    });
+                }
+
+                // ✅ TOUT ce qui touche WPF doit être sur le Dispatcher
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    content.LegacyHost.SetTopLevel(top);
+                    content.LegacyHost.Bind(target);
+                });
 
                 content.IsLegacyLaunching = false;
                 content.IsLegacyExternal = true;
                 content.LegacyLastError = null;
+
                 await Dispatcher.InvokeAsync(() =>
                 {
-                    
                     SyncWebHostWithSelection();
-
 
                     content.LegacyHost?.ShowDock();
                     content.LegacyHost?.UpdateDockPosition();
@@ -4084,30 +4612,13 @@ namespace MyHomelabBrowser
         [DllImport("user32.dll", SetLastError = true)]
         static extern IntPtr GetParent(IntPtr hWnd);
 
-        Rect GetWebHostScreenRect()
-        {
-            // WebHost est ton ContentControl qui affiche l’onglet
-            var p = WebHost.PointToScreen(new Point(0, 0));
-            return new Rect(p.X, p.Y, WebHost.ActualWidth, WebHost.ActualHeight);
-        }
+        
         
 
         const uint SWP_NOMOVE = 0x0002;
         const uint SWP_NOSIZE = 0x0001;
 
-        void HideBasiliskWindow(IntPtr hwnd)
-        {
-            if (hwnd == IntPtr.Zero) return;
-            ShowWindow(hwnd, SW_HIDE);
-        }
-
-
-        static string GetWndClass(IntPtr h)
-        {
-            var sb = new System.Text.StringBuilder(256);
-            GetClassName(h, sb, sb.Capacity);
-            return sb.ToString();
-        }
+       
 
         // ===============================
         // CONTENU D’ONGLET (BASE PROPRE)
@@ -4140,7 +4651,8 @@ namespace MyHomelabBrowser
             public bool LegacyDocked { get; set; }
             public bool LegacyEmbeddedReady { get; set; }
             public bool ForceLegacyOnce { get; set; } = false;
-
+            public bool FlashChecked { get; set; } = false;
+            public IntPtr LegacyEmbedHwnd { get; set; } = IntPtr.Zero;
 
             // Legacy proxy
             public bool IsLegacyExternal { get; set; }

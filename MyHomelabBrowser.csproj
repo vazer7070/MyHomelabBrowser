@@ -1,16 +1,40 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <UseWPF>true</UseWPF>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net10.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UseWPF>true</UseWPF>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3650.58" />
-  </ItemGroup>
+		<!-- ✅ Version app -->
+		<Version>0.6.63</Version>
+		<AssemblyVersion>0.6.63.0</AssemblyVersion>
+		<FileVersion>0.6.63.0</FileVersion>
+
+		<ApplicationIcon>PommeBrowser.ico</ApplicationIcon>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Remove="Assets\PommeBrowser.ico" />
+		<None Remove="Assets\ssl_bad.png" />
+		<None Remove="Assets\ssl_ok.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Content Include="PommeBrowser.ico" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Resource Include="Assets\PommeBrowser.ico" />
+		<Resource Include="Assets\ssl_bad.png" />
+		<Resource Include="Assets\ssl_ok.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.1" />
+		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3650.58" />
+		<PackageReference Include="Velopack" Version="0.0.1298" />
+	</ItemGroup>
 
 </Project>

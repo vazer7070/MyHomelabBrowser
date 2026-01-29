@@ -34,6 +34,13 @@ namespace MyHomelabBrowser.classes
                 "Downloads");
 
         // ====================
+        // 📣 Rapport utilisateur
+        // ====================
+        public bool ReportIncludeLogs { get; set; } = true;
+        public bool ReportIncludePcInfo { get; set; } = true;
+        public bool ReportIncludeMode { get; set; } = true;
+
+        // ====================
         // 🔥 FLASH / LEGACY
         // ====================
         public bool EnableFlashSupport { get; set; } = false;
@@ -68,6 +75,11 @@ namespace MyHomelabBrowser.classes
                 PreferRuffle = PreferRuffle,
                 BasiliskPath = BasiliskPath,
                 FlashDebugEnabled = FlashDebugEnabled,
+
+                // 📣 Rapport utilisateur
+                ReportIncludeLogs = ReportIncludeLogs,
+                ReportIncludePcInfo = ReportIncludePcInfo,
+                ReportIncludeMode = ReportIncludeMode,
 
                 Commands = Commands
                     .Select(c => new CommandSetting

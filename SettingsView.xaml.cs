@@ -1,8 +1,12 @@
 ﻿using Microsoft.Win32;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Flash;
+using MyHomelabBrowser.controles;
 using System;
 using System.IO;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Animation;
@@ -17,7 +21,54 @@ namespace MyHomelabBrowser
         public bool FlashDebugEnabled { get; set; } = false;
 
         public event Action? OpenHistoryRequested;
+        public event Action? CheckUpdatesRequested;
+        public void SetUpdateStatus(string text) => UpdateStatusLabel.Text = text;
+        public event Action? InstallUpdateRequested;
+        public event Action<ReportIssueOptions>? OpenReportIssueRequested;
 
+        public event Action? ChangelogRequested;
+
+        public string UpdateStatusText
+        {
+            get => UpdateStatusLabel.Text;
+            set => UpdateStatusLabel.Text = value;
+        }
+
+        public bool IsUpdateButtonEnabled
+        {
+            get => CheckUpdatesBtn.IsEnabled;
+            set => CheckUpdatesBtn.IsEnabled = value;
+        }
+        public void ShowUpdateProgress(bool show)
+        {
+            UpdateProgress.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            UpdateProgressLabel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        public void SetUpdateProgress(double percent)
+        {
+            if (percent < 0) percent = 0;
+            if (percent > 100) percent = 100;
+
+            UpdateProgress.Value = percent;
+            UpdateProgressLabel.Text = $"{percent:0}%";
+        }
+        public void SetUpdateBusy(bool busy)
+        {
+            CheckUpdatesBtn.IsEnabled = !busy;
+
+            if (busy)
+                InstallUpdateBtn.IsEnabled = false;
+        }
+        private void InstallUpdateBtn_Click(object sender, RoutedEventArgs e)
+        {
+            InstallUpdateRequested?.Invoke();
+        }
+        public void SetInstallAvailable(bool available)
+        {
+            InstallUpdateBtn.IsEnabled = available;
+        }
+        
         public SettingsView(SettingsService service)
         {
             InitializeComponent();
@@ -27,8 +78,34 @@ namespace MyHomelabBrowser
             _original = _service.Settings.Clone();
             _working = _service.Settings.Clone();
 
-            DataContext = _working;
 
+            DataContext = _working;
+            // ✅ 1er lancement : Basilisk par défaut depuis le dossier du navigateur
+            if (string.IsNullOrWhiteSpace(_working.BasiliskPath))
+            {
+                try
+                {
+                    string exeDir = AppDomain.CurrentDomain.BaseDirectory;
+                    string defaultBasilisk = Path.Combine(exeDir, "Basilisk", "Basilisk-Portable.exe");
+
+                    if (File.Exists(defaultBasilisk))
+                    {
+                        _working.BasiliskPath = defaultBasilisk;
+
+                        // ✅ persiste immédiatement (comme "1er lancement")
+                        _service.Apply(_working.Clone());
+
+                        // ✅ resync working/original proprement
+                        _original = _service.Settings.Clone();
+                        _working = _service.Settings.Clone();
+                        DataContext = _working;
+                    }
+                }
+                catch
+                {
+                    // rien : pas de crash au démarrage
+                }
+            }
             // 🔽 synchro initiale du DownloadManager
             if (!string.IsNullOrWhiteSpace(_working.DownloadFolder))
                 DownloadManager.Instance.DownloadFolder = _working.DownloadFolder;
@@ -37,9 +114,32 @@ namespace MyHomelabBrowser
             RefreshFlashRules();
         }
 
+
+        private void OpenReportIssue_Click(object sender, RoutedEventArgs e)
+        {
+            var options = new ReportIssueOptions
+            {
+                IncludeLogs = _working.ReportIncludeLogs,
+                IncludePcInfo = _working.ReportIncludePcInfo,
+                IncludeMode = _working.ReportIncludeMode
+            };
+
+            OpenReportIssueRequested?.Invoke(options);
+        }
+
         private void OpenHistory_Click(object sender, RoutedEventArgs e)
         {
             OpenHistoryRequested?.Invoke();
+        }
+        
+        private void CheckUpdatesBtn_Click(object sender, RoutedEventArgs e)
+        {
+            CheckUpdatesRequested?.Invoke();
+        }
+
+        private void ChangelogBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ChangelogRequested?.Invoke();
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
@@ -54,7 +154,22 @@ namespace MyHomelabBrowser
             // 🔁 rollback visuel whitelist
             RefreshFlashRules();
         }
+        
 
+        public void SetCurrentVersion(string version)
+        {
+            CurrentVersionLabel.Text = version;
+        }
+
+        public void SetLatestVersion(string version)
+        {
+            LatestVersionLabel.Text = version;
+        }
+
+        public void SetChangelogAvailable(bool available)
+        {
+            ChangelogBtn.IsEnabled = available;
+        }
         private void Save_Click(object sender, RoutedEventArgs e)
         {
             _service.Apply(_working.Clone());
@@ -131,13 +246,19 @@ namespace MyHomelabBrowser
         // ===============================
         private void PickBasiliskPath_Click(object sender, RoutedEventArgs e)
         {
+            string exeDir = AppDomain.CurrentDomain.BaseDirectory;
+            string defaultBasiliskDir = Path.Combine(exeDir, "Basilisk");
+
+            string initialDir =
+                !string.IsNullOrWhiteSpace(_working.BasiliskPath)
+                    ? Path.GetDirectoryName(_working.BasiliskPath) ?? exeDir
+                    : (Directory.Exists(defaultBasiliskDir) ? defaultBasiliskDir : exeDir);
+
             var dlg = new OpenFileDialog
             {
                 Title = "Choisir Basilisk-Portable.exe",
                 Filter = "Basilisk (Basilisk-Portable.exe)|Basilisk-Portable.exe|Tous les fichiers|*.*",
-                InitialDirectory = string.IsNullOrWhiteSpace(_working.BasiliskPath)
-                    ? Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)
-                    : Path.GetDirectoryName(_working.BasiliskPath)
+                InitialDirectory = initialDir
             };
 
             if (dlg.ShowDialog() != true)

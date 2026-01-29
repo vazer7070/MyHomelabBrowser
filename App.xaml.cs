@@ -1,17 +1,14 @@
-﻿using System.Configuration;
-using System.Data;
-using System.Windows;
+﻿using System.Windows;
+using Velopack;
 
-namespace MyHomelabBrowser;
-
-/// <summary>
-/// Interaction logic for App.xaml
-/// </summary>
-public partial class App : Application
+namespace MyHomelabBrowser
 {
-    
-
-
-
+    public partial class App : Application
+    {
+        protected override void OnStartup(StartupEventArgs e)
+        {
+            VelopackApp.Build().Run();
+            base.OnStartup(e);
+        }
+    }
 }
-

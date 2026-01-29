@@ -1,12 +1,17 @@
 ﻿using MyHomelabBrowser.classes;
+using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Windows;
 
 namespace MyHomelabBrowser
 {
     public class LegacyLauncher
     {
         private readonly SettingsService _settings;
+        public event Action<string>? OnDebug;
+        private void Dbg(string msg) => OnDebug?.Invoke(msg);
 
         public LegacyLauncher(SettingsService settings)
         {
@@ -28,43 +33,6 @@ namespace MyHomelabBrowser
 
             return File.Exists(s.BasiliskPath);
         }
-        private static void EnsureWebOnlyChrome(string profileDir)
-        {
-          /*  if (string.IsNullOrWhiteSpace(profileDir))
-                return;
-
-            Directory.CreateDirectory(profileDir);
-
-            // ✅ force existence prefs.js (certains forks ignorent user.js sinon)
-            var prefsJsPath = Path.Combine(profileDir, "prefs.js");
-            if (!File.Exists(prefsJsPath))
-                File.WriteAllText(prefsJsPath, "// created by MyHomelabBrowser\n");
-
-            // ✅ user.js (préférences forcées à chaque lancement)
-            var userJsPath = Path.Combine(profileDir, "user.js");
-            File.WriteAllText(userJsPath,
-        @"user_pref(""toolkit.legacyUserProfileCustomizations.stylesheets"", true);
-user_pref(""browser.tabs.autoHide"", true);
-user_pref(""browser.fullscreen.autohide"", true);
-");
-
-            // ✅ chrome/userChrome.css
-            var chromeDir = Path.Combine(profileDir, "chrome");
-            Directory.CreateDirectory(chromeDir);
-
-            File.WriteAllText(Path.Combine(chromeDir, "userChrome.css"),
-        @"#navigator-toolbox { visibility: collapse !important; }
-#TabsToolbar { visibility: collapse !important; }
-#nav-bar { visibility: collapse !important; }
-#toolbar-menubar { visibility: collapse !important; }
-#PersonalToolbar { visibility: collapse !important; }
-");
-
-                
-           
-            */
-        }
-
 
         public static void KillAllBasiliskProcesses()
         {
@@ -73,7 +41,147 @@ user_pref(""browser.fullscreen.autohide"", true);
                 try { p.Kill(true); } catch { }
             }
         }
+        private void EnsureLegacyProfileReady(string profileDir)
+        {
+            void Log(string s) => Dbg("[LegacyProfile] " + s);
 
+            if (string.IsNullOrWhiteSpace(profileDir))
+            {
+                Log("profileDir vide -> skip");
+                return;
+            }
+
+            try
+            {
+                Log("Init profile: " + profileDir);
+
+                Directory.CreateDirectory(profileDir);
+
+                // chrome/
+                string chromeDir = Path.Combine(profileDir, "chrome");
+                Directory.CreateDirectory(chromeDir);
+
+                // userChrome.css (WriteIfMissing)
+                string userChromePath = Path.Combine(chromeDir, "userChrome.css");
+                if (!File.Exists(userChromePath))
+                {
+                    File.WriteAllText(userChromePath,
+        @"#navigator-toolbox { visibility: collapse !important; }
+#TabsToolbar { visibility: collapse !important; }
+#nav-bar { visibility: collapse !important; }
+#toolbar-menubar { visibility: collapse !important; }
+#PersonalToolbar { visibility: collapse !important; }
+");
+                    Log("Créé: chrome/userChrome.css");
+                }
+                else
+                {
+                    Log("Existe déjà: chrome/userChrome.css (pas écrasé)");
+                }
+
+                // user.js (WriteIfMissing)
+                string userJsPath = Path.Combine(profileDir, "user.js");
+                if (!File.Exists(userJsPath))
+                {
+                    File.WriteAllText(userJsPath,
+        @"user_pref(""toolkit.legacyUserProfileCustomizations.stylesheets"", true);
+user_pref(""browser.tabs.autoHide"", true);
+user_pref(""browser.fullscreen.autohide"", true);
+user_pref(""app.update.auto"", false);
+user_pref(""app.update.enabled"", false);
+");
+                    Log("Créé: user.js");
+                }
+                else
+                {
+                    Log("Existe déjà: user.js (pas écrasé)");
+                }
+
+                // prefs.js (ne pas écraser, juste garantir les prefs)
+                string prefsJsPath = Path.Combine(profileDir, "prefs.js");
+                if (!File.Exists(prefsJsPath))
+                {
+                    File.WriteAllText(prefsJsPath, "// created by MyHomelabBrowser\n");
+                    Log("Créé: prefs.js");
+                }
+                else
+                {
+                    Log("Existe déjà: prefs.js");
+                }
+
+                // lire prefs.js
+                string prefsContent = "";
+                try { prefsContent = File.ReadAllText(prefsJsPath); }
+                catch (Exception ex)
+                {
+                    Log("Impossible de lire prefs.js: " + ex.Message);
+                    prefsContent = "";
+                }
+
+                // ✅ garantir userChrome enabled
+                if (!prefsContent.Contains("toolkit.legacyUserProfileCustomizations.stylesheets", StringComparison.Ordinal))
+                {
+                    File.AppendAllText(prefsJsPath,
+                        "user_pref(\"toolkit.legacyUserProfileCustomizations.stylesheets\", true);\n");
+                    Log("Ajout pref dans prefs.js: toolkit.legacyUserProfileCustomizations.stylesheets=true");
+                }
+                else
+                {
+                    Log("Pref déjà présente dans prefs.js");
+                }
+
+                // ✅ garantir stop updates (backup dans prefs.js)
+                if (!prefsContent.Contains("app.update.auto", StringComparison.Ordinal))
+                {
+                    File.AppendAllText(prefsJsPath, "user_pref(\"app.update.auto\", false);\n");
+                    Log("Ajout pref dans prefs.js: app.update.auto=false");
+                }
+
+                if (!prefsContent.Contains("app.update.enabled", StringComparison.Ordinal))
+                {
+                    File.AppendAllText(prefsJsPath, "user_pref(\"app.update.enabled\", false);\n");
+                    Log("Ajout pref dans prefs.js: app.update.enabled=false");
+                }
+
+                DeleteIfExists(Path.Combine(profileDir, "parent.lock"), Log);
+                DeleteIfExists(Path.Combine(profileDir, "lock"), Log);
+                DeleteIfExists(Path.Combine(profileDir, ".parentlock"), Log);
+
+                Log("OK");
+            }
+            catch (Exception ex)
+            {
+                Log("FAILED: " + ex);
+            }
+        }
+
+        private static void DeleteIfExists(string path, Action<string> log)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                    log("Supprimé lock: " + Path.GetFileName(path));
+                }
+            }
+            catch (Exception ex)
+            {
+                log("Impossible de supprimer " + Path.GetFileName(path) + ": " + ex.Message);
+            }
+        }
+        private string GetPortableProfileDirFromBasiliskPath()
+        {
+            var exe = _settings.Settings.BasiliskPath;
+            var root = Path.GetDirectoryName(exe);
+
+            // si exe invalide -> fallback vide
+            if (string.IsNullOrWhiteSpace(root))
+                return "";
+
+            // ✅ correspond EXACTEMENT à ton chemin about:support
+            return Path.Combine(root, "Bin", "basilisk", "Profiles", "Default");
+        }
         // ===============================
         // LANCEMENT
         // ===============================
@@ -82,29 +190,16 @@ user_pref(""browser.fullscreen.autohide"", true);
             if (!CanLaunch())
                 return null;
 
-            EnsureWebOnlyChrome(profileDir);
-
             var exe = _settings.Settings.BasiliskPath;
 
-            var args =
-                $"--no-remote " +
-                $"--profile \"{profileDir}\" " +
-                $"\"{url}\"";
+            // ✅ PROD : profil portable officiel (confirmé about:support)
+            profileDir = GetPortableProfileDirFromBasiliskPath();
 
-            if (Directory.Exists(profileDir))
-            {
-                // ⚠️ garde "FlashPlayerTrust" / plugin si tu en as
-                // sinon wipe tout pour un profil vierge
-                foreach (var f in Directory.GetFiles(profileDir, "*", SearchOption.AllDirectories))
-                {
-                    try { File.SetAttributes(f, FileAttributes.Normal); } catch { }
-                }
-            }
+            // ✅ préparer le profil (UI clean + stop updates + locks)
+            EnsureLegacyProfileReady(profileDir);
 
-            foreach (var pr in Process.GetProcessesByName("basilisk"))
-            {
-                try { pr.Kill(true); } catch { }
-            }
+            // ✅ args
+            string args = $"-no-remote \"{url}\"";
 
             return Process.Start(new ProcessStartInfo
             {
@@ -113,7 +208,6 @@ user_pref(""browser.fullscreen.autohide"", true);
                 UseShellExecute = true
             });
         }
-
 
 
     }

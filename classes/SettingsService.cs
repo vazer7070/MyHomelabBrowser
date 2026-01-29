@@ -35,16 +35,47 @@ namespace MyHomelabBrowser.classes
         {
             try
             {
-                if (!File.Exists(_path))
-                    return CreateDefaults();
+                BrowserSettings s;
 
-                return JsonSerializer.Deserialize<BrowserSettings>(
-                    File.ReadAllText(_path)
-                ) ?? CreateDefaults();
+                if (!File.Exists(_path))
+                {
+                    s = CreateDefaults();
+                }
+                else
+                {
+                    s = JsonSerializer.Deserialize<BrowserSettings>(File.ReadAllText(_path))
+                        ?? CreateDefaults();
+                }
+
+                // ✅ BasiliskPath par défaut (1er lancement / chemin invalide)
+                try
+                {
+                    string defaultBasilisk = GetDefaultBasiliskPortablePath();
+
+                    if (string.IsNullOrWhiteSpace(s.BasiliskPath) || !File.Exists(s.BasiliskPath))
+                    {
+                        if (File.Exists(defaultBasilisk))
+                            s.BasiliskPath = defaultBasilisk;
+                    }
+                }
+                catch { }
+
+                return s;
             }
             catch
             {
-                return CreateDefaults();
+                var s = CreateDefaults();
+
+                // ✅ BasiliskPath par défaut même si JSON cassé
+                try
+                {
+                    string defaultBasilisk = GetDefaultBasiliskPortablePath();
+                    if (File.Exists(defaultBasilisk))
+                        s.BasiliskPath = defaultBasilisk;
+                }
+                catch { }
+
+                return s;
             }
         }
 
@@ -52,23 +83,29 @@ namespace MyHomelabBrowser.classes
         {
             return new BrowserSettings
             {
+                BasiliskPath = GetDefaultBasiliskPortablePath(),
+
                 EnableSuspension = true,
                 SuspendDelayMinutes = 5,
                 StartPage = "https://google.com",
                 NewTabPage = "https://duckduckgo.com",
                 EnableCommands = true,
                 Commands = new List<CommandSetting>
-                {
-                    new() { Key="new", Description="Nouvel onglet", Enabled=true },
-                    new() { Key="close", Description="Fermer onglet", Enabled=true },
-                    new() { Key="close others", Description="Fermer les autres", Enabled=true },
-                    new() { Key="reload", Description="Recharger", Enabled=true },
-                    new() { Key="suspend", Description="Suspendre onglet", Enabled=true },
-                    new() { Key="resume", Description="Réactiver onglet", Enabled=true },
-                }
+        {
+            new() { Key="new", Description="Nouvel onglet", Enabled=true },
+            new() { Key="close", Description="Fermer onglet", Enabled=true },
+            new() { Key="close others", Description="Fermer les autres", Enabled=true },
+            new() { Key="reload", Description="Recharger", Enabled=true },
+            new() { Key="suspend", Description="Suspendre onglet", Enabled=true },
+            new() { Key="resume", Description="Réactiver onglet", Enabled=true },
+        }
             };
         }
-
+        private static string GetDefaultBasiliskPortablePath()
+        {
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            return Path.Combine(appData, "PommeBrowser", "Basilisk", "Basilisk-Portable.exe");
+        }
         public void Save()
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);

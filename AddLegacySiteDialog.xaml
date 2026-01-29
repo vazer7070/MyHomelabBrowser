@@ -17,7 +17,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Text="Domaine à forcer en Legacy (Basilisk)"
+        <TextBlock Text="Domaine à forcer en Legacy"
                    FontSize="14"
                    FontWeight="SemiBold"/>
 
@@ -30,7 +30,7 @@
                  Foreground="White"
                  BorderBrush="#444"
                  BorderThickness="1"
-                 Text="ministryofwar.com"/>
+                 Text=""/>
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button x:Name="CancelBtn"

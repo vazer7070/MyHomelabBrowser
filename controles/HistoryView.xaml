@@ -198,27 +198,36 @@
                     Padding="12,0"
                     VerticalAlignment="Center">
                 <DockPanel LastChildFill="True">
+
                     <TextBlock Text="🔎"
-                               Foreground="#BBBBBB"
-                               FontSize="14"
-                               VerticalAlignment="Center"
-                               Margin="0,0,10,0"/>
+               Foreground="#BBBBBB"
+               FontSize="14"
+               VerticalAlignment="Center"
+               Margin="0,0,10,0"/>
 
-                    <TextBox x:Name="SearchBox"
-                             Background="Transparent"
-                             Foreground="White"
-                             BorderThickness="0"
-                             VerticalContentAlignment="Center"
-                             FontSize="13"
-                             TextChanged="SearchBox_TextChanged"/>
+                    <!-- ✅ Zone search + clear propre -->
+                    <Grid>
+                        <TextBox x:Name="SearchBox"
+                 Background="Transparent"
+                 Foreground="White"
+                 BorderThickness="0"
+                 VerticalContentAlignment="Center"
+                 FontSize="13"
+                 Padding="0,0,34,0"
+                 TextChanged="SearchBox_TextChanged"/>
 
-                    <!-- Clear search -->
-                    <Button x:Name="ClearSearchBtn"
-                            Content="✕"
-                            Style="{StaticResource IconButtonStyle}"
-                            Foreground="#BDBDBD"
-                            Click="ClearSearch_Click"
-                            Visibility="Collapsed"/>
+                        <!-- Clear search (overlay à droite) -->
+                        <Button x:Name="ClearSearchBtn"
+                Content="✕"
+                Style="{StaticResource IconButtonStyle}"
+                Foreground="#BDBDBD"
+                Click="ClearSearch_Click"
+                Visibility="Collapsed"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                Margin="0,0,-6,0"/>
+                    </Grid>
+
                 </DockPanel>
             </Border>
 
