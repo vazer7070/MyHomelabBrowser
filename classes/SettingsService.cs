@@ -16,11 +16,8 @@ namespace MyHomelabBrowser.classes
 
         public SettingsService()
         {
-            _path = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "MyHomelabBrowser",
-                "settings.json"
-            );
+            _path = MyHomelabBrowser.classes.Profiles.AppDataContext.GetPath("settings.json");
+
 
             Settings = Load();
         }

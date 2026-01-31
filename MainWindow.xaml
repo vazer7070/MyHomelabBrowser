@@ -8,6 +8,120 @@
         Width="1400"
         Background="{StaticResource FluentBg}">
     <Window.Resources>
+        <Style x:Key="FluentContextMenuStyle" TargetType="ContextMenu">
+            <Setter Property="Background" Value="#FF1E1E1E"/>
+            <Setter Property="BorderBrush" Value="#FF3A3A3A"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6"/>
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="10"
+                    Padding="{TemplateBinding Padding}">
+
+                            <!-- 🔥 OBLIGATOIRE -->
+                            <ItemsPresenter/>
+
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+
+        <Style x:Key="FluentMenuSeparatorStyle" TargetType="Separator">
+            <Setter Property="Margin" Value="8,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Separator">
+                        <Border Height="1"
+                        Background="#33FFFFFF"
+                        CornerRadius="1"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="FluentMenuItemStyle" TargetType="MenuItem">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Grid>
+                            <!-- ITEM PRINCIPAL -->
+                            <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                                <Grid>
+                                    <ContentPresenter
+                                ContentSource="Header"
+                                VerticalAlignment="Center"/>
+
+                                    <!-- flèche sous-menu -->
+                                    <TextBlock x:Name="Arrow"
+                                       Text="▶"
+                                       Foreground="#AAAAAA"
+                                       FontSize="10"
+                                       HorizontalAlignment="Right"
+                                       VerticalAlignment="Center"
+                                       Margin="12,0,0,0"
+                                       Visibility="Collapsed"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- 🔥 SOUS-MENU -->
+                            <Popup x:Name="SubMenuPopup"
+                           Placement="Right"
+                           IsOpen="{TemplateBinding IsSubmenuOpen}"
+                           AllowsTransparency="True"
+                           Focusable="False"
+                           PopupAnimation="Fade">
+                                <Border Background="#1E1E1E"
+                                BorderBrush="#3A3A3A"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                Padding="6">
+                                    <ItemsPresenter/>
+                                </Border>
+                            </Popup>
+                        </Grid>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd"
+                                Property="Background"
+                                Value="#2A2A2A"/>
+                            </Trigger>
+
+                            <Trigger Property="HasItems" Value="True">
+                                <Setter TargetName="Arrow"
+                                Property="Visibility"
+                                Value="Visible"/>
+                            </Trigger>
+
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground"
+                                Value="#777777"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+
+
+
         <Style x:Key="NavIconButtonStyle" TargetType="Button">
             <Setter Property="Width" Value="30"/>
             <Setter Property="Height" Value="30"/>
@@ -39,6 +153,44 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <ContextMenu x:Key="ProfileContextMenu_LoggedOut">
+            <MenuItem Header="🔑 Se connecter"
+              Click="Profile_Login_Click"/>
+            <MenuItem Header="➕ Créer un profil"
+              Click="Profile_Create_Click"/>
+        </ContextMenu>
+
+        <ContextMenu x:Key="ProfileContextMenu_LoggedIn">
+
+            <MenuItem Header="👤 Profil"
+              IsEnabled="False"/>
+
+            <Separator/>
+
+            <!-- 🔁 CHANGER DE PROFIL -->
+            <MenuItem Header="🔁 Changer de profil"
+              x:Name="SwitchProfileMenu"/>
+
+            <Separator/>
+
+            <MenuItem Header="⚙ Paramètres du profil"
+              Click="Profile_Settings_Click"/>
+
+            <MenuItem Style="{StaticResource FluentMenuItemStyle}"
+                      Click="Profile_Logout_Click">
+                <MenuItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="⏻" Margin="0,0,8,0"/>
+                        <TextBlock Text="Se déconnecter"/>
+                    </StackPanel>
+                </MenuItem.Header>
+            </MenuItem>
+
+            
+
+        </ContextMenu>
+
+
     </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
@@ -542,7 +694,47 @@
                     Margin="6,0,0,0"
                     Click="FlashModeBtn_Click"
                     ToolTip="Forcer ou libérer le mode Flash pour ce site"/>
+                    <!-- 👤 PROFIL UTILISATEUR -->
+                    <Button x:Name="ProfileButton"
+        Width="28"
+        Height="28"
+        Margin="6,0,0,0"
+        Cursor="Hand"
+        Click="ProfileButton_Click"
+        ToolTip="Profil utilisateur"
+        BorderThickness="0"
+        Background="#2A2A2A">
+
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bd"
+                    Background="{TemplateBinding Background}"
+                    CornerRadius="14"
+                    Width="28"
+                    Height="28">
+                                    <TextBlock x:Name="ProfileLetter"
+           Text="{TemplateBinding Content}"
+           Foreground="White"
+           FontWeight="SemiBold"
+           FontSize="14"
+           HorizontalAlignment="Center"
+           VerticalAlignment="Center"/>
+
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#353535"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#404040"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
                 </StackPanel>
+                
 
                 <!-- =========================
              ✅ CommandSuggestionsPopup + CommandList (PAS TOUCHÉS)
@@ -628,15 +820,38 @@
                     Grid.Column="1"
                     Width="56"
                     Background="#1E1E1E">
-                <StackPanel Margin="0,48,0,0">
-                    <Button Content="⚙" Margin="10" Click="OpenSettings_Click" Cursor="Hand"/>
-                    <Button Content="🌐" Margin="6"/>
-                    <Button Content="🔒" Margin="6"/>
-                    <Button Content="📜"
-                            Margin="6"
-                            ToolTip="Historique"
-                            Click="OpenHistory_Click"/>
+                <StackPanel>
+
+                    <!-- 👤 PROFIL (TOP SIDEBAR) -->
+                    <Button x:Name="SidebarProfileButton"
+            Content="👤"
+            Width="36"
+            Height="36"
+            Margin="10,10,10,6"
+            FontSize="16"
+            FontWeight="SemiBold"
+            Cursor="Hand"
+            Click="SidebarProfileButton_Click"
+            ToolTip="Profil utilisateur"/>
+
+                    <!-- CONTENU EXISTANT -->
+                    <StackPanel Margin="0,12,0,0">
+                        <Button Content="⚙"
+                Margin="10"
+                Click="OpenSettings_Click"
+                Cursor="Hand"/>
+
+                        <Button Content="🌐" Margin="6"/>
+                        <Button Content="🔒" Margin="6"/>
+
+                        <Button Content="📜"
+                Margin="6"
+                ToolTip="Historique"
+                Click="OpenHistory_Click"/>
+                    </StackPanel>
+
                 </StackPanel>
+
             </Border>
         </Grid>
 

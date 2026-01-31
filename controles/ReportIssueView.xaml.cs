@@ -299,22 +299,22 @@ Aucun log console n’a été généré pour cette session.
             return type switch
             {
                 ReportIssueView.IssueType.Bug =>
-                    "https://discord.com/api/webhooks/1175892971103723520/JfZC2bVlenFQDghAqi8OJLqbFikpT_rBZU8VzDmY9U722H7rAXVsP-id6fjTjkI-OwOE",
+                    "https://discord.com/api/webhooks/1466856163688845413/SNN4ZMroiwUejaUgIHDLtbvb8ovVebpT1tigZjuS_zGIc2CE0SLkT78cIJH3NS_gDxC4",
 
                 ReportIssueView.IssueType.MissingFeature =>
-                    "https://discord.com/api/webhooks/1175892971103723520/JfZC2bVlenFQDghAqi8OJLqbFikpT_rBZU8VzDmY9U722H7rAXVsP-id6fjTjkI-OwOE",
+                    "https://discord.com/api/webhooks/1466856296002228235/HguCY5QSmLSzbVaomvsWuJGusjmg8dK_axxkBGWYCmIMXIszVPO6QKKNBrtvc2x-iiTo",
 
                 ReportIssueView.IssueType.FeatureRequest =>
-                    "https://discord.com/api/webhooks/1175892971103723520/JfZC2bVlenFQDghAqi8OJLqbFikpT_rBZU8VzDmY9U722H7rAXVsP-id6fjTjkI-OwOE",
+                    "https://discord.com/api/webhooks/1466856426881421364/Q9tepiS8kF1jV0wetkr4TKtN0vZNOP_5FRlEwzeycfbzu_1_kvZbciYiR1toLjCkL19L",
 
                 ReportIssueView.IssueType.UiUx =>
-                    "https://discord.com/api/webhooks/1175892971103723520/JfZC2bVlenFQDghAqi8OJLqbFikpT_rBZU8VzDmY9U722H7rAXVsP-id6fjTjkI-OwOE",
+                    "https://discord.com/api/webhooks/1466856539980566764/Zo5Q8BRkNH2XxrZmQ2jneF3GSDsdvpVco-JxggullC8XiCxrKGHBayvY5y6lC4S_mywg",
 
                 ReportIssueView.IssueType.Performance =>
-                    "https://discord.com/api/webhooks/1175892971103723520/JfZC2bVlenFQDghAqi8OJLqbFikpT_rBZU8VzDmY9U722H7rAXVsP-id6fjTjkI-OwOE",
+                    "https://discord.com/api/webhooks/1466856656121106614/2xq3neD_NLWcWbHmX37HyMHq90utWOtY-wlVhBoSUXmJakBL01o6BC6pVxEAdFbWAIrX",
 
                 _ =>
-                    "https://discord.com/api/webhooks/1175892971103723520/JfZC2bVlenFQDghAqi8OJLqbFikpT_rBZU8VzDmY9U722H7rAXVsP-id6fjTjkI-OwOE",
+                    "https://discord.com/api/webhooks/1466856775859834880/pfgE0hXTaEzaRXKjl1_P-IOvuFlcNK7ES3-fKv0FvwCKVepmWJ3Ac3eY2PEQCsSexF8O",
             };
         }
     }

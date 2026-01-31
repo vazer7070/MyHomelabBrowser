@@ -2,6 +2,7 @@
 using Microsoft.Web.WebView2.Wpf;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Flash;
+using MyHomelabBrowser.classes.Profiles;
 using MyHomelabBrowser.classes.Session;
 using MyHomelabBrowser.controles;
 using System;
@@ -17,6 +18,7 @@ using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -84,6 +86,17 @@ namespace MyHomelabBrowser
         private Dictionary<string, List<string>>? _changelogMap;
         private Velopack.UpdateInfo? _pendingUpdateInfo;
 
+        private readonly ProfileService _profileService = new ProfileService(
+    Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "MyHomelabBrowser"));
+
+        public IEnumerable<UserProfile> AllProfiles
+    => _profileService.GetAllProfiles();
+
+
+
+
         readonly ObservableCollection<ToastItem> _toasts = new();
 
         public FlashDecisionService? FlashService { get; set; }
@@ -93,10 +106,15 @@ namespace MyHomelabBrowser
         DateTime _lastHistoryAt = DateTime.MinValue;
 
         string AppDataDir =>
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MyHomelabBrowser");
+    MyHomelabBrowser.classes.Profiles.AppDataContext.Root;
 
-        string HistoryPath => Path.Combine(AppDataDir, "history.json");
-        string FavoritesPath => Path.Combine(AppDataDir, "favorites.json");
+
+        string HistoryPath =>
+    Path.Combine(AppDataContext.Root, "history.json");
+
+        string FavoritesPath =>
+            Path.Combine(AppDataContext.Root, "favorites.json");
+
 
 
         static readonly JsonSerializerOptions JsonOpts = new()
@@ -171,7 +189,23 @@ namespace MyHomelabBrowser
                     {
                     }
                 });
+                RefreshProfileUI();
             };
+
+            _profileService.ProfileChanged += _ =>
+            {
+                LoadHistory();
+                LoadFavorites();
+
+                Dispatcher.Invoke(() =>
+                {
+                    RefreshProfileUI();
+                    RefreshFavoritesBar();
+                    UpdateFavoriteButton();
+                });
+            };
+
+
 
             _settings = new SettingsService();
             _legacyLauncher = new LegacyLauncher(_settings);
@@ -188,29 +222,412 @@ namespace MyHomelabBrowser
                 _updates = null; 
             }
 
-            // load persisted data (safe)
-            LoadHistory();
-            LoadFavorites();
-
-           
-
-            // initial UI refresh (safe even if XAML not ready yet)
-            RefreshFavoritesBar();
-            UpdateFavoriteButton();
             UpdateDownloadsBadge();
 
 
             // start page
             CreateTab(_settings.Settings.StartPage);
         }
+
+        void SwitchProfile_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem mi ||
+                mi.DataContext is not UserProfile profile)
+                return;
+
+            var dlg = new LoginDialog(profile.Username)
+            {
+                Owner = this,
+                Title = "Changer de profil",
+                ValidateLogin = (_, p) =>
+                    _profileService.VerifyPassword(profile, p)
+            };
+
+            if (dlg.ShowDialog() != true)
+                return;
+
+           
+            _profileService.LoginSilent(profile);
+
+            RefreshProfileUI();
+        }
+
+
+
+
+
+        void PopulateSwitchProfileMenu(MenuItem parent)
+        {
+            parent.Items.Clear();
+
+            foreach (var profile in _profileService.GetAllProfiles())
+            {
+                if (_profileService.Current != null &&
+                    profile.Username.Equals(_profileService.Current.Username,
+                                             StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var username = profile.Username;
+
+                var item = new MenuItem
+                {
+                    Style = (Style)Resources["FluentMenuItemStyle"],
+                    DataContext = profile
+                };
+
+                // Header Fluent avec avatar rond Win11
+                item.Header = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Children =
+            {
+                new Border
+                {
+                    Width = 24,
+                    Height = 24,
+                    CornerRadius = new CornerRadius(12),
+                    Background = GetAvatarBrush(username), 
+                    Child = new TextBlock
+                    {
+                        Text = username.Trim()[0].ToString().ToUpperInvariant(),
+                        Foreground = Brushes.White,
+                        FontWeight = FontWeights.SemiBold,
+                        FontSize = 12,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
+                },
+                new TextBlock
+                {
+                    Text = username,
+                    Margin = new Thickness(10,0,0,0),
+                    VerticalAlignment = VerticalAlignment.Center
+                }
+            }
+                };
+
+                item.Click += SwitchProfile_Click;
+                parent.Items.Add(item);
+            }
+        }
+
+
+
+
+
+
+        void RefreshProfileUI()
+        {
+            if (_profileService.Current == null ||
+                string.IsNullOrWhiteSpace(_profileService.Current.Username))
+            {
+                ProfileButton.Content = "👤";
+                ProfileButton.Foreground = Brushes.White;
+
+                SidebarProfileButton.Content = "👤";
+                SidebarProfileButton.Foreground = Brushes.White;
+                SidebarProfileButton.IsEnabled = false;
+                return;
+            }
+
+            var letter = _profileService.Current.Username
+                .Trim()[0]
+                .ToString()
+                .ToUpperInvariant();
+
+            ProfileButton.Content = letter;
+            ProfileButton.Foreground = Brushes.White;   // 🔥 LIGNE MANQUANTE
+
+            // Sidebar ne change PAS de tête
+            SidebarProfileButton.Content = "👤";
+            SidebarProfileButton.Foreground = Brushes.White;
+            SidebarProfileButton.IsEnabled = true;
+        }
+
+
+
+
+
+
+
+        void Profile_Login_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new LoginDialog
+            {
+                Owner = this,
+                Title = "Connexion",
+                ValidateLogin = (u, p) =>
+                {
+                    var profile = _profileService.GetAllProfiles()
+                        .FirstOrDefault(x =>
+                            x.Username.Equals(u, StringComparison.OrdinalIgnoreCase));
+
+                    return profile != null &&
+                           _profileService.VerifyPassword(profile, p);
+                }
+            };
+
+            if (dlg.ShowDialog() != true)
+                return;
+
+            var prof = _profileService.GetAllProfiles()
+                .First(x => x.Username.Equals(dlg.Username, StringComparison.OrdinalIgnoreCase));
+
+            _profileService.LoginSilent(prof);
+            RefreshProfileUI();
+        }
+
+
+
+
+        void Profile_Create_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new CreateProfileDialog
+            {
+                Owner = this,
+                Title = "Créer un profil"
+            };
+
+            if (dlg.ShowDialog() != true)
+                return;
+
+            _profileService.CreateProfile(dlg.Username, dlg.Password);
+            _profileService.Login(dlg.Username, dlg.Password);
+
+        }
+
+
+        void AnimateSubMenu(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem mi || mi.Items.Count == 0)
+                return;
+
+            // Le popup réel du sous-menu
+            if (mi.Template.FindName("PART_Popup", mi) is not Popup popup ||
+                popup.Child is not FrameworkElement root)
+                return;
+
+            root.Opacity = 0;
+            root.RenderTransform = new TranslateTransform(0, -6);
+
+            var fade = new DoubleAnimation
+            {
+                From = 0,
+                To = 1,
+                Duration = TimeSpan.FromMilliseconds(120),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+
+            var slide = new DoubleAnimation
+            {
+                From = -6,
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(120),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+
+            root.BeginAnimation(UIElement.OpacityProperty, fade);
+            ((TranslateTransform)root.RenderTransform)
+                .BeginAnimation(TranslateTransform.YProperty, slide);
+        }
+
+
+        void ProfileButton_Click(object sender, RoutedEventArgs e)
+        {
+            ContextMenu menu;
+
+            if (_profileService.Current == null)
+            {
+                menu = (ContextMenu)Resources["ProfileContextMenu_LoggedOut"];
+            }
+            else
+            {
+                menu = (ContextMenu)Resources["ProfileContextMenu_LoggedIn"];
+
+                // ---------------------------
+                // Sous-menu "Changer de profil"
+                // ---------------------------
+                foreach (var it in menu.Items)
+                {
+                    if (it is MenuItem mi && mi.Name == "SwitchProfileMenu")
+                    {
+                        PopulateSwitchProfileMenu(mi);
+
+                        mi.SubmenuOpened -= AnimateSubMenu;
+                        mi.SubmenuOpened += AnimateSubMenu;
+
+                        // petit padding pour aérer le header
+                        mi.Padding = new Thickness(14, 8, 14, 8);
+                        break;
+                    }
+                }
+
+                // ---------------------------
+                // Header profil actif (désactivé)
+                // ---------------------------
+                int insertSeparatorIndex = -1;
+
+                for (int i = 0; i < menu.Items.Count; i++)
+                {
+                    if (menu.Items[i] is MenuItem mi && mi.IsEnabled == false)
+                    {
+                        var username = _profileService.Current.Username;
+
+                        mi.Padding = new Thickness(16, 10, 16, 10);
+
+                        mi.Header = new StackPanel
+                        {
+                            Orientation = Orientation.Horizontal,
+                            VerticalAlignment = VerticalAlignment.Center,
+                            Children =
+                    {
+                        // Avatar rond (lettre)
+                        new Border
+                        {
+                            Width = 30,
+                            Height = 30,
+                            CornerRadius = new CornerRadius(15),
+                            Background = GetAvatarBrush(username),
+                            Margin = new Thickness(0,0,12,0),
+                            Child = new TextBlock
+                            {
+                                Text = username.Trim()[0]
+                                    .ToString()
+                                    .ToUpperInvariant(),
+                                Foreground = Brushes.White,
+                                FontWeight = FontWeights.SemiBold,
+                                HorizontalAlignment = HorizontalAlignment.Center,
+                                VerticalAlignment = VerticalAlignment.Center
+                            }
+                        },
+                        new TextBlock
+                        {
+                            Text = username,
+                            VerticalAlignment = VerticalAlignment.Center,
+                            FontWeight = FontWeights.SemiBold,
+                            FontSize = 13
+                        }
+                    }
+                        };
+
+                        insertSeparatorIndex = i + 1;
+                        break;
+                    }
+                }
+
+                // ---------------------------
+                // Separator Fluent (espacé)
+                // ---------------------------
+                if (insertSeparatorIndex != -1)
+                {
+                    if (menu.Items.Count <= insertSeparatorIndex ||
+                        menu.Items[insertSeparatorIndex] is not Separator)
+                    {
+                        menu.Items.Insert(insertSeparatorIndex, new Separator
+                        {
+                            Margin = new Thickness(8, 6, 8, 6),
+                            Style = (Style)Resources["FluentMenuSeparatorStyle"]
+                        });
+                    }
+                }
+            }
+
+            // ---------------------------
+            // Styles Fluent
+            // ---------------------------
+            menu.Style = (Style)Resources["FluentContextMenuStyle"];
+
+            foreach (var it in menu.Items)
+            {
+                if (it is MenuItem mi)
+                    mi.Style = (Style)Resources["FluentMenuItemStyle"];
+            }
+
+            // ---------------------------
+            // Ouverture + animation
+            // ---------------------------
+            ProfileButton.ContextMenu = menu;
+            menu.PlacementTarget = ProfileButton;
+
+            menu.Opacity = 0;
+            menu.RenderTransform = new TranslateTransform(0, -6);
+            menu.IsOpen = true;
+
+            var fade = new DoubleAnimation
+            {
+                From = 0,
+                To = 1,
+                Duration = TimeSpan.FromMilliseconds(120),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+
+            var slide = new DoubleAnimation
+            {
+                From = -6,
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(120),
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+
+            menu.BeginAnimation(OpacityProperty, fade);
+            ((TranslateTransform)menu.RenderTransform)
+                .BeginAnimation(TranslateTransform.YProperty, slide);
+        }
+
+
+
+
+        Brush GetAvatarBrush(string username)
+        {
+            var colors = new[]
+            {
+        "#FF3A6EA5", "#FF8E44AD", "#FF2ECC71",
+        "#FFE67E22", "#FFE74C3C", "#FF16A085"
+    };
+
+            int idx = Math.Abs(username.GetHashCode()) % colors.Length;
+            return (Brush)new BrushConverter().ConvertFromString(colors[idx])!;
+        }
+
+
+        void SidebarProfileButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Même comportement que le bouton rond en haut
+            ProfileButton_Click(sender, e);
+        }
+
+        void Profile_Settings_Click(object sender, RoutedEventArgs e)
+        {
+            if (_profileService.Current == null)
+                return;
+
+            var dlg = new ProfileSettingsDialog(_profileService)
+            {
+                Owner = this
+            };
+
+            dlg.ShowDialog();
+            RefreshProfileUI();
+        }
+
+
+        void Profile_Logout_Click(object sender, RoutedEventArgs e)
+        {
+            if (_profileService.Current == null)
+                return;
+
+            _profileService.Logout();
+
+        }
+
+
+
         private static string FormatChangelogJson(string json, string currentVersionText)
         {
             if (string.IsNullOrWhiteSpace(json))
                 return "";
 
 
-            // Format attendu :
-            // { "0.6.60": ["...", "..."], "0.6.61": ["..."] }
             var dict = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(json);
 
 
