@@ -168,7 +168,7 @@ namespace MyHomelabBrowser
 
         public void SetChangelogAvailable(bool available)
         {
-            ChangelogBtn.IsEnabled = available;
+            ChangelogBtn.IsEnabled = true;
         }
         private void Save_Click(object sender, RoutedEventArgs e)
         {

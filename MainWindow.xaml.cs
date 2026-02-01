@@ -12,6 +12,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -35,6 +36,7 @@ namespace MyHomelabBrowser
         // Settings
         // ---------------------------
         readonly SettingsService _settings;
+        private string? _remoteChangelogJson;
 
         // ---------------------------
         // Omnibox
@@ -80,16 +82,27 @@ namespace MyHomelabBrowser
         private bool _oauthFinishing = false;
         LegacyLauncher _legacyLauncher;
         private Uri _oauthReturnUri;
+        readonly Dictionary<string, CoreWebView2Environment> _envByProfile = new();
+        bool _historyLoaded;
+        bool _favoritesLoaded;
+
+        DispatcherTimer _historyDebounceTimer;
+        string? _pendingHistoryUrl;
 
         private UpdateService? _updates;
         private bool _isUpdateCheckRunning;
         private Dictionary<string, List<string>>? _changelogMap;
         private Velopack.UpdateInfo? _pendingUpdateInfo;
 
+        public event Action<string, string, string, string?>? CredentialCapturedUi;
+
         private readonly ProfileService _profileService = new ProfileService(
     Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "MyHomelabBrowser"));
+
+        private readonly classes.Profiles.Credentials.CredentialVaultService _vault;
+
 
         public IEnumerable<UserProfile> AllProfiles
     => _profileService.GetAllProfiles();
@@ -109,11 +122,9 @@ namespace MyHomelabBrowser
     MyHomelabBrowser.classes.Profiles.AppDataContext.Root;
 
 
-        string HistoryPath =>
-    Path.Combine(AppDataContext.Root, "history.json");
+        string HistoryPath => Path.Combine(GetProfileDataDir(), "history.json");
+        string FavoritesPath => Path.Combine(GetProfileDataDir(), "favorites.json");
 
-        string FavoritesPath =>
-            Path.Combine(AppDataContext.Root, "favorites.json");
 
 
 
@@ -157,11 +168,66 @@ namespace MyHomelabBrowser
         {
             InitializeComponent();
 
+            
             // timers + settings
             _suspendTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
             _suspendTimer.Tick += (_, _) => AutoSuspendTabs();
             _suspendTimer.Start();
             ToastHost.ItemsSource = _toasts;
+            _ = LoadRemoteChangelogAsync();
+
+
+            _vault = new MyHomelabBrowser.classes.Profiles.Credentials.CredentialVaultService(() => System.IO.Path.Combine(AppDataContext.Root, "vault.json.enc"));
+
+            CredentialCapturedUi += (host, user, pass, action) =>
+            {
+                // 🔒 s'assurer que le vault est unlock
+                if (!_vault.IsUnlocked)
+                {
+                    var unlockDlg = new UnlockVaultDialog
+                    {
+                        Owner = this
+                    };
+
+                    if (unlockDlg.ShowDialog() != true)
+                        return;
+
+                    if (!_vault.TryUnlock(unlockDlg.EnteredPassword))
+                        return;
+                }
+
+                var existing = _vault.FindForHost(host);
+
+                // ⛔ jamais enregistrer
+                if (existing?.NeverSave == true)
+                    return;
+
+                var dlg = new SaveCredentialDialog(host, user ?? "")
+                {
+                    Owner = this,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner
+                };
+
+                if (dlg.ShowDialog() != true)
+                    return;
+
+                if (dlg.NeverSave)
+                {
+                    _vault.Upsert(
+                        host,
+                        user ?? "",
+                        pass,
+                        action,
+                        alwaysSave: false,
+                        neverSave: true
+                    );
+                    return;
+                }
+
+                _vault.Upsert(host, user ?? "", pass, action);
+                ShowToast("Mot de passe enregistré", host, null);
+            };
+
 
             RuntimeLogBuffer.Init();
 
@@ -192,8 +258,16 @@ namespace MyHomelabBrowser
                 RefreshProfileUI();
             };
 
+
+           
+
             _profileService.ProfileChanged += _ =>
             {
+                _vault.Lock();
+
+                _historyLoaded = false;
+                _favoritesLoaded = false;
+
                 LoadHistory();
                 LoadFavorites();
 
@@ -205,12 +279,21 @@ namespace MyHomelabBrowser
                 });
             };
 
-
-
             _settings = new SettingsService();
+            var SettingsView = new SettingsView(_settings);
             _legacyLauncher = new LegacyLauncher(_settings);
             _settings.SettingsChanged += ApplySettings;
             _legacyLauncher.OnDebug += FlashDbg;
+
+            // 🔥 INSTANCE UNIQUE DES PARAMÈTRES
+            var settingsView = new SettingsView(_settings);
+
+            // 🔥 INJECTION DANS L’UI
+            SettingsHost.Content = settingsView;
+
+         
+
+           
             PreviewMouseDown += OnGlobalMouseDown;
 
             try
@@ -224,9 +307,51 @@ namespace MyHomelabBrowser
 
             UpdateDownloadsBadge();
 
+            
+
+            _historyLoaded = false;
+            _favoritesLoaded = false;
+
+            LoadHistory();
+            LoadFavorites();
+            RefreshFavoritesBar();
+            UpdateFavoriteButton();
 
             // start page
             CreateTab(_settings.Settings.StartPage);
+        }
+       
+
+        private async Task LoadRemoteChangelogAsync()
+        {
+            try
+            {
+                using var http = new HttpClient
+                {
+                    Timeout = TimeSpan.FromSeconds(5)
+                };
+
+                _remoteChangelogJson = await http.GetStringAsync(
+                    "https://github.com/vazer7070/PommeBrowser-release/releases/latest/download/changelog.json"
+                );
+            }
+            catch
+            {
+                _remoteChangelogJson = null; // pas bloquant
+            }
+        }
+
+        private string LoadChangelogJson()
+        {
+            var path = System.IO.Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "changelog.json"
+            );
+
+            if (!File.Exists(path))
+                return "{}";
+
+            return File.ReadAllText(path);
         }
 
         void SwitchProfile_Click(object sender, RoutedEventArgs e)
@@ -604,7 +729,37 @@ namespace MyHomelabBrowser
             var dlg = new ProfileSettingsDialog(_profileService)
             {
                 Owner = this
+
             };
+            dlg.PasswordsRequested += () =>
+            {
+                if (_profileService.Current == null)
+                    return;
+
+                // 1) demander le mdp du profil pour unlock vault
+                var ask = new LoginDialog(_profileService.Current.Username)
+                {
+                    Owner = this,
+                    Title = "Déverrouiller les mots de passe",
+                    ValidateLogin = (_, p) =>
+                    {
+                        // vérif mdp profil (hash/salt)
+                        return _profileService.Current != null && _profileService.VerifyPassword(_profileService.Current, p)
+                               && _vault.TryUnlock(p);
+                    }
+                };
+
+                if (ask.ShowDialog() != true)
+                    return;
+
+                var win = new PasswordVaultWindow(_vault)
+                {
+                    Owner = this
+                };
+                win.ShowDialog();
+
+            };
+
 
             dlg.ShowDialog();
             RefreshProfileUI();
@@ -622,52 +777,49 @@ namespace MyHomelabBrowser
 
 
 
-        private static string FormatChangelogJson(string json, string currentVersionText)
+        private static string FormatChangelogJson(string json)
         {
             if (string.IsNullOrWhiteSpace(json))
-                return "";
+                return "Aucun changelog disponible.";
 
-
-            var dict = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(json);
-
-
-            if (dict == null || dict.Count == 0)
-                return "";
-
-
-            // Version actuelle
-            Version currentVersion = new Version(0, 0, 0);
-            if (!string.IsNullOrWhiteSpace(currentVersionText))
+            Dictionary<string, List<string>>? dict;
+            try
             {
-                Version.TryParse(currentVersionText, out currentVersion);
+                dict = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(json);
+            }
+            catch
+            {
+                return "Erreur lors de la lecture du changelog.";
             }
 
+            if (dict == null || dict.Count == 0)
+                return "Aucun changelog disponible.";
 
-            // On parse + on garde uniquement > currentVersion
-            var filtered = dict
-            .Select(kv => new
-            {
-                VersionText = kv.Key,
-                Items = kv.Value ?? new List<string>(),
-                Parsed = Version.TryParse(kv.Key, out var v) ? v : null
-            })
-            .Where(x => x.Parsed != null && x.Parsed > currentVersion)
-            .OrderByDescending(x => x.Parsed)
-            .ToList();
+            // 🔥 parse + tri DESC (toutes les versions)
+            var all = dict
+                .Select(kv =>
+                {
+                    var ok = Version.TryParse(kv.Key, out var v);
+                    return new
+                    {
+                        VersionText = kv.Key,
+                        Items = kv.Value ?? new List<string>(),
+                        Parsed = ok ? v : null
+                    };
+                })
+                .Where(x => x.Parsed != null)
+                .OrderByDescending(x => x.Parsed)
+                .ToList();
 
-
-            if (filtered.Count == 0)
-                return "Aucun changement (vous êtes déjà à jour).";
-
+            if (all.Count == 0)
+                return "Aucun changelog valide.";
 
             var sb = new StringBuilder();
 
-
-            foreach (var v in filtered)
+            foreach (var v in all)
             {
                 sb.AppendLine($"Version {v.VersionText}");
-                sb.AppendLine(new string('-', 10 + v.VersionText.Length));
-
+                sb.AppendLine(new string('─', 12 + v.VersionText.Length));
 
                 if (v.Items.Count == 0)
                 {
@@ -682,16 +834,16 @@ namespace MyHomelabBrowser
                     }
                 }
 
-
                 sb.AppendLine();
             }
 
-
             return sb.ToString().TrimEnd();
         }
-        
 
-       
+
+
+
+
         private static string GetAppVersion()
         {
             var v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
@@ -1216,8 +1368,7 @@ namespace MyHomelabBrowser
                 {
                     _ = Dispatcher.BeginInvoke(UpdateAddressBarFromTab);
 
-                    if (!content.IsPrivate && web.Source != null)
-                        AddHistoryEntry(web);
+                   
 
                     _ = Dispatcher.BeginInvoke(UpdateFavoriteButton);
 
@@ -1468,7 +1619,7 @@ namespace MyHomelabBrowser
         }
 
 
-        public void ShowToast(string title, string message, DownloadItem item)
+        public void ShowToast(string title, string message, DownloadItem? item)
         {
             var toast = new ToastItem
             {
@@ -1806,12 +1957,16 @@ namespace MyHomelabBrowser
             // ✅ history
             view.OpenHistoryRequested += OpenHistory;
             view.OpenReportIssueRequested += OpenReportIssueView;
+
             // ✅ init UI update dès l'ouverture Settings (pas à chaque clic)
             view.SetCurrentVersion(GetAppVersion());
             view.SetLatestVersion("(non vérifiée)");
             view.SetUpdateStatus("Prêt");
             view.SetUpdateBusy(false);
+
+            // (tu peux laisser, ça ne bloque plus le bouton si tu as neutralisé SetChangelogAvailable)
             view.SetChangelogAvailable(false);
+
             view.SetInstallAvailable(false);
 
             _latestVersionText = null;
@@ -1930,32 +2085,21 @@ namespace MyHomelabBrowser
                 }
             };
 
+            // ✅ changelog : TOUJOURS afficher une fenêtre (même si pas encore chargé)
             view.ChangelogRequested += () =>
             {
-                if (string.IsNullOrWhiteSpace(_latestChangelogText))
-                    return;
-
-                var current = GetAppVersion(); // ex: 0.6.60
-
-                string niceText;
-                try
-                {
-                    niceText = FormatChangelogJson(_latestChangelogText, current);
-                }
-                catch
-                {
-                    niceText = _latestChangelogText; // fallback brut
-                }
-
-                // Tu peux garder _latestVersionText en titre si tu veux
-                var titleVersion = string.IsNullOrWhiteSpace(_latestVersionText) ? "Dernière version" : _latestVersionText;
-
-                var win = new ChangelogWindow(titleVersion, niceText)
+                var win = new ChangelogWindow(
+     "Historique des versions",
+     _remoteChangelogJson ?? "{}"
+ )
                 {
                     Owner = this
                 };
+
                 win.ShowDialog();
+
             };
+
 
             var header = new BrowserTabHeader();
             header.SetTitle("Paramètres");
@@ -1975,11 +2119,150 @@ namespace MyHomelabBrowser
 
 
 
+        void FillCredential_Click(object sender, RoutedEventArgs e)
+        {
+            if (Tabs.SelectedItem is not TabItem tab ||
+                tab.Tag is not WebTabContent content)
+                return;
 
-        async void CreateTab(string url)
+            var web = content.Web;
+            if (web?.Source == null)
+                return;
+
+            // 🔒 garantir l’unlock AVANT tout accès au vault
+            if (!_vault.IsSessionUnlocked)
+            {
+                var unlockDlg = new UnlockVaultDialog { Owner = this };
+
+                if (unlockDlg.ShowDialog() != true)
+                    return;
+
+                if (!_vault.TryUnlock(unlockDlg.EnteredPassword))
+                    return;
+            }
+
+            // 🔑 maintenant seulement on lit le vault
+            var cred = _vault.FindForHost(web.Source.Host);
+            if (cred == null)
+                return;
+
+            // injection JS inchangée
+            var u = JsonSerializer.Serialize(cred.Username);
+            var p = JsonSerializer.Serialize(cred.Password);
+
+            var js = $@"
+(() => {{
+  const username = {u};
+  const password = {p};
+
+  function setValue(el, val) {{
+    if (!el) return;
+    el.focus();
+    el.value = val;
+    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+  }}
+
+  const pwd = document.querySelector('input[type=""password""]');
+  if (!pwd) return;
+
+  const user =
+    document.querySelector('input[autocomplete=""username""]') ||
+    document.querySelector('input[type=""email""]') ||
+    document.querySelector(
+      'input[name*=""user"" i], input[id*=""user"" i], ' +
+      'input[name*=""email"" i], input[id*=""email"" i]'
+    ) ||
+    document.querySelector(
+      'input[type=""text""]:not([name*=""search"" i]):not([id*=""search"" i])'
+    );
+
+  if (user && user.value.trim().length === 0)
+    setValue(user, username);
+
+  if (pwd.value.trim().length === 0)
+    setValue(pwd, password);
+}})();";
+
+            _ = web.ExecuteScriptAsync(js);
+        }
+
+
+        async Task<CoreWebView2Environment> GetEnvironmentForCurrentProfileAsync(bool isPrivate)
+        {
+            // 🔒 privé
+            if (isPrivate)
+                return _privateEnvironment;
+
+            var profileId = _profileService.Current?.Username ?? "default";
+
+            if (_envByProfile.TryGetValue(profileId, out var cached))
+                return cached;
+
+            string userData = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "PommeBrowser",
+                "Profiles",
+                profileId,
+                "WebView2"
+            );
+
+            Directory.CreateDirectory(userData);
+
+            var env = await CoreWebView2Environment.CreateAsync(
+                null,
+                userData
+            );
+
+            _envByProfile[profileId] = env;
+            return env;
+        }
+        void CreateTab(string url)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                _ = CreateTabInternal(url);
+            });
+        }
+
+
+        async Task CreateTabInternal(string url)
         {
             var web = new WebView2();
             DownloadHook.Attach(web, isPrivate: false);
+            // ===============================
+            // 🕒 HISTORIQUE : URL STABILISÉE (PAR ONGLET)
+            // ===============================
+            DispatcherTimer historyDebounce = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(800)
+            };
+
+            string? pendingUrl = null;
+
+            historyDebounce.Tick += (_, _) =>
+            {
+                historyDebounce.Stop();
+
+                if (pendingUrl == null)
+                    return;
+
+                AddHistoryEntryFinal(web, pendingUrl);
+                pendingUrl = null;
+            };
+
+            web.SourceChanged += (_, _) =>
+            {
+                if (web.Source == null)
+                    return;
+
+                pendingUrl = web.Source.AbsoluteUri;
+
+                historyDebounce.Stop();
+                historyDebounce.Start();
+            };
+
+
 
             var header = new BrowserTabHeader();
             header.SetTitle("Nouvel onglet");
@@ -2038,61 +2321,107 @@ namespace MyHomelabBrowser
             // ✅ INIT WEBVIEW2 ENV + CORE
             // ===============================
             await InitWebViewEnvironmentsAsync();
-            await web.EnsureCoreWebView2Async(_normalEnvironment);
+
+            var env = await GetEnvironmentForCurrentProfileAsync(isPrivate: false);
+            await web.EnsureCoreWebView2Async(env);
+            web.NavigationCompleted += async (_, _) =>
+            {
+                try
+                {
+                    await HandleFlashAsync(web, content, header, overlay);
+                }
+                catch { }
+            };
 
             if (web.CoreWebView2 == null)
                 return;
+            
 
+
+            // 🔥 OBLIGATOIRE : autoriser JS -> C#
+            web.CoreWebView2.Settings.IsWebMessageEnabled = true;
+
+            // 🔥 DEBUG TEMPORAIRE (tu peux enlever après)
+            web.CoreWebView2.WebMessageReceived += (_, e) =>
+            {
+                System.Diagnostics.Debug.WriteLine("🔥 JS → C# : " + e.WebMessageAsJson);
+            };
+
+            // ===============================
+            // 🔐 CREDENTIALS (profil -> vault)
+            // ===============================
+            await MyHomelabBrowser.classes.Profiles.Credentials.CredentialInjector.Attach(
+                web,
+                isPrivateTab: () => content.IsPrivate,
+                getCurrentProfileUsername: () => _profileService.Current?.Username,
+                isVaultUnlocked: () => _vault.IsUnlocked,
+                getCredForHost: host => _vault.FindForHost(host),
+               onCredentialCaptured: (host, user, pass, action) =>
+               {
+
+                   Application.Current.Dispatcher.BeginInvoke(
+                       () => CredentialCapturedUi?.Invoke(host, user, pass, action)
+                   );
+               }
+
+
+
+            );
+
+            // ===============================
             // ✅ User-Agent Chrome réel
+            // ===============================
             web.CoreWebView2.Settings.UserAgent =
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-            // ✅ Navigation completed (UI / history / flash)
-            // ⚠️ IMPORTANT : DOIT être attaché AVANT web.Source = ...
-            web.NavigationCompleted += async (_, _) =>
+            // ===============================
+            // ✅ Navigation completed
+            // ===============================
+            await Dispatcher.BeginInvoke(() =>
             {
-                _ = Dispatcher.BeginInvoke(UpdateAddressBarFromTab);
-
-                if (web.Source != null)
-                    FlashDbg($"NavigationCompleted: {web.Source.AbsoluteUri}");
-
-                if (web.Source != null)
-                    AddHistoryEntry(web);
-
-                _ = Dispatcher.BeginInvoke(UpdateFavoriteButton);
-
-                if (web.CoreWebView2 != null)
+                try
                 {
-                    string title = web.CoreWebView2.DocumentTitle;
-                    string fav = web.CoreWebView2.FaviconUri;
+                    FillCredentialButton.IsEnabled = false;
+                    FillCredentialButton.Opacity = 0.35;
+                    FillCredentialButton.ToolTip = "Aucun identifiant disponible";
 
-                    _ = Dispatcher.BeginInvoke(() =>
+                    if (_profileService.Current == null)
+                        return;
+
+                    if (web.Source == null)
+                        return;
+
+                    var host = web.Source.Host;
+                    if (string.IsNullOrWhiteSpace(host))
+                        return;
+
+                    // 🔑 on ne dépend PLUS de IsUnlocked ici
+                    if (_vault.FindForHost(host) != null)
                     {
-                        header.SetTitle(title);
+                        FillCredentialButton.IsEnabled = true;
+                        FillCredentialButton.Opacity = 1.0;
 
-                        if (!string.IsNullOrEmpty(fav))
-                            header.SetIcon(new BitmapImage(new Uri(fav)));
-                    });
+                        // tooltip dynamique
+                        FillCredentialButton.ToolTip =
+                            _vault.IsUnlocked
+                                ? "Remplir les identifiants"
+                                : "Déverrouiller le coffre pour remplir";
+                    }
                 }
+                catch { }
+            });
 
-                await HandleFlashAsync(web, content, header, overlay);
 
-                _ = Dispatcher.BeginInvoke(UpdateNavButtonsFast);
-            };
-
-            // ==========================================================
-            // ✅ POPUPS : gestion OAuth + new tabs (sans onglet noir)
-            // ==========================================================
+            // ===============================
+            // ✅ POPUPS / OAuth
+            // ===============================
             web.CoreWebView2.NewWindowRequested += async (_, ev) =>
             {
                 var def = ev.GetDeferral();
-
                 try
                 {
                     var uri = ev.Uri ?? "";
-                    FlashDbg($"NewWindowRequested URI = '{uri}'");
 
-                    // ✅ Gameforge/Google: popup commence souvent par about:blank
                     bool isAboutBlank = uri.Equals("about:blank", StringComparison.OrdinalIgnoreCase);
 
                     bool isOAuthPopup =
@@ -2106,27 +2435,21 @@ namespace MyHomelabBrowser
                         uri.Contains("gameforge.com/service/external-auth", StringComparison.OrdinalIgnoreCase) &&
                         uri.EndsWith("/message", StringComparison.OrdinalIgnoreCase);
 
-                    // ✅ Callback technique : WebView2 doit le traiter normalement
                     if (isMessageCallback)
                     {
                         ev.Handled = false;
                         return;
                     }
 
-                    // ✅ OAuth => toujours popup interne
                     if (isOAuthPopup)
                     {
                         ev.Handled = true;
 
-                        // ✅ onglet appelant (pour Reload à la fin)
                         _oauthReturnWeb = web;
 
                         var popup = await GetOrCreateOAuthPopupAsync();
-
-                        // ✅ Si la popup n'est pas prête => ne pas créer d'onglet noir
                         if (popup?.Web?.CoreWebView2 == null)
                         {
-                            FlashDbg("[OAuth] popup CoreWebView2 NULL => WebView2 default handling");
                             ev.Handled = false;
                             return;
                         }
@@ -2138,8 +2461,6 @@ namespace MyHomelabBrowser
                         return;
                     }
 
-                    // ✅ Autres popups => onglet
-                    // ⚠️ NE JAMAIS ouvrir about:blank en onglet sinon écran noir
                     if (!isAboutBlank)
                     {
                         ev.Handled = true;
@@ -2149,21 +2470,19 @@ namespace MyHomelabBrowser
 
                     ev.Handled = false;
                 }
-                catch (Exception ex)
-                {
-                    FlashDbg("[NewWindowRequested] " + ex);
-                    ev.Handled = false;
-                }
                 finally
                 {
                     def.Complete();
                 }
             };
 
-            // ✅ Navigation initiale (APRÈS handlers)
+            // ===============================
+            // ✅ NAVIGATION INITIALE
+            // ===============================
             if (!string.IsNullOrWhiteSpace(url))
                 web.Source = new Uri(url);
         }
+
 
         private void NewPrivateTab_Click(object sender, RoutedEventArgs e)
         {
@@ -2171,11 +2490,52 @@ namespace MyHomelabBrowser
             CreatePrivateTab(GetNewTabUrl());
         }
 
+        void AddHistoryEntryFinal(WebView2 web,string url)
+        {
+            var now = DateTime.Now;
+
+            if (_navigatingFromHistory)
+            {
+                _navigatingFromHistory = false;
+                return;
+            }
+
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var u))
+                return;
+
+            if (u.Scheme != Uri.UriSchemeHttp &&
+                u.Scheme != Uri.UriSchemeHttps)
+                return;
+
+            // 🔁 anti-duplication rapide
+            if (string.Equals(url, _lastHistoryUrl, StringComparison.OrdinalIgnoreCase) &&
+                (now - _lastHistoryAt) < TimeSpan.FromSeconds(3))
+                return;
+
+            _lastHistoryUrl = url;
+            _lastHistoryAt = now;
+
+            _history.Add(new HistoryEntry
+            {
+                Title = web.CoreWebView2?.DocumentTitle ?? u.Host,
+                Url = url,
+                VisitedAt = now
+            });
+
+            const int max = 5000;
+            if (_history.Count > max)
+                _history.RemoveRange(0, _history.Count - max);
+
+            HistoryNavigationIdleSave.RequestIdleSave(this, SaveHistory, 2500);
+        }
 
         void CreatePrivateTab(string url)
         {
             var web = new WebView2(); // pas de Source ici
             DownloadHook.Attach(web, isPrivate: true);
+
+            
+
 
             var header = new BrowserTabHeader();
             header.SetTitle("Privé");
@@ -2196,6 +2556,25 @@ namespace MyHomelabBrowser
                 FlashOverlay = overlay,
                 IsPrivate = true
             };
+            DispatcherTimer historyDebounce = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(800)
+            };
+
+           
+
+            historyDebounce.Tick += (_, _) =>
+            {
+                historyDebounce.Stop();
+
+                // 🔒 privé = jamais d’historique
+            };
+
+            web.SourceChanged += (_, _) =>
+            {
+                // 🔒 privé = on ignore
+            };
+
             // 🔒 Initialisation STABLE du host
             content.HostGrid.Children.Add(web);
 
@@ -2827,29 +3206,66 @@ namespace MyHomelabBrowser
             // --------------------------------------------------
             try
             {
-                var u = new Uri(url);
+                Uri u;
+                try
+                {
+                    u = new Uri(url);
 
-                // schémas non web
-                if (u.Scheme != Uri.UriSchemeHttp &&
-                    u.Scheme != Uri.UriSchemeHttps)
+                    // schémas non web
+                    if (u.Scheme != Uri.UriSchemeHttp &&
+                        u.Scheme != Uri.UriSchemeHttps)
+                        return;
+                }
+                catch
+                {
                     return;
+                }
 
-                // hôtes tracking connus
-                if (u.Host.Contains("googleadservices", StringComparison.OrdinalIgnoreCase) ||
-                    u.Host.Contains("doubleclick", StringComparison.OrdinalIgnoreCase))
-                    return;
+                // --------------------------------------------------
+                // 🧹 NETTOYAGE PARAMÈTRES TRACKING (AU LIEU DE BLOQUER)
+                // --------------------------------------------------
+                var qb = System.Web.HttpUtility.ParseQueryString(u.Query);
+                bool hadTracking = false;
 
-                var q = u.Query ?? "";
+                string[] trackingKeys =
+                {
+    "gfsid",
+    "gad_source",
+    "gad_campaignid",
+    "gclid",
+    "gbraid",
+    "wbraid"
+};
 
-                // paramètres tracking (Gameforge / Ads / UTM)
-                if (q.Contains("gfsid=", StringComparison.OrdinalIgnoreCase) ||
-                    q.Contains("gad_source=", StringComparison.OrdinalIgnoreCase) ||
-                    q.Contains("gad_campaignid=", StringComparison.OrdinalIgnoreCase) ||
-                    q.Contains("gclid=", StringComparison.OrdinalIgnoreCase) ||
-                    q.Contains("gbraid=", StringComparison.OrdinalIgnoreCase) ||
-                    q.Contains("wbraid=", StringComparison.OrdinalIgnoreCase) ||
-                    q.Contains("utm_", StringComparison.OrdinalIgnoreCase))
-                    return;
+                foreach (var key in trackingKeys)
+                {
+                    if (qb[key] != null)
+                    {
+                        qb.Remove(key);
+                        hadTracking = true;
+                    }
+                }
+
+                // supprime TOUS les utm_*
+                foreach (string key in qb.AllKeys.ToArray())
+                {
+                    if (key != null && key.StartsWith("utm_", StringComparison.OrdinalIgnoreCase))
+                    {
+                        qb.Remove(key);
+                        hadTracking = true;
+                    }
+                }
+
+                if (hadTracking)
+                {
+                    u = new UriBuilder(u)
+                    {
+                        Query = qb.ToString() ?? ""
+                    }.Uri;
+
+                    url = u.AbsoluteUri;
+                }
+
             }
             catch
             {
@@ -2902,65 +3318,115 @@ namespace MyHomelabBrowser
         {
             try
             {
-                EnsureAppDataDir();
-                if (!File.Exists(HistoryPath)) return;
+                _history.Clear();
+
+                if (!File.Exists(HistoryPath))
+                {
+                    _historyLoaded = true;
+                    return;
+                }
 
                 var json = File.ReadAllText(HistoryPath);
                 var items = JsonSerializer.Deserialize<List<HistoryEntry>>(json, JsonOpts);
-                _history.Clear();
-                if (items != null) _history.AddRange(items);
+
+                if (items != null)
+                    _history.AddRange(items);
+
+                _historyLoaded = true;
             }
             catch
             {
-                // volontairement silencieux: pas de crash au démarrage
                 _history.Clear();
+                _historyLoaded = true;
             }
         }
+
+
 
         void SaveHistory()
         {
             try
             {
-                EnsureAppDataDir();
+                // ⛔ ne jamais écraser avant le premier Load
+                if (!_historyLoaded)
+                    return;
+
                 var json = JsonSerializer.Serialize(_history, JsonOpts);
                 File.WriteAllText(HistoryPath, json);
             }
             catch
             {
-                // silencieux: pas de crash pendant navigation
+                // silencieux volontairement
             }
         }
+
 
         void LoadFavorites()
         {
             try
             {
-                EnsureAppDataDir();
-                if (!File.Exists(FavoritesPath)) return;
+                _favorites.Clear();
+
+                if (!File.Exists(FavoritesPath))
+                {
+                    _favoritesLoaded = true;
+                    return;
+                }
 
                 var json = File.ReadAllText(FavoritesPath);
                 var items = JsonSerializer.Deserialize<List<FavoriteItem>>(json, JsonOpts);
-                _favorites.Clear();
-                if (items != null) _favorites.AddRange(items);
+
+                if (items != null)
+                {
+                    foreach (var fav in items)
+                        _favorites.Add(fav); 
+                }
+
+                _favoritesLoaded = true;
             }
             catch
             {
                 _favorites.Clear();
+                _favoritesLoaded = true;
             }
         }
+
+
 
         void SaveFavorites()
         {
             try
             {
-                EnsureAppDataDir();
+                // ⛔ ne jamais écraser avant le premier Load
+                if (!_favoritesLoaded)
+                    return;
+
                 var json = JsonSerializer.Serialize(_favorites, JsonOpts);
                 File.WriteAllText(FavoritesPath, json);
             }
             catch
             {
+                // silencieux volontairement
             }
         }
+
+        string GetProfileDataDir()
+        {
+            var profileId = _profileService.Current?.Username ?? "default";
+
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), // ✅ Roaming
+                "MyHomelabBrowser",
+                "profiles",
+                profileId
+            );
+
+            Directory.CreateDirectory(dir);
+            return dir;
+        }
+
+
+
 
         // ---------------------------
         // Reorder / pin

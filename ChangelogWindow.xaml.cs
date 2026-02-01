@@ -1,4 +1,8 @@
-﻿using System.Windows;
+﻿using System.Text;
+using System.Text.Json;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace MyHomelabBrowser
 {
@@ -7,8 +11,169 @@ namespace MyHomelabBrowser
         public ChangelogWindow(string version, string changelog)
         {
             InitializeComponent();
-            TitleText.Text = $"Changelog - {version}";
-            ChangelogText.Text = changelog;
+
+            TitleText.Text = "Historique des versions";
+
+            if (string.IsNullOrWhiteSpace(changelog))
+                return;
+
+            var normalized = NormalizeChangelogInput(changelog);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                RenderMultiVersionChangelog(normalized);
+
+        }
+
+        void RenderMultiVersionChangelog(string raw)
+        {
+            raw = raw.Replace("\r\n", "\n");
+
+            var blocks = raw.Split("## ")
+                             .Where(b => !string.IsNullOrWhiteSpace(b))
+                             .ToList();
+
+            foreach (var block in blocks)
+            {
+                var lines = block.Split('\n');
+                var versionLine = lines[0].Trim();
+                var content = string.Join("\n", lines.Skip(1));
+
+                AddVersionHeader(versionLine);
+                RenderSingleVersion(content);
+            }
+        }
+
+        void AddVersionHeader(string version)
+        {
+            ChangelogHost.Children.Add(new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(45, 45, 45)),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(12),
+                Margin = new Thickness(0, 20, 0, 6),
+                Child = new TextBlock
+                {
+                    Text = $"🚀 Version {version}",
+                    FontSize = 17,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = Brushes.White
+                }
+            });
+        }
+        string NormalizeChangelogInput(string raw)
+        {
+            // Si c’est du JSON → on le transforme en markdown-like
+            if (raw.TrimStart().StartsWith("{"))
+            {
+                try
+                {
+                    var dict = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(raw);
+                    if (dict == null || dict.Count == 0)
+                        return "";
+
+                    var sb = new StringBuilder();
+
+                    foreach (var v in dict
+                        .Select(kv =>
+                        {
+                            var ok = Version.TryParse(kv.Key, out var ver);
+                            return new { kv.Key, Items = kv.Value, Parsed = ok ? ver : null };
+                        })
+                        .Where(x => x.Parsed != null)
+                        .OrderByDescending(x => x.Parsed))
+                    {
+                        sb.AppendLine($"## {v.Key}");
+
+                        if (v.Items != null)
+                        {
+                            foreach (var item in v.Items)
+                                sb.AppendLine(item);
+                        }
+
+                        sb.AppendLine();
+                    }
+
+                    return sb.ToString();
+                }
+                catch
+                {
+                    return "";
+                }
+            }
+
+            // Sinon → on suppose que c’est déjà du texte
+            return raw;
+        }
+
+
+        void RenderSingleVersion(string content)
+        {
+            content = content.Replace("\r\n", "\n");
+
+            var sections = new Dictionary<string, (string icon, string title)>
+            {
+                ["add"] = ("✨", "Ajouts"),
+                ["added"] = ("✨", "Ajouts"),
+                ["new"] = ("✨", "Ajouts"),
+
+                ["fix"] = ("🐛", "Corrections"),
+                ["fixed"] = ("🐛", "Corrections"),
+
+                ["change"] = ("🔧", "Modifications"),
+                ["changed"] = ("🔧", "Modifications"),
+
+                ["misc"] = ("📦", "Divers"),
+                ["other"] = ("📦", "Divers")
+            };
+
+            string? currentSection = null;
+
+            foreach (var line in content.Split('\n'))
+            {
+                var trimmed = line.Trim().TrimStart('-', '•');
+                if (trimmed.Length == 0)
+                    continue;
+
+                var lower = trimmed.ToLowerInvariant();
+
+                var section = sections
+                    .FirstOrDefault(s => lower.StartsWith(s.Key + ":"));
+
+                if (!section.Equals(default(KeyValuePair<string, (string, string)>)))
+                {
+                    currentSection = section.Key;
+                    AddSection(section.Value.icon, section.Value.title);
+                    AddBullet(trimmed.Substring(section.Key.Length + 1).Trim());
+                }
+                else
+                {
+                    AddBullet(trimmed);
+                }
+            }
+        }
+
+
+        void AddSection(string icon, string title)
+        {
+            ChangelogHost.Children.Add(new TextBlock
+            {
+                Text = $"{icon} {title}",
+                FontSize = 16,
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 16, 0, 6),
+                Foreground = Brushes.White
+            });
+        }
+
+        void AddBullet(string text)
+        {
+            ChangelogHost.Children.Add(new TextBlock
+            {
+                Text = "• " + text,
+                FontSize = 14,
+                Margin = new Thickness(12, 2, 0, 2),
+                Foreground = new SolidColorBrush(Color.FromRgb(230, 230, 230)),
+                TextWrapping = TextWrapping.Wrap
+            });
         }
 
         private void Close_Click(object sender, RoutedEventArgs e)

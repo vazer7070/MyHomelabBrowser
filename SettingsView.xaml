@@ -326,12 +326,13 @@
             Click="InstallUpdateBtn_Click"/>
 
                             <Button x:Name="ChangelogBtn"
-            Content="Changelog"
-            Padding="16,8"
-            Margin="10,0,0,0"
-            HorizontalAlignment="Left"
-            IsEnabled="False"
-            Click="ChangelogBtn_Click"/>
+        Content="Changelog"
+        Padding="16,8"
+        Margin="10,0,0,0"
+        HorizontalAlignment="Left"
+        IsEnabled="True"
+        Click="ChangelogBtn_Click"/>
+
                         </StackPanel>
 
                     </StackPanel>

@@ -25,7 +25,10 @@
             <SolidColorBrush x:Key="PrivateSurfaceBrush" Color="#241632"/>
             <SolidColorBrush x:Key="PrivateAddressBrush" Color="#2D1B3F"/>
             <SolidColorBrush x:Key="NormalSurfaceBrush" Color="#1E1E1E"/>
+            
 
         </ResourceDictionary>
+        
     </Application.Resources>
+    
 </Application>

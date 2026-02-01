@@ -19,6 +19,8 @@ namespace MyHomelabBrowser.controles
     public partial class ProfileSettingsDialog : Window
     {
         readonly ProfileService _profileService;
+        public event Action? PasswordsRequested;
+
         public ProfileSettingsDialog(ProfileService service)
         {
             InitializeComponent();
@@ -27,6 +29,11 @@ namespace MyHomelabBrowser.controles
             if (_profileService.Current != null)
                 UsernameBox.Text = _profileService.Current.Username;
         }
+        private void Passwords_Click(object sender, RoutedEventArgs e)
+        {
+            PasswordsRequested?.Invoke();
+        }
+
         private void Save_Click(object sender, RoutedEventArgs e)
         {
             var username = UsernameBox.Text.Trim();

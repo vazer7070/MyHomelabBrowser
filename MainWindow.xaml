@@ -628,29 +628,53 @@
 
                     <Grid>
                         <Grid.ColumnDefinitions>
+                            <!-- 🔒 SSL -->
                             <ColumnDefinition Width="34"/>
+
+                            <!-- 🔑 Credentials -->
+                            <ColumnDefinition Width="34"/>
+
+                            <!-- 🌐 Address -->
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- 🔒 Icône SSL -->
-                        <Image x:Name="SslIcon" Width="18" Height="18" Margin="10,0,0,0"
-       HorizontalAlignment="Left" VerticalAlignment="Center" Panel.ZIndex="2"/>
+                        <!-- 🔒 SSL ICON -->
+                        <Image x:Name="SslIcon"
+           Grid.Column="0"
+           Width="18"
+           Height="18"
+           Margin="10,0,0,0"
+           HorizontalAlignment="Left"
+           VerticalAlignment="Center"/>
 
-                        <!-- ✅ TextBox -->
+                        <!-- 🔑 CREDENTIAL BUTTON -->
+                        <Button x:Name="FillCredentialButton"
+            Grid.Column="1"
+            Content="🔑"
+            Width="28"
+            Height="28"
+            Margin="0,0,6,0"
+            VerticalAlignment="Center"
+            Click="FillCredential_Click"
+            IsEnabled="False"
+            Opacity="0.35"/>
+
+                        <!-- 🌐 ADDRESS BAR -->
                         <TextBox x:Name="AddressBar"
-                 Grid.Column="1"
-                 Background="Transparent"
-                 Foreground="White"
-                 BorderThickness="0"
-                 Padding="0,5,12,5"
-                 FontSize="14"
-                 KeyDown="AddressBar_KeyDown"
-                 TextChanged="AddressBar_TextChanged"
-                 PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown"
-                 GotKeyboardFocus="AddressBar_GotKeyboardFocus"
-                 GotFocus="AddressBar_GotFocus"
-                 LostFocus="AddressBar_LostFocus"/>
+             Grid.Column="2"
+             Background="Transparent"
+             Foreground="White"
+             BorderThickness="0"
+             Padding="0,5,12,5"
+             FontSize="14"
+             KeyDown="AddressBar_KeyDown"
+             TextChanged="AddressBar_TextChanged"
+             PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown"
+             GotKeyboardFocus="AddressBar_GotKeyboardFocus"
+             GotFocus="AddressBar_GotFocus"
+             LostFocus="AddressBar_LostFocus"/>
                     </Grid>
+
                 </Border>
                 <!-- =========================
              RIGHT : Fav + Legacy + FlashModeBtn
@@ -797,10 +821,16 @@
         </Border>
 
         <!-- WEB -->
-        <ContentControl x:Name="WebHost"
-                        Grid.Row="3"
-                        Grid.Column="0"
-                        Background="{StaticResource FluentBg}"/>
+        <Grid Grid.Row="3" Grid.Column="0">
+
+            <!-- NAVIGATION WEB -->
+            <ContentControl x:Name="WebHost"
+                    Background="{StaticResource FluentBg}"/>
+
+            <!-- PARAMÈTRES -->
+            <ContentControl x:Name="SettingsHost"
+                    Visibility="Collapsed"/>
+        </Grid>
 
         <!-- SIDEBAR -->
         <Grid Grid.Row="3" Grid.Column="1" Panel.ZIndex="20">
