@@ -205,7 +205,7 @@ user_pref(""app.update.enabled"", false);
             {
                 FileName = exe,
                 Arguments = args,
-                UseShellExecute = true
+                UseShellExecute = false
             });
         }
 

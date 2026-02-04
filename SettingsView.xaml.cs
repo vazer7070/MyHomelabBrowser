@@ -2,11 +2,10 @@
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Flash;
 using MyHomelabBrowser.controles;
+using MyHomelabBrowser.controles.settings;
 using System;
 using System.IO;
-using System.Net.Http;
-using System.Text;
-using System.Text.Json;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Animation;
@@ -22,27 +21,49 @@ namespace MyHomelabBrowser
 
         public event Action? OpenHistoryRequested;
         public event Action? CheckUpdatesRequested;
-        public void SetUpdateStatus(string text) => UpdateStatusLabel.Text = text;
         public event Action? InstallUpdateRequested;
         public event Action<ReportIssueOptions>? OpenReportIssueRequested;
-
         public event Action? ChangelogRequested;
+
+        // === References (mêmes noms que ton code utilisait avant)
+        Button? CheckUpdatesBtn;
+        Button? InstallUpdateBtn;
+        Button? ChangelogBtn;
+
+        TextBlock? CurrentVersionLabel;
+        TextBlock? LatestVersionLabel;
+        TextBlock? UpdateStatusLabel;
+
+        ProgressBar? UpdateProgress;
+        TextBlock? UpdateProgressLabel;
+
+        ListBox? FlashLegacyList;
+
+        public void SetUpdateStatus(string text)
+        {
+            if (UpdateStatusLabel != null)
+                UpdateStatusLabel.Text = text;
+        }
 
         public string UpdateStatusText
         {
-            get => UpdateStatusLabel.Text;
-            set => UpdateStatusLabel.Text = value;
+            get => UpdateStatusLabel?.Text ?? "";
+            set { if (UpdateStatusLabel != null) UpdateStatusLabel.Text = value; }
         }
 
         public bool IsUpdateButtonEnabled
         {
-            get => CheckUpdatesBtn.IsEnabled;
-            set => CheckUpdatesBtn.IsEnabled = value;
+            get => CheckUpdatesBtn?.IsEnabled ?? false;
+            set { if (CheckUpdatesBtn != null) CheckUpdatesBtn.IsEnabled = value; }
         }
+
         public void ShowUpdateProgress(bool show)
         {
-            UpdateProgress.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-            UpdateProgressLabel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            if (UpdateProgress != null)
+                UpdateProgress.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+
+            if (UpdateProgressLabel != null)
+                UpdateProgressLabel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         }
 
         public void SetUpdateProgress(double percent)
@@ -50,36 +71,45 @@ namespace MyHomelabBrowser
             if (percent < 0) percent = 0;
             if (percent > 100) percent = 100;
 
-            UpdateProgress.Value = percent;
-            UpdateProgressLabel.Text = $"{percent:0}%";
+            if (UpdateProgress != null)
+                UpdateProgress.Value = percent;
+
+            if (UpdateProgressLabel != null)
+                UpdateProgressLabel.Text = $"{percent:0}%";
         }
+
         public void SetUpdateBusy(bool busy)
         {
-            CheckUpdatesBtn.IsEnabled = !busy;
+            if (CheckUpdatesBtn != null)
+                CheckUpdatesBtn.IsEnabled = !busy;
 
-            if (busy)
+            if (busy && InstallUpdateBtn != null)
                 InstallUpdateBtn.IsEnabled = false;
         }
-        private void InstallUpdateBtn_Click(object sender, RoutedEventArgs e)
+
+        void InstallUpdateBtn_Click(object sender, RoutedEventArgs e)
         {
             InstallUpdateRequested?.Invoke();
         }
+
         public void SetInstallAvailable(bool available)
         {
-            InstallUpdateBtn.IsEnabled = available;
+            if (InstallUpdateBtn != null)
+                InstallUpdateBtn.IsEnabled = available;
         }
-        
+
         public SettingsView(SettingsService service)
         {
             InitializeComponent();
-
             _service = service;
 
             _original = _service.Settings.Clone();
             _working = _service.Settings.Clone();
 
-
             DataContext = _working;
+
+            Loaded += SettingsView_Loaded;
+
             // ✅ 1er lancement : Basilisk par défaut depuis le dossier du navigateur
             if (string.IsNullOrWhiteSpace(_working.BasiliskPath))
             {
@@ -91,30 +121,140 @@ namespace MyHomelabBrowser
                     if (File.Exists(defaultBasilisk))
                     {
                         _working.BasiliskPath = defaultBasilisk;
-
-                        // ✅ persiste immédiatement (comme "1er lancement")
                         _service.Apply(_working.Clone());
 
-                        // ✅ resync working/original proprement
                         _original = _service.Settings.Clone();
                         _working = _service.Settings.Clone();
                         DataContext = _working;
                     }
                 }
-                catch
-                {
-                    // rien : pas de crash au démarrage
-                }
+                catch { }
             }
-            // 🔽 synchro initiale du DownloadManager
+
             if (!string.IsNullOrWhiteSpace(_working.DownloadFolder))
                 DownloadManager.Instance.DownloadFolder = _working.DownloadFolder;
 
-            // 🔥 charger la whitelist Flash au démarrage
             RefreshFlashRules();
+        }
+        private void SettingsView_Loaded(object sender, RoutedEventArgs e)
+        {
+            Loaded -= SettingsView_Loaded;
+            LoadSection(0);
+        }
+
+        void NavList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (NavList.SelectedItem is not ListBoxItem item)
+                return;
+
+            var text = item.Content?.ToString() ?? "";
+
+            int section = text switch
+            {
+                "Général" => 0,
+                "Téléchargements" => 1,
+                "Historique" => 2,
+                "Mises à jour" => 3,
+                "⚠ Avancé" => 4,
+                _ => 0
+            };
+
+            LoadSection(section);
         }
 
 
+        void LoadSection(int index)
+        {
+            UserControl? view = index switch
+            {
+                0 => new SettingsGeneralView(),
+                1 => new SettingsDownloadsView(),
+                2 => new SettingsHistoryView(),
+                3 => new SettingsUpdatesView(),
+                4 => new SettingsAdvancedView(),
+                _ => null
+            };
+
+            ContentHost.Content = view;
+
+            // Reset refs
+            CheckUpdatesBtn = null;
+            InstallUpdateBtn = null;
+            ChangelogBtn = null;
+            CurrentVersionLabel = null;
+            LatestVersionLabel = null;
+            UpdateStatusLabel = null;
+            UpdateProgress = null;
+            UpdateProgressLabel = null;
+            FlashLegacyList = null;
+
+            if (view is not FrameworkElement fe)
+                return;
+
+            // === Updates view wiring
+            CheckUpdatesBtn = fe.FindName("CheckUpdatesBtn") as Button;
+            InstallUpdateBtn = fe.FindName("InstallUpdateBtn") as Button;
+            ChangelogBtn = fe.FindName("ChangelogBtn") as Button;
+
+            CurrentVersionLabel = fe.FindName("CurrentVersionLabel") as TextBlock;
+            LatestVersionLabel = fe.FindName("LatestVersionLabel") as TextBlock;
+            UpdateStatusLabel = fe.FindName("UpdateStatusLabel") as TextBlock;
+
+            UpdateProgress = fe.FindName("UpdateProgress") as ProgressBar;
+            UpdateProgressLabel = fe.FindName("UpdateProgressLabel") as TextBlock;
+
+            if (CheckUpdatesBtn != null) CheckUpdatesBtn.Click += CheckUpdatesBtn_Click;
+            if (InstallUpdateBtn != null) InstallUpdateBtn.Click += InstallUpdateBtn_Click;
+            if (ChangelogBtn != null) ChangelogBtn.Click += ChangelogBtn_Click;
+
+            // === History view wiring
+            var openHistoryBtn = fe.FindName("OpenHistoryBtn") as Button;
+            if (openHistoryBtn != null) openHistoryBtn.Click += OpenHistory_Click;
+
+            // === Downloads view wiring
+            var pickDownloadBtn = fe.FindName("PickDownloadFolderBtn") as Button;
+            if (pickDownloadBtn != null) pickDownloadBtn.Click += PickDownloadFolder_Click;
+
+            // === General view wiring
+            var newTabBox = fe.FindName("NewTabPageBox") as TextBox;
+            if (newTabBox != null) newTabBox.TextChanged += TextBox_TextChanged;
+
+            // === Advanced/Flash wiring
+            FlashLegacyList = fe.FindName("FlashLegacyList") as ListBox;
+
+            var openFlashConsoleBtn = fe.FindName("OpenFlashConsoleBtn") as Button;
+            if (openFlashConsoleBtn != null) openFlashConsoleBtn.Click += OpenFlashConsole_Click;
+
+            var pickBasiliskBtn = fe.FindName("PickBasiliskPathBtn") as Button;
+            if (pickBasiliskBtn != null) pickBasiliskBtn.Click += PickBasiliskPath_Click;
+
+            var addFlashBtn = fe.FindName("AddFlashRuleBtn") as Button;
+            if (addFlashBtn != null) addFlashBtn.Click += AddFlashRule_Click;
+
+            var removeFlashBtn = fe.FindName("RemoveFlashRuleBtn") as Button;
+            if (removeFlashBtn != null) removeFlashBtn.Click += RemoveFlashRule_Click;
+
+            if (FlashLegacyList != null)
+                RefreshFlashRules();
+
+            // === Auto-fill versions when Updates view is loaded
+            if (index == 3)
+            {
+                SetCurrentVersion(
+     System.Reflection.Assembly
+         .GetExecutingAssembly()
+         .GetName()
+         .Version?
+         .ToString() ?? "?"
+ );
+
+
+                // Statut initial
+                SetUpdateStatus("Prêt à vérifier les mises à jour.");
+                CheckUpdatesRequested?.Invoke();
+            }
+
+        }
         private void OpenReportIssue_Click(object sender, RoutedEventArgs e)
         {
             var options = new ReportIssueOptions
@@ -127,99 +267,26 @@ namespace MyHomelabBrowser
             OpenReportIssueRequested?.Invoke(options);
         }
 
-        private void OpenHistory_Click(object sender, RoutedEventArgs e)
-        {
-            OpenHistoryRequested?.Invoke();
-        }
-        
-        private void CheckUpdatesBtn_Click(object sender, RoutedEventArgs e)
+        void CheckUpdatesBtn_Click(object sender, RoutedEventArgs e)
         {
             CheckUpdatesRequested?.Invoke();
         }
 
-        private void ChangelogBtn_Click(object sender, RoutedEventArgs e)
+        void ChangelogBtn_Click(object sender, RoutedEventArgs e)
         {
             ChangelogRequested?.Invoke();
         }
 
-        private void Cancel_Click(object sender, RoutedEventArgs e)
+        void OpenHistory_Click(object sender, RoutedEventArgs e)
         {
-            _working = _original.Clone();
-            DataContext = _working;
-
-            // 🔽 rollback dossier downloads
-            if (!string.IsNullOrWhiteSpace(_working.DownloadFolder))
-                DownloadManager.Instance.DownloadFolder = _working.DownloadFolder;
-
-            // 🔁 rollback visuel whitelist
-            RefreshFlashRules();
-        }
-        
-
-        public void SetCurrentVersion(string version)
-        {
-            CurrentVersionLabel.Text = version;
+            OpenHistoryRequested?.Invoke();
         }
 
-        public void SetLatestVersion(string version)
-        {
-            LatestVersionLabel.Text = version;
-        }
-
-        public void SetChangelogAvailable(bool available)
-        {
-            ChangelogBtn.IsEnabled = true;
-        }
-        private void Save_Click(object sender, RoutedEventArgs e)
-        {
-            _service.Apply(_working.Clone());
-
-            _original = _service.Settings.Clone();
-            _working = _service.Settings.Clone();
-            DataContext = _working;
-
-            // 🔽 applique définitivement le dossier de téléchargement
-            if (!string.IsNullOrWhiteSpace(_working.DownloadFolder))
-                DownloadManager.Instance.DownloadFolder = _working.DownloadFolder;
-
-            // 🔁 refresh whitelist après save
-            RefreshFlashRules();
-
-            ShowSaveFeedback();
-        }
-
-        // ===============================
-        // DOWNLOAD FOLDER PICKER
-        // ===============================
-        private void PickDownloadFolder_Click(object sender, RoutedEventArgs e)
-        {
-            var dlg = new OpenFolderDialog
-            {
-                Title = "Choisir le dossier de téléchargement",
-                InitialDirectory = string.IsNullOrWhiteSpace(_working.DownloadFolder)
-                    ? Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                        "Downloads")
-                    : _working.DownloadFolder
-            };
-
-            if (dlg.ShowDialog() != true)
-                return;
-
-            var path = dlg.FolderName;
-
-            if (string.IsNullOrWhiteSpace(path))
-                return;
-
-            _working.DownloadFolder = path;
-            DownloadManager.Instance.DownloadFolder = path;
-        }
-
-        // ===============================
-        // FLASH WHITELIST
-        // ===============================
         void RefreshFlashRules()
         {
+            if (FlashLegacyList == null)
+                return;
+
             FlashLegacyList.ItemsSource =
                 FlashDomainRules.GetAll()
                     .Where(kv => kv.Value == FlashRuleMode.Legacy)
@@ -228,23 +295,84 @@ namespace MyHomelabBrowser
                     .ToList();
         }
 
-        private void RemoveFlashRule_Click(object sender, RoutedEventArgs e)
+        public void SetCurrentVersion(string version)
         {
-            if (FlashLegacyList.SelectedItem is not string host)
+            if (CurrentVersionLabel != null)
+                CurrentVersionLabel.Text = version;
+        }
+
+        public void SetLatestVersion(string version)
+        {
+            if (LatestVersionLabel != null)
+                LatestVersionLabel.Text = version;
+        }
+
+        public void SetChangelogAvailable(bool available)
+        {
+            if (ChangelogBtn != null)
+                ChangelogBtn.IsEnabled = true;
+        }
+
+        void Save_Click(object sender, RoutedEventArgs e)
+        {
+            _service.Apply(_working.Clone());
+
+            _original = _service.Settings.Clone();
+            _working = _service.Settings.Clone();
+            DataContext = _working;
+
+            if (!string.IsNullOrWhiteSpace(_working.DownloadFolder))
+                DownloadManager.Instance.DownloadFolder = _working.DownloadFolder;
+
+            RefreshFlashRules();
+            ShowSaveFeedback();
+        }
+
+        void ShowSaveFeedback()
+        {
+            SaveFeedback.Opacity = 1;
+
+            var anim = new DoubleAnimation
+            {
+                To = 0,
+                Duration = TimeSpan.FromSeconds(2),
+                BeginTime = TimeSpan.FromSeconds(1)
+            };
+
+            SaveFeedback.BeginAnimation(OpacityProperty, anim);
+        }
+
+        void PickDownloadFolder_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new OpenFolderDialog
+            {
+                Title = "Choisir le dossier de téléchargement",
+                InitialDirectory = string.IsNullOrWhiteSpace(_working.DownloadFolder)
+                    ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads")
+                    : _working.DownloadFolder
+            };
+
+            if (dlg.ShowDialog() != true)
+                return;
+
+            var path = dlg.FolderName;
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+
+            _working.DownloadFolder = path;
+            DownloadManager.Instance.DownloadFolder = path;
+        }
+
+        void RemoveFlashRule_Click(object sender, RoutedEventArgs e)
+        {
+            if (FlashLegacyList?.SelectedItem is not string host)
                 return;
 
             FlashDomainRules.RemoveRule(new Uri("https://" + host));
-
             RefreshFlashRules();
         }
 
-
-
-
-        // ===============================
-        // BASILISK PICKER
-        // ===============================
-        private void PickBasiliskPath_Click(object sender, RoutedEventArgs e)
+        void PickBasiliskPath_Click(object sender, RoutedEventArgs e)
         {
             string exeDir = AppDomain.CurrentDomain.BaseDirectory;
             string defaultBasiliskDir = Path.Combine(exeDir, "Basilisk");
@@ -273,25 +401,7 @@ namespace MyHomelabBrowser
             DataContext = _working;
         }
 
-
-        // ===============================
-        // UI FEEDBACK
-        // ===============================
-        void ShowSaveFeedback()
-        {
-            SaveFeedback.Opacity = 1;
-
-            var anim = new DoubleAnimation
-            {
-                To = 0,
-                Duration = TimeSpan.FromSeconds(2),
-                BeginTime = TimeSpan.FromSeconds(1)
-            };
-
-            SaveFeedback.BeginAnimation(OpacityProperty, anim);
-        }
-
-        private void AddFlashRule_Click(object sender, RoutedEventArgs e)
+        void AddFlashRule_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new AddLegacySiteDialog
             {
@@ -319,9 +429,9 @@ namespace MyHomelabBrowser
             RefreshFlashRules();
         }
 
-        private FlashConsoleWindow? _flashConsole;
+        FlashConsoleWindow? _flashConsole;
 
-        private void OpenFlashConsole_Click(object sender, RoutedEventArgs e)
+        void OpenFlashConsole_Click(object sender, RoutedEventArgs e)
         {
             if (_flashConsole == null || !_flashConsole.IsVisible)
             {
@@ -336,11 +446,9 @@ namespace MyHomelabBrowser
             _flashConsole.Activate();
         }
 
-
-        private static string NormalizeHost(string input)
+        static string NormalizeHost(string input)
         {
             string s = input.Trim().ToLowerInvariant();
-
             s = s.Replace("https://", "").Replace("http://", "");
             s = s.Split('/')[0];
 
@@ -350,7 +458,7 @@ namespace MyHomelabBrowser
             return s;
         }
 
-        private static bool IsValidHost(string host)
+        static bool IsValidHost(string host)
         {
             if (string.IsNullOrWhiteSpace(host)) return false;
             if (host.Contains(" ")) return false;
@@ -360,9 +468,8 @@ namespace MyHomelabBrowser
             return true;
         }
 
-        private void TextBox_TextChanged(object sender, TextChangedEventArgs e)
+        void TextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-
         }
     }
 }

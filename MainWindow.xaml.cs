@@ -44,6 +44,9 @@ namespace MyHomelabBrowser
         bool _addressBarEditing;
         private bool _addressBarSelectAllPending;
         bool _navigatingFromHistory;
+        bool _pendingCredentialDecision;
+        string? _pendingNavigationUri;
+
 
         // ---------------------------
         // Dock indicator + docking mode
@@ -235,6 +238,8 @@ namespace MyHomelabBrowser
             {
                 await RestoreSessionIfAnyAsync();
 
+                _vault.ReloadForCurrentProfile();
+
                 _ = Task.Run(async () =>
                 {
                     try
@@ -276,6 +281,8 @@ namespace MyHomelabBrowser
                     RefreshProfileUI();
                     RefreshFavoritesBar();
                     UpdateFavoriteButton();
+                    
+
                 });
             };
 
@@ -1363,13 +1370,15 @@ namespace MyHomelabBrowser
                 web.SourceChanged += (_, _) =>
                     Dispatcher.BeginInvoke(UpdateAddressBarFromTab);
 
+                web.SourceChanged += (_, _) =>
+                {
+                    Dispatcher.BeginInvoke(UpdateFillCredentialButtonState);
+                };
+
                 // ✅ NavigationCompleted privé : UI / history / flash (comme normal)
                 web.NavigationCompleted += async (_, _) =>
                 {
                     _ = Dispatcher.BeginInvoke(UpdateAddressBarFromTab);
-
-                   
-
                     _ = Dispatcher.BeginInvoke(UpdateFavoriteButton);
 
                     if (web.CoreWebView2 != null)
@@ -1392,6 +1401,8 @@ namespace MyHomelabBrowser
                     SyncWebHostWithSelection();
                     UpdateManualLegacyButton();
                     UpdateNavButtons();
+
+                   
                 };
 
                 // ✅ Go !
@@ -2224,12 +2235,48 @@ namespace MyHomelabBrowser
                 _ = CreateTabInternal(url);
             });
         }
+        void UpdateFillCredentialButtonState()
+        {
+            try
+            {
+                FillCredentialButton.IsEnabled = false;
+                FillCredentialButton.Opacity = 0.35;
+                FillCredentialButton.ToolTip = "Aucun identifiant disponible";
+
+                if (_profileService.Current == null)
+                    return;
+
+                if (Tabs.SelectedItem is not TabItem tab ||
+                    tab.Tag is not WebTabContent content ||
+                    content.Web?.Source == null)
+                    return;
+
+                var host = content.Web.Source.Host;
+                if (string.IsNullOrWhiteSpace(host))
+                    return;
+
+                if (_vault.HasCredentialForHost(host))
+                {
+                    FillCredentialButton.IsEnabled = true;
+                    FillCredentialButton.Opacity = 1.0;
+                    FillCredentialButton.ToolTip =
+                        _vault.IsSessionUnlocked
+                            ? "Remplir les identifiants"
+                            : "Déverrouiller le coffre pour remplir";
+                }
+
+            }
+            catch { }
+        }
 
 
         async Task CreateTabInternal(string url)
         {
             var web = new WebView2();
             DownloadHook.Attach(web, isPrivate: false);
+
+           
+
             // ===============================
             // 🕒 HISTORIQUE : URL STABILISÉE (PAR ONGLET)
             // ===============================
@@ -2260,6 +2307,8 @@ namespace MyHomelabBrowser
 
                 historyDebounce.Stop();
                 historyDebounce.Start();
+                UpdateFillCredentialButtonState();
+
             };
 
 
@@ -2292,8 +2341,6 @@ namespace MyHomelabBrowser
                 Tag = content
             };
 
-            AttachPreview(tab, web);
-
             Tabs.Items.Add(tab);
             Tabs.SelectedItem = tab;
             SyncWebHostWithSelection();
@@ -2324,18 +2371,48 @@ namespace MyHomelabBrowser
 
             var env = await GetEnvironmentForCurrentProfileAsync(isPrivate: false);
             await web.EnsureCoreWebView2Async(env);
+            web.CoreWebView2.NavigationStarting += (_, e) =>
+            {
+                if (_pendingCredentialDecision && _pendingNavigationUri == null)
+                {
+                    _pendingNavigationUri = e.Uri;
+                    e.Cancel = true;
+                }
+
+            };
             web.NavigationCompleted += async (_, _) =>
             {
+               
                 try
                 {
                     await HandleFlashAsync(web, content, header, overlay);
                 }
                 catch { }
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    AttachPreview(tab, web);
+                });
             };
 
             if (web.CoreWebView2 == null)
                 return;
-            
+
+            // ===============================
+            // 🏷️ TITRE DE L’ONGLET (DocumentTitle)
+            // ===============================
+            web.CoreWebView2.DocumentTitleChanged += (_, __) =>
+            {
+                Dispatcher.BeginInvoke(() =>
+                {
+                    var title = web.CoreWebView2.DocumentTitle;
+
+                    header.SetTitle(
+                        string.IsNullOrWhiteSpace(title)
+                            ? "Nouvel onglet"
+                            : title
+                    );
+                });
+            };
 
 
             // 🔥 OBLIGATOIRE : autoriser JS -> C#
@@ -2356,14 +2433,63 @@ namespace MyHomelabBrowser
                 getCurrentProfileUsername: () => _profileService.Current?.Username,
                 isVaultUnlocked: () => _vault.IsUnlocked,
                 getCredForHost: host => _vault.FindForHost(host),
-               onCredentialCaptured: (host, user, pass, action) =>
+               onCredentialCaptured: async (host, user, pass, action) =>
                {
+                   // ===============================
+                   // 0️⃣ IGNORER SI DÉJÀ CONNU (CRITIQUE)
+                   // ===============================
+                   var existing = _vault.FindForHost(host);
 
-                   Application.Current.Dispatcher.BeginInvoke(
-                       () => CredentialCapturedUi?.Invoke(host, user, pass, action)
-                   );
+                   if (existing != null &&
+                       string.Equals(existing.Username, user, StringComparison.OrdinalIgnoreCase) &&
+                       existing.Password == pass)
+                   {
+                       // rien à faire, surtout ne pas bloquer la navigation
+                       return;
+                   }
+
+                   // ===============================
+                   // 1️⃣ geler la navigation
+                   // ===============================
+                   _pendingCredentialDecision = true;
+
+                   // ===============================
+                   // 2️⃣ laisser l’UI décider (save / never / cancel)
+                   // ===============================
+                   await Application.Current.Dispatcher.InvokeAsync(() =>
+                   {
+                       CredentialCapturedUi?.Invoke(host, user, pass, action);
+                   });
+
+                   // ===============================
+                   // 3️⃣ libérer le gel
+                   // ===============================
+                   _pendingCredentialDecision = false;
+
+                   // ===============================
+                   // 4️⃣ relancer la navigation si elle avait été bloquée
+                   // ===============================
+                   if (!string.IsNullOrWhiteSpace(_pendingNavigationUri))
+                   {
+                       var uri = _pendingNavigationUri;
+                       _pendingNavigationUri = null;
+
+                       await Application.Current.Dispatcher.InvokeAsync(() =>
+                       {
+                           if (Tabs.SelectedItem is TabItem tab &&
+                               tab.Tag is WebTabContent content &&
+                               content.Web?.CoreWebView2 != null)
+                           {
+                               content.Web.CoreWebView2.Navigate(uri);
+                           }
+                       });
+                   }
+
+                   // ===============================
+                   // 5️⃣ rafraîchir l’UI clé
+                   // ===============================
+                   await Application.Current.Dispatcher.InvokeAsync(UpdateFillCredentialButtonState);
                }
-
 
 
             );
@@ -2374,42 +2500,8 @@ namespace MyHomelabBrowser
             web.CoreWebView2.Settings.UserAgent =
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-            // ===============================
-            // ✅ Navigation completed
-            // ===============================
-            await Dispatcher.BeginInvoke(() =>
-            {
-                try
-                {
-                    FillCredentialButton.IsEnabled = false;
-                    FillCredentialButton.Opacity = 0.35;
-                    FillCredentialButton.ToolTip = "Aucun identifiant disponible";
+            await Dispatcher.BeginInvoke(UpdateFillCredentialButtonState);
 
-                    if (_profileService.Current == null)
-                        return;
-
-                    if (web.Source == null)
-                        return;
-
-                    var host = web.Source.Host;
-                    if (string.IsNullOrWhiteSpace(host))
-                        return;
-
-                    // 🔑 on ne dépend PLUS de IsUnlocked ici
-                    if (_vault.FindForHost(host) != null)
-                    {
-                        FillCredentialButton.IsEnabled = true;
-                        FillCredentialButton.Opacity = 1.0;
-
-                        // tooltip dynamique
-                        FillCredentialButton.ToolTip =
-                            _vault.IsUnlocked
-                                ? "Remplir les identifiants"
-                                : "Déverrouiller le coffre pour remplir";
-                    }
-                }
-                catch { }
-            });
 
 
             // ===============================
@@ -2901,8 +2993,9 @@ namespace MyHomelabBrowser
                     ShowWindow(_legacyDockHwnd, SW_HIDE);
             }
             UpdateManualLegacyButton();
-            UpdateNavButtonsFast();
-
+            UpdateNavButtonsFast(); 
+            
+            Dispatcher.BeginInvoke(UpdateFillCredentialButtonState);
         }
 
 

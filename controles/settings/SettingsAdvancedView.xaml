@@ -1,0 +1,106 @@
+﻿<UserControl x:Class="MyHomelabBrowser.controles.settings.SettingsAdvancedView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="720">
+
+            <TextBlock Text="⚠ Paramètres avancés"
+                       FontSize="26"
+                       FontWeight="Bold"
+                       Foreground="White"/>
+
+            <TextBlock Text="Options techniques réservées aux utilisateurs avancés."
+                       Foreground="#FFB4B4"
+                       Margin="0,6,0,20"/>
+
+            <Border Style="{StaticResource SettingsCard}">
+                <StackPanel>
+
+                    <TextBlock Text="Flash / Legacy"
+                               Style="{StaticResource SettingsTitle}"/>
+
+                    <CheckBox x:Name="EnableFlashSupportBox"
+                              Content="Activer le support Flash (Ruffle / Legacy)"
+                              IsChecked="{Binding EnableFlashSupport}"
+                              Foreground="#E6E6E6"
+                              Margin="0,6"/>
+
+                    <CheckBox x:Name="PreferRuffleBox"
+                              Content="Tenter Ruffle avant Basilisk"
+                              IsChecked="{Binding PreferRuffle}"
+                              IsEnabled="{Binding EnableFlashSupport}"
+                              Foreground="#E6E6E6"
+                              Margin="0,4"/>
+
+                    <CheckBox x:Name="FlashDebugEnabledBox"
+                              Content="Mode debug Flash (logs / overlay)"
+                              IsChecked="{Binding FlashDebugEnabled}"
+                              IsEnabled="{Binding EnableFlashSupport}"
+                              Foreground="#E6E6E6"
+                              Margin="0,4"/>
+
+                    <Button x:Name="OpenFlashConsoleBtn"
+                            Content="Ouvrir console Flash"
+                            Padding="16,6"
+                            Margin="0,10,0,0"
+                            HorizontalAlignment="Left"/>
+
+                    <TextBlock Text="Navigateur Legacy (Basilisk)"
+                               Style="{StaticResource SettingsLabel}"
+                               Margin="0,16,0,6"/>
+
+                    <StackPanel Orientation="Horizontal"
+                                IsEnabled="{Binding EnableFlashSupport}">
+                        <TextBox x:Name="BasiliskPathBox"
+                                 Height="36"
+                                 Width="460"
+                                 Padding="12,0"
+                                 VerticalContentAlignment="Center"
+                                 IsReadOnly="True"
+                                 Text="{Binding BasiliskPath}"/>
+
+                        <Button x:Name="PickBasiliskPathBtn"
+                                Content="Parcourir…"
+                                Margin="10,0,0,0"
+                                Padding="16,6"/>
+                    </StackPanel>
+
+                    <TextBlock Text="Utilisé uniquement si un site nécessite Flash réel (MMO anciens)."
+                               Foreground="#9E9E9E"
+                               FontSize="12"
+                               Margin="0,6,0,0"/>
+
+                    <Separator Margin="0,18,0,12"/>
+
+                    <TextBlock Text="Sites forcés en mode Legacy"
+                               Style="{StaticResource SettingsLabel}"/>
+
+                    <TextBlock Text="Ces sites seront toujours ouverts avec Basilisk, même si Ruffle est disponible."
+                               Foreground="#9E9E9E"
+                               FontSize="12"
+                               Margin="0,0,0,8"/>
+
+                    <ListBox x:Name="FlashLegacyList"
+                             Height="140"
+                             Background="#2B2B2B"
+                             Foreground="#E0E0E0"
+                             BorderThickness="0"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <Button x:Name="AddFlashRuleBtn"
+                                Content="Ajouter"
+                                Padding="14,6"
+                                Margin="0,0,10,0"/>
+
+                        <Button x:Name="RemoveFlashRuleBtn"
+                                Content="Supprimer"
+                                Padding="14,6"/>
+                    </StackPanel>
+
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

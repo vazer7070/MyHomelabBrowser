@@ -19,7 +19,8 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
         readonly Func<string> _getVaultPath; // dépend du profil (AppDataContext.Root)
         readonly List<CredentialEntry> _cache = new();
         public bool IsSessionUnlocked { get; private set; }
-
+        static HashSet<string> _knownHosts = new();
+        static Func<string> _getVaultPathStatic = null!;
 
 
         byte[]? _key; // clé AES en mémoire uniquement (après unlock)
@@ -28,6 +29,74 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
         public CredentialVaultService(Func<string> getVaultPath)
         {
             _getVaultPath = getVaultPath;
+            _getVaultPathStatic = getVaultPath;
+        }
+        static readonly HashSet<string> TwoPartTlds = new(StringComparer.OrdinalIgnoreCase)
+{
+    "co.uk", "org.uk", "gov.uk", "ac.uk",
+    "com.au", "net.au", "org.au",
+    "co.jp", "ne.jp", "or.jp",
+    "com.br", "com.ar",
+    "co.in", "com.tr"
+};
+        public void ReloadForCurrentProfile()
+        {
+            _knownHosts.Clear();
+            LoadHostIndex();
+        }
+
+        static string NormalizeSiteKey(string host)
+        {
+            host = (host ?? "").Trim().ToLowerInvariant();
+            if (host.StartsWith("www.")) host = host[4..];
+
+            // IP / localhost
+            if (host == "localhost" || host.All(c => char.IsDigit(c) || c == '.'))
+                return host;
+
+            var parts = host.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2)
+                return host;
+
+            var last2 = parts[^2] + "." + parts[^1];
+
+            // ex: something.co.uk => keep last3
+            if (TwoPartTlds.Contains(last2) && parts.Length >= 3)
+                return parts[^3] + "." + last2;
+
+            // default: eTLD+1 simple
+            return last2;
+        }
+
+        
+
+
+        private void LoadHostIndex()
+        {
+            _knownHosts.Clear();
+
+            var indexPath = Path.ChangeExtension(_getVaultPathStatic(), ".index.json");
+            if (!File.Exists(indexPath))
+                return;
+
+            try
+            {
+                var hosts = JsonSerializer.Deserialize<HashSet<string>>(
+                    File.ReadAllText(indexPath)
+                );
+
+                if (hosts != null)
+                {
+                    _knownHosts.Clear();
+                    foreach (var h in hosts)
+                        _knownHosts.Add(h);
+
+                }
+            }
+            catch
+            {
+                // index corrompu → on ignore
+            }
         }
 
         public void Lock()
@@ -36,8 +105,23 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             _cache.Clear();
             IsSessionUnlocked = false;
         }
+        public bool HasCredentialForHost(string host)
+        {
+            return _knownHosts.Contains(NormalizeSiteKey(host));
+        }
 
 
+        public void RebuildHostIndexFromCache()
+        {
+            _knownHosts.Clear();
+
+            foreach (var c in _cache)
+                _knownHosts.Add(NormalizeSiteKey(c.Host));
+
+            var indexPath = Path.ChangeExtension(_getVaultPath(), ".index.json");
+            File.WriteAllText(indexPath, JsonSerializer.Serialize(_knownHosts, JsonOpts));
+        }
+       
         public bool TryUnlock(string profilePassword)
         {
             try
@@ -90,6 +174,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
 
                 _cache.Clear();
                 _cache.AddRange(list);
+                RebuildHostIndexFromCache();
 
                 IsSessionUnlocked = true;
                 return true;
@@ -103,17 +188,13 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             }
         }
 
-
-
-
-
         public IReadOnlyList<CredentialEntry> GetAll()
             => _cache.OrderByDescending(x => x.UpdatedAt).ToList();
 
         public CredentialEntry? FindForHost(string host)
         {
-            host = NormalizeHost(host);
-            return _cache.FirstOrDefault(x => NormalizeHost(x.Host) == host);
+            var key = NormalizeSiteKey(host);
+            return _cache.FirstOrDefault(x => NormalizeSiteKey(x.Host) == key);
         }
 
         public void Upsert(string host, string username, string password, string? formAction, bool alwaysSave = false, bool neverSave = false)
@@ -121,7 +202,8 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             if (_key == null)
                 throw new InvalidOperationException("Vault verrouillé.");
 
-            host = NormalizeHost(host);
+            host = NormalizeSiteKey(host);
+
 
             var existing = _cache.FirstOrDefault(x => NormalizeHost(x.Host) == host && string.Equals(x.Username, username, StringComparison.OrdinalIgnoreCase));
             if (existing == null)
@@ -149,7 +231,22 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             }
 
             Save();
+            UpdateHostIndex(host);
+
         }
+        void UpdateHostIndex(string host)
+        {
+            host = NormalizeSiteKey(host);
+            _knownHosts.Add(host);
+
+            var indexPath = Path.ChangeExtension(_getVaultPath(), ".index.json");
+            File.WriteAllText(
+                indexPath,
+                JsonSerializer.Serialize(_knownHosts, JsonOpts)
+            );
+        }
+
+
 
         public void Delete(string host, string username)
         {
@@ -273,6 +370,9 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
 
                 return new VaultEnvelope { Salt = salt, Nonce = nonce, Ciphertext = ct };
             }
+
+          
+
 
             public static VaultEnvelope CreateFromPlaintext(string json, byte[] key, byte[]? salt)
             {

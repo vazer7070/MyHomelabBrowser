@@ -30,6 +30,13 @@ namespace MyHomelabBrowser.controles
         private const int WS_CAPTION = 0x00C00000;
         private const int WS_THICKFRAME = 0x00040000;
 
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOZORDER = 0x0004;
+        private const uint SWP_NOACTIVATE = 0x0010;
+        private const uint SWP_FRAMECHANGED = 0x0020;
+
+
         private const int WS_EX_APPWINDOW = 0x00040000;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
 
@@ -46,6 +53,21 @@ namespace MyHomelabBrowser.controles
 
         // ✅ VRAI handle host maintenant
         public IntPtr HostHandle => _host.Handle;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(
+     IntPtr hWnd,
+     IntPtr hWndInsertAfter,
+     int X,
+     int Y,
+     int cx,
+     int cy,
+     uint uFlags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr GetParent(IntPtr hWnd);
+
+
 
         public ExternalWindowDock()
         {
@@ -131,6 +153,18 @@ namespace MyHomelabBrowser.controles
                 return;
             }
 
+            // 🔴 Vérifier la réalité, pas le bool
+            int style = GetWindowLong(_hwnd, GWL_STYLE);
+
+            bool isReallyEmbedded =
+                (style & WS_CHILD) != 0 &&
+                GetParent(_hwnd) == HostHandle;
+
+            if (!isReallyEmbedded)
+            {
+                _embedded = false;
+            }
+
             EnsureEmbedded();
 
             if (_embedded)
@@ -140,6 +174,7 @@ namespace MyHomelabBrowser.controles
                 ShowEmbedded();
             }
         }
+
 
 
         // ✅ Compat : ton ancien code appelle RefreshLayout()
@@ -245,6 +280,12 @@ namespace MyHomelabBrowser.controles
                 ex &= ~WS_EX_APPWINDOW;
                 ex |= WS_EX_TOOLWINDOW;
                 SetWindowLong(_hwnd, GWL_EXSTYLE, ex);
+                SetWindowPos(
+    _hwnd,
+    IntPtr.Zero,
+    0, 0, 0, 0,
+    SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
+);
 
                 _embedded = true;
             }
