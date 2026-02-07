@@ -39,6 +39,8 @@ namespace MyHomelabBrowser.classes
         public bool ReportIncludeLogs { get; set; } = true;
         public bool ReportIncludePcInfo { get; set; } = true;
         public bool ReportIncludeMode { get; set; } = true;
+        public StartupMode Startup { get; set; }
+        public string? CustomStartupPage { get; set; }
 
         // ====================
         // 🔥 FLASH / LEGACY
@@ -63,6 +65,8 @@ namespace MyHomelabBrowser.classes
             {
                 StartPage = StartPage,
                 NewTabPage = NewTabPage,
+                CustomStartupPage = CustomStartupPage,
+                Startup = Startup,
 
                 EnableSuspension = EnableSuspension,
                 SuspendDelayMinutes = SuspendDelayMinutes,
@@ -90,6 +94,16 @@ namespace MyHomelabBrowser.classes
                     })
                     .ToList()
             };
+
         }
+        public enum StartupMode
+        {
+            EmptyTab,
+            CustomPage,
+            RestoreSession
+        }
+
+        
+
     }
 }

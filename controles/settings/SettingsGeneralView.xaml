@@ -4,71 +4,132 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid>
-
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="3*"/>
                 <ColumnDefinition Width="2*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- CONTENU -->
+            <!-- ================= CONTENU ================= -->
             <Border Grid.Column="0"
-                Background="#1E1E1E"
-                CornerRadius="12"
-                Padding="28"
-                Margin="0,0,24,0">
+                    Background="#1E1E1E"
+                    CornerRadius="12"
+                    Padding="28"
+                    Margin="0,0,24,0">
 
                 <StackPanel>
 
+                    <!-- TITRE -->
                     <TextBlock Text="Général"
-                           FontSize="28"
-                           FontWeight="Bold"
-                           Foreground="White"/>
+                               FontSize="28"
+                               FontWeight="Bold"
+                               Foreground="White"/>
 
                     <TextBlock Text="Comportement général du navigateur"
-                           Foreground="#A8A8A8"
-                           FontSize="14"
-                           Margin="0,6,0,28"/>
+                               Foreground="#A8A8A8"
+                               FontSize="14"
+                               Margin="0,6,0,28"/>
 
-                    <StackPanel Margin="0,0,0,22">
-                        <TextBlock Text="Page de démarrage"
-                               Style="{StaticResource SettingsLabel}"
-                               FontWeight="SemiBold"
-                               Margin="0,0,0,6"/>
+                    <!-- ================= DÉMARRAGE ================= -->
+                    <Border Background="#191919"
+                            CornerRadius="10"
+                            Padding="20"
+                            Margin="0,0,0,28">
 
-                        <TextBox x:Name="StartPageBox"
-                             Height="40"
-                             Padding="14,0"
-                             VerticalContentAlignment="Center"
-                             Background="#2B2B2B"
-                             Foreground="White"
-                             BorderThickness="0"
-                             Text="{Binding StartPage}"/>
-                    </StackPanel>
+                        <StackPanel>
 
-                    <StackPanel>
-                        <TextBlock Text="Page des nouveaux onglets"
-                               Style="{StaticResource SettingsLabel}"
-                               FontWeight="SemiBold"
-                               Margin="0,0,0,6"/>
+                            <TextBlock Text="Démarrage du navigateur"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="White"
+                                       Margin="0,0,0,14"/>
 
-                        <TextBox x:Name="NewTabPageBox"
-                             Height="40"
-                             Padding="14,0"
-                             VerticalContentAlignment="Center"
-                             Background="#2B2B2B"
-                             Foreground="White"
-                             BorderThickness="0"
-                             Text="{Binding NewTabPage}"/>
-                    </StackPanel>
+                            <!-- ONGLET VIDE (PAR DÉFAUT) -->
+                            <RadioButton Content="Ouvrir un onglet vide (PommeBrowser)"
+                                         GroupName="StartupMode"
+                                         Foreground="#E0E0E0"
+                                         Margin="0,4"
+                                         IsChecked="{Binding Startup,
+                                             Converter={StaticResource EnumEqualsConverter},
+                                             ConverterParameter=EmptyTab}"/>
+
+                            <!-- PAGE PERSONNALISÉE -->
+                            <RadioButton Content="Ouvrir une page personnalisée"
+                                         GroupName="StartupMode"
+                                         Foreground="#E0E0E0"
+                                         Margin="0,12,0,4"
+                                         IsChecked="{Binding Startup,
+                                             Converter={StaticResource EnumEqualsConverter},
+                                             ConverterParameter=CustomPage}"/>
+
+                            <!-- UTILISE StartPage EXISTANT -->
+                            <TextBox Height="38"
+                                     Margin="24,4,0,0"
+                                     Padding="12,0"
+                                     VerticalContentAlignment="Center"
+                                     Background="#2B2B2B"
+                                     Foreground="White"
+                                     BorderThickness="0"
+                                     Text="{Binding StartPage}"
+                                     IsEnabled="{Binding Startup,
+                                         Converter={StaticResource EnumEqualsConverter},
+                                         ConverterParameter=CustomPage}"
+                                     Opacity="{Binding Startup,
+                                         Converter={StaticResource EnumOpacityConverter},
+                                         ConverterParameter=CustomPage}"/>
+
+                            <!-- RESTAURER SESSION -->
+                            <RadioButton Content="Restaurer les onglets de la session précédente"
+                                         GroupName="StartupMode"
+                                         Foreground="#E0E0E0"
+                                         Margin="0,16,0,0"
+                                         IsChecked="{Binding Startup,
+                                             Converter={StaticResource EnumEqualsConverter},
+                                             ConverterParameter=RestoreSession}"/>
+
+                            <TextBlock Text="Rouvre automatiquement tous les onglets (WebView2 et Legacy)."
+                                       Foreground="#9A9A9A"
+                                       FontSize="12"
+                                       Margin="24,4,0,0"/>
+
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ================= NOUVEAUX ONGLETS ================= -->
+                    <Border Background="#191919"
+                            CornerRadius="10"
+                            Padding="20">
+
+                        <StackPanel>
+
+                            <TextBlock Text="Nouveaux onglets"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="White"
+                                       Margin="0,0,0,12"/>
+
+                            <TextBlock Text="Page ouverte lors de la création d’un nouvel onglet"
+                                       Foreground="#9A9A9A"
+                                       FontSize="12"
+                                       Margin="0,0,0,6"/>
+
+                            <TextBox Height="40"
+                                     Padding="14,0"
+                                     VerticalContentAlignment="Center"
+                                     Background="#2B2B2B"
+                                     Foreground="White"
+                                     BorderThickness="0"
+                                     Text="{Binding NewTabPage}"/>
+
+                        </StackPanel>
+                    </Border>
 
                 </StackPanel>
             </Border>
 
-            <!-- ZONE DE RESPIRATION ASSUMÉE -->
+            <!-- ZONE RESPIRATION -->
             <Border Grid.Column="1"
-                Background="#171717"
-                CornerRadius="12"/>
+                    Background="#171717"
+                    CornerRadius="12"/>
         </Grid>
     </ScrollViewer>
-
 </UserControl>

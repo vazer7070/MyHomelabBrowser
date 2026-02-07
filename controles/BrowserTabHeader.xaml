@@ -37,12 +37,21 @@
             </Grid.ColumnDefinitions>
 
             <!-- FAVICON -->
-            <Image x:Name="Icon"
-                   Grid.Column="0"
-                   Width="16"
-                   Height="16"
-                   Margin="0,0,6,0"
-                   VerticalAlignment="Center"/>
+            <Border Grid.Column="0"
+        Width="22"
+        Height="22"
+        Margin="0,0,6,0"
+        CornerRadius="6"
+        VerticalAlignment="Center"
+        ClipToBounds="True">
+
+                <Image x:Name="Icon"
+           Stretch="UniformToFill"
+           SnapsToDevicePixels="True"
+           UseLayoutRounding="True"/>
+            </Border>
+
+
 
             <!-- TITRE -->
             <TextBlock x:Name="Title"

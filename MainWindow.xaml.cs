@@ -25,6 +25,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.BrowserSettings;
 
 
 
@@ -91,6 +92,8 @@ namespace MyHomelabBrowser
 
         DispatcherTimer _historyDebounceTimer;
         string? _pendingHistoryUrl;
+        EmptyStartPage _startPage = null!;
+
 
         private UpdateService? _updates;
         private bool _isUpdateCheckRunning;
@@ -231,8 +234,44 @@ namespace MyHomelabBrowser
                 ShowToast("Mot de passe enregistré", host, null);
             };
 
+            _startPage = new EmptyStartPage();
 
             RuntimeLogBuffer.Init();
+
+            _profileService.ProfileChanged += _ =>
+            {
+                _vault.Lock();
+
+                _historyLoaded = false;
+                _favoritesLoaded = false;
+
+                LoadHistory();
+                LoadFavorites();
+                _startPage.SetHistory(_history);
+
+                Dispatcher.Invoke(() =>
+                {
+                    RefreshProfileUI();
+                    RefreshFavoritesBar();
+                    UpdateFavoriteButton();
+                    
+
+                });
+            };
+
+            _settings = new SettingsService();
+            var SettingsView = new SettingsView(_settings);
+            _legacyLauncher = new LegacyLauncher(_settings);
+            _settings.SettingsChanged += ApplySettings;
+            _legacyLauncher.OnDebug += FlashDbg;
+
+            // 🔥 INSTANCE UNIQUE DES PARAMÈTRES
+            var settingsView = new SettingsView(_settings);
+
+           _startPage.NavigateRequested += url =>
+            {
+                _ = CreateTabInternal(url);
+            };
 
             Loaded += async (_, _) =>
             {
@@ -261,46 +300,12 @@ namespace MyHomelabBrowser
                     }
                 });
                 RefreshProfileUI();
+                OpenInitialTab();
             };
-
-
-           
-
-            _profileService.ProfileChanged += _ =>
-            {
-                _vault.Lock();
-
-                _historyLoaded = false;
-                _favoritesLoaded = false;
-
-                LoadHistory();
-                LoadFavorites();
-
-                Dispatcher.Invoke(() =>
-                {
-                    RefreshProfileUI();
-                    RefreshFavoritesBar();
-                    UpdateFavoriteButton();
-                    
-
-                });
-            };
-
-            _settings = new SettingsService();
-            var SettingsView = new SettingsView(_settings);
-            _legacyLauncher = new LegacyLauncher(_settings);
-            _settings.SettingsChanged += ApplySettings;
-            _legacyLauncher.OnDebug += FlashDbg;
-
-            // 🔥 INSTANCE UNIQUE DES PARAMÈTRES
-            var settingsView = new SettingsView(_settings);
 
             // 🔥 INJECTION DANS L’UI
             SettingsHost.Content = settingsView;
 
-         
-
-           
             PreviewMouseDown += OnGlobalMouseDown;
 
             try
@@ -314,8 +319,6 @@ namespace MyHomelabBrowser
 
             UpdateDownloadsBadge();
 
-            
-
             _historyLoaded = false;
             _favoritesLoaded = false;
 
@@ -323,11 +326,67 @@ namespace MyHomelabBrowser
             LoadFavorites();
             RefreshFavoritesBar();
             UpdateFavoriteButton();
+            
+
+            _startPage.SetHistory(_history);
 
             // start page
-            CreateTab(_settings.Settings.StartPage);
+            //CreateTab(_settings.Settings.StartPage);
+
         }
-       
+
+        static readonly DependencyProperty CachedTabPreviewProperty =
+    DependencyProperty.RegisterAttached(
+        "CachedTabPreview",
+        typeof(BitmapSource),
+        typeof(MainWindow),
+        new PropertyMetadata(null)
+    );
+        static async System.Threading.Tasks.Task CaptureAndCachePreviewAsync(TabItem tab, WebView2 web)
+        {
+            if (tab == null || web?.CoreWebView2 == null)
+                return;
+
+            // WebView2 pas visible => capture noire
+            if (!web.IsVisible)
+                return;
+
+            try
+            {
+                using var stream = new MemoryStream();
+                await web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
+
+                stream.Position = 0;
+
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.StreamSource = stream;
+                bmp.EndInit();
+                bmp.Freeze();
+
+                SetCachedTabPreview(tab, bmp);
+
+                // si le tooltip est déjà visible, on refresh
+                if (tab.ToolTip is Border b)
+                {
+                    if (b.Child is Image img)
+                        img.Source = bmp;
+                }
+
+                TabPreviewState.SetLastCaptureAt(tab, DateTime.Now);
+            }
+            catch
+            {
+                // jamais casser la nav
+            }
+        }
+
+        static void SetCachedTabPreview(TabItem tab, BitmapSource? bmp)
+            => tab.SetValue(CachedTabPreviewProperty, bmp);
+
+        static BitmapSource? GetCachedTabPreview(TabItem tab)
+            => tab.GetValue(CachedTabPreviewProperty) as BitmapSource;
 
         private async Task LoadRemoteChangelogAsync()
         {
@@ -348,18 +407,7 @@ namespace MyHomelabBrowser
             }
         }
 
-        private string LoadChangelogJson()
-        {
-            var path = System.IO.Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
-                "changelog.json"
-            );
-
-            if (!File.Exists(path))
-                return "{}";
-
-            return File.ReadAllText(path);
-        }
+        
 
         void SwitchProfile_Click(object sender, RoutedEventArgs e)
         {
@@ -784,69 +832,7 @@ namespace MyHomelabBrowser
 
 
 
-        private static string FormatChangelogJson(string json)
-        {
-            if (string.IsNullOrWhiteSpace(json))
-                return "Aucun changelog disponible.";
-
-            Dictionary<string, List<string>>? dict;
-            try
-            {
-                dict = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(json);
-            }
-            catch
-            {
-                return "Erreur lors de la lecture du changelog.";
-            }
-
-            if (dict == null || dict.Count == 0)
-                return "Aucun changelog disponible.";
-
-            // 🔥 parse + tri DESC (toutes les versions)
-            var all = dict
-                .Select(kv =>
-                {
-                    var ok = Version.TryParse(kv.Key, out var v);
-                    return new
-                    {
-                        VersionText = kv.Key,
-                        Items = kv.Value ?? new List<string>(),
-                        Parsed = ok ? v : null
-                    };
-                })
-                .Where(x => x.Parsed != null)
-                .OrderByDescending(x => x.Parsed)
-                .ToList();
-
-            if (all.Count == 0)
-                return "Aucun changelog valide.";
-
-            var sb = new StringBuilder();
-
-            foreach (var v in all)
-            {
-                sb.AppendLine($"Version {v.VersionText}");
-                sb.AppendLine(new string('─', 12 + v.VersionText.Length));
-
-                if (v.Items.Count == 0)
-                {
-                    sb.AppendLine("• (Aucun détail)");
-                }
-                else
-                {
-                    foreach (var line in v.Items)
-                    {
-                        if (!string.IsNullOrWhiteSpace(line))
-                            sb.AppendLine("• " + line.Trim());
-                    }
-                }
-
-                sb.AppendLine();
-            }
-
-            return sb.ToString().TrimEnd();
-        }
-
+       
 
 
 
@@ -1534,10 +1520,21 @@ namespace MyHomelabBrowser
                 if (child is T t)
                     return t;
 
-                child = VisualTreeHelper.GetParent(child);
+                // Si on est dans le Visual Tree
+                if (child is Visual || child is System.Windows.Media.Media3D.Visual3D)
+                {
+                    child = VisualTreeHelper.GetParent(child);
+                }
+                // Sinon (Run, Span, Inline, etc.) → Logical Tree
+                else
+                {
+                    child = LogicalTreeHelper.GetParent(child);
+                }
             }
+
             return null;
         }
+
 
         void OnGlobalMouseDown(object sender, MouseButtonEventArgs e)
         {
@@ -2228,13 +2225,19 @@ namespace MyHomelabBrowser
             _envByProfile[profileId] = env;
             return env;
         }
+
+
         void CreateTab(string url)
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            if (string.IsNullOrWhiteSpace(url))
             {
-                _ = CreateTabInternal(url);
-            });
+                CreateEmptyStartTab();
+                return;
+            }
+
+            _ = CreateTabInternal(url);
         }
+
         void UpdateFillCredentialButtonState()
         {
             try
@@ -2268,6 +2271,41 @@ namespace MyHomelabBrowser
             }
             catch { }
         }
+        void CreateEmptyStartTab()
+        {
+            var view = new EmptyStartPage();
+
+            // 🔥 OBLIGATOIRE : brancher CE QUI EST AFFICHÉ
+            view.SetHistory(_history);
+            view.NavigateRequested += url =>
+            {
+                _ = CreateTabInternal(url);
+            };
+
+            var header = new BrowserTabHeader();
+            header.SetTitle("Accueil");
+            header.SetIcon(new BitmapImage(new Uri("pack://application:,,,/Assets/logo.png", UriKind.Absolute)));
+            var tab = new TabItem
+            {
+                Header = header,
+                Tag = new ViewTabContent { View = view }
+            };
+
+            Tabs.Items.Add(tab);
+            Tabs.SelectedItem = tab;
+            SyncWebHostWithSelection();
+
+            header.CloseRequested += () => CloseTab(tab);
+            header.DetachRequested += () =>
+            {
+                if (_isDocking) return;
+                DetachTab(tab);
+            };
+        }
+
+
+
+
 
 
         async Task CreateTabInternal(string url)
@@ -2382,17 +2420,19 @@ namespace MyHomelabBrowser
             };
             web.NavigationCompleted += async (_, _) =>
             {
-               
-                try
+                try { await HandleFlashAsync(web, content, header, overlay); } catch { }
+
+                await Dispatcher.InvokeAsync(() => AttachPreview(tab, web));
+
+                // ✅ Warm cache si visible (onglet actif)
+                await Dispatcher.InvokeAsync(async () =>
                 {
-                    await HandleFlashAsync(web, content, header, overlay);
-                }
-                catch { }
-                await Dispatcher.InvokeAsync(() =>
-                {
-                    AttachPreview(tab, web);
+                    // petit délai UI pour être sûr que le frame est rendu
+                    await System.Threading.Tasks.Task.Delay(50);
+                    await CaptureAndCachePreviewAsync(tab, web);
                 });
             };
+
 
             if (web.CoreWebView2 == null)
                 return;
@@ -2573,6 +2613,8 @@ namespace MyHomelabBrowser
             // ===============================
             if (!string.IsNullOrWhiteSpace(url))
                 web.Source = new Uri(url);
+
+
         }
 
 
@@ -2874,9 +2916,18 @@ namespace MyHomelabBrowser
                 }
                 else
                 {
-                    // Web normal
+                    // Web normal (SAFE)
                     webTab.HostGrid.Children.Clear();
-                    webTab.HostGrid.Children.Add(webTab.Web);
+
+                    if (webTab.Web != null)
+                    {
+                        webTab.HostGrid.Children.Add(webTab.Web);
+                    }
+                    else
+                    {
+                        webTab.HostGrid.Children.Add(CreateSuspendedPlaceholder(tab, webTab));
+                    }
+
                 }
 
                 // ---------------------------
@@ -3000,18 +3051,51 @@ namespace MyHomelabBrowser
 
 
 
+        void OpenInitialTab()
+            {
+                switch (_settings.Settings.Startup)
+                {
+                    case StartupMode.EmptyTab:
+                        CreateEmptyStartTab();
+                        break;
+
+                    case StartupMode.CustomPage:
+                        if (!string.IsNullOrWhiteSpace(_settings.Settings.StartPage))
+                            _ = CreateTabInternal(_settings.Settings.StartPage);
+                        else
+                            CreateEmptyStartTab();
+                        break;
+
+                    case StartupMode.RestoreSession:
+                        _ = RestoreSessionIfAnyAsync();
+                        break;
+                }
+            }
+
+        
+
+
+        string GetNewTabUrl()
+        {
+            // si tu veux ta page vide custom
+            return string.IsNullOrWhiteSpace(_settings.Settings.NewTabPage)
+                ? "about:blank"
+                : _settings.Settings.NewTabPage;
+        }
 
 
 
         private void NewTab_Click(object sender, RoutedEventArgs e)
-            => CreateTab(GetNewTabUrl());
-
-        string GetNewTabUrl()
         {
-            return _settings.Settings.NewTabPage?.Trim() is string url && url.Length > 0
-                ? url
-                : "about:blank";
+            var url = _settings.Settings.NewTabPage;
+
+            if (string.IsNullOrWhiteSpace(url) || url == "about:blank")
+                CreateEmptyStartTab();
+            else
+                _ = CreateTabInternal(url);
         }
+
+
 
         // ---------------------------
         // Favorites bar + star button (safe until XAML exists)
@@ -3213,17 +3297,34 @@ namespace MyHomelabBrowser
         {
             if (FavoriteButton == null) return;
 
-            if (Tabs.SelectedItem is not TabItem tab ||
-                tab.Tag is not WebTabContent web ||
+            if (Tabs.SelectedItem is not TabItem tab)
+            {
+                FavoriteButton.Foreground = Brushes.Gray;
+                return;
+            }
+
+            // ✅ si c’est un onglet View (EmptyStartPage / Settings / ReportIssue)
+            if (tab.Tag is ViewTabContent)
+            {
+                FavoriteButton.Foreground = Brushes.Gray;
+                return;
+            }
+
+            if (tab.Tag is not WebTabContent web ||
+                web.Web == null ||
                 web.Web.Source == null)
             {
                 FavoriteButton.Foreground = Brushes.Gray;
                 return;
             }
 
-            bool isFav = _favorites.Any(f => string.Equals(f.Url, web.Web.Source.AbsoluteUri, StringComparison.OrdinalIgnoreCase));
+            bool isFav = _favorites.Any(f =>
+                string.Equals(f.Url, web.Web.Source.AbsoluteUri, StringComparison.OrdinalIgnoreCase));
+
             FavoriteButton.Foreground = isFav ? Brushes.Gold : Brushes.Gray;
         }
+
+
 
         private void ToggleFavorite_Click(object sender, RoutedEventArgs e)
         {
@@ -3274,138 +3375,7 @@ namespace MyHomelabBrowser
         // ---------------------------
         // History
         // ---------------------------
-        void AddHistoryEntry(WebView2 web)
-        {
-            if (Tabs.SelectedItem is TabItem tab &&
-                tab.Tag is WebTabContent state &&
-                state.IsPrivate)
-                return;
-
-            // 🚫 navigation issue de l’historique → ne pas réenregistrer
-            if (_navigatingFromHistory)
-            {
-                _navigatingFromHistory = false;
-                return;
-            }
-
-            if (web.Source == null)
-                return;
-
-            string url = web.Source.AbsoluteUri;
-            var now = DateTime.Now;
-
-            // --------------------------------------------------
-            // 🚫 FILTRAGE URL TRACKING / REDIRECT (SANS RÉGRESSION)
-            // --------------------------------------------------
-            try
-            {
-                Uri u;
-                try
-                {
-                    u = new Uri(url);
-
-                    // schémas non web
-                    if (u.Scheme != Uri.UriSchemeHttp &&
-                        u.Scheme != Uri.UriSchemeHttps)
-                        return;
-                }
-                catch
-                {
-                    return;
-                }
-
-                // --------------------------------------------------
-                // 🧹 NETTOYAGE PARAMÈTRES TRACKING (AU LIEU DE BLOQUER)
-                // --------------------------------------------------
-                var qb = System.Web.HttpUtility.ParseQueryString(u.Query);
-                bool hadTracking = false;
-
-                string[] trackingKeys =
-                {
-    "gfsid",
-    "gad_source",
-    "gad_campaignid",
-    "gclid",
-    "gbraid",
-    "wbraid"
-};
-
-                foreach (var key in trackingKeys)
-                {
-                    if (qb[key] != null)
-                    {
-                        qb.Remove(key);
-                        hadTracking = true;
-                    }
-                }
-
-                // supprime TOUS les utm_*
-                foreach (string key in qb.AllKeys.ToArray())
-                {
-                    if (key != null && key.StartsWith("utm_", StringComparison.OrdinalIgnoreCase))
-                    {
-                        qb.Remove(key);
-                        hadTracking = true;
-                    }
-                }
-
-                if (hadTracking)
-                {
-                    u = new UriBuilder(u)
-                    {
-                        Query = qb.ToString() ?? ""
-                    }.Uri;
-
-                    url = u.AbsoluteUri;
-                }
-
-            }
-            catch
-            {
-                // URL bizarre → on laisse passer (pas de crash)
-            }
-
-            // --------------------------------------------------
-            // ⛔ ANTI-SPAM (même URL rapprochée)
-            // --------------------------------------------------
-            if (string.Equals(url, _lastHistoryUrl, StringComparison.OrdinalIgnoreCase) &&
-                (now - _lastHistoryAt) < TimeSpan.FromSeconds(3))
-                return;
-
-            _lastHistoryUrl = url;
-            _lastHistoryAt = now;
-
-            // --------------------------------------------------
-            // ➕ AJOUT HISTORIQUE (RAM)
-            // --------------------------------------------------
-            _history.Add(new HistoryEntry
-            {
-                Title = web.CoreWebView2?.DocumentTitle ?? web.Source.Host,
-                Url = url,
-                VisitedAt = now
-            });
-
-            // limiter taille (évite gonflement infini)
-            const int max = 5000;
-            if (_history.Count > max)
-                _history.RemoveRange(0, _history.Count - max);
-
-            // --------------------------------------------------
-            // 💾 SAVE SEULEMENT QUAND LA NAVIGATION EST IDLE
-            // --------------------------------------------------
-            HistoryNavigationIdleSave.RequestIdleSave(this, SaveHistory, 2500);
-        }
-
-
-
-        // ---------------------------
-        // Persist (JSON)
-        // ---------------------------
-        void EnsureAppDataDir()
-        {
-            if (!Directory.Exists(AppDataDir))
-                Directory.CreateDirectory(AppDataDir);
-        }
+        
 
         void LoadHistory()
         {
@@ -4316,12 +4286,32 @@ namespace MyHomelabBrowser
                 if (web.CoreWebView2 == null)
                     return;
 
-                // ✅ cooldown: max 1 capture / 2s
+                // Tooltip content (Image) créé une fois
+                if (tab.ToolTip is Border bb && bb.Child == null)
+                {
+                    bb.Child = new Image
+                    {
+                        Width = 320,
+                        Height = 200,
+                        Stretch = Stretch.UniformToFill
+                    };
+                }
+
+                // 1) Affiche immédiatement le cache si présent
+                var cached = GetCachedTabPreview(tab);
+                if (cached != null && tab.ToolTip is Border b1 && b1.Child is Image img1)
+                    img1.Source = cached;
+
+                // 2) si le WebView n'est PAS visible => ne pas capturer (sinon noir)
+                if (!web.IsVisible)
+                    return;
+
+                // 3) cooldown : max 1 capture / 2s
                 var last = TabPreviewState.GetLastCaptureAt(tab);
                 if ((DateTime.Now - last) < TimeSpan.FromSeconds(2))
                     return;
 
-                // ✅ annule ancien job
+                // 4) annule ancien job
                 var old = TabPreviewState.GetCts(tab);
                 if (old != null)
                 {
@@ -4334,51 +4324,18 @@ namespace MyHomelabBrowser
 
                 try
                 {
-                    // ✅ hover delay : si tu passes juste dessus, pas de capture
                     await System.Threading.Tasks.Task.Delay(180, cts.Token);
-
                     if (cts.IsCancellationRequested || web.CoreWebView2 == null)
                         return;
 
-                    var preview = new Image
-                    {
-                        Width = 320,
-                        Height = 200,
-                        Stretch = System.Windows.Media.Stretch.UniformToFill
-                    };
-
-                    using var stream = new System.IO.MemoryStream();
-                    await web.CoreWebView2.CapturePreviewAsync(
-                        Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png,
-                        stream);
-
-                    if (cts.IsCancellationRequested)
-                        return;
-
-                    stream.Position = 0;
-
-                    var bmp = new System.Windows.Media.Imaging.BitmapImage();
-                    bmp.BeginInit();
-                    bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                    bmp.StreamSource = stream;
-                    bmp.EndInit();
-                    bmp.Freeze();
-
-                    preview.Source = bmp;
-
-                    // ✅ écrit dans le tooltip existant (border)
-                    if (tab.ToolTip is Border b)
-                        b.Child = preview;
-
-                    TabPreviewState.SetLastCaptureAt(tab, DateTime.Now);
+                    // Capture + cache (et refresh tooltip si visible)
+                    await CaptureAndCachePreviewAsync(tab, web);
                 }
                 catch
                 {
-                    // silencieux (preview ne doit JAMAIS casser la navigation)
                 }
                 finally
                 {
-                    // ✅ cleanup token
                     var cur = TabPreviewState.GetCts(tab);
                     if (ReferenceEquals(cur, cts))
                     {
@@ -4387,6 +4344,7 @@ namespace MyHomelabBrowser
                     }
                 }
             };
+
         }
 
 
@@ -5615,7 +5573,7 @@ namespace MyHomelabBrowser
             public bool FlashRequired { get; set; }
             public bool? LastFlashButtonVisible { get; set; }
             public FlashMode? LastFlashMode { get; set; }
-            public Grid HostGrid { get; } = new Grid();
+            public Grid HostGrid { get; set; } = new Grid();
             public bool IsLegacyLaunching { get; set; }
             public string? LegacyLastError { get; set; }
             public LegacyFlashView? LegacyView { get; set; }

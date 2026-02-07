@@ -281,7 +281,6 @@ namespace MyHomelabBrowser
         {
             OpenHistoryRequested?.Invoke();
         }
-
         void RefreshFlashRules()
         {
             if (FlashLegacyList == null)
