@@ -6,7 +6,29 @@
         Height="800"
         Background="#1E1E1E">
 
+
     <Grid>
-        <ContentPresenter x:Name="Host"/>
+        <DockPanel LastChildFill="True">
+
+            <!-- Barre simple -->
+            <Border DockPanel.Dock="Top"
+                Height="32"
+                Background="#222"
+                MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+
+                <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right">
+
+                    <Button Content="↩ Rattacher"
+                        Margin="6,0"
+                        Padding="6,0"
+                        Click="Redock_Click"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Host WebView -->
+            <ContentControl x:Name="Host"/>
+        </DockPanel>
     </Grid>
+
 </Window>

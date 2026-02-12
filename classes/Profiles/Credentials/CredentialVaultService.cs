@@ -16,29 +16,38 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             PropertyNameCaseInsensitive = true
         };
 
-        readonly Func<string> _getVaultPath; // dépend du profil (AppDataContext.Root)
+        readonly Func<string> _getVaultPath;
         readonly List<CredentialEntry> _cache = new();
-        public bool IsSessionUnlocked { get; private set; }
+
+        byte[]? _key;     // clé AES du VAULT en mémoire
+        byte[]? _salt;    // salt du VAULT (persisté dans l'enveloppe)
+        public bool IsUnlocked => _key != null;
+        public bool VaultExists => File.Exists(_getVaultPath());
+
+        // anti bruteforce simple (mémoire)
+        int _failedUnlocks;
+        DateTime _lockedUntilUtc;
+
         static HashSet<string> _knownHosts = new();
         static Func<string> _getVaultPathStatic = null!;
 
-
-        byte[]? _key; // clé AES en mémoire uniquement (après unlock)
-        public bool IsUnlocked => _key != null;
+        public bool IsSessionUnlocked { get; private set; }
 
         public CredentialVaultService(Func<string> getVaultPath)
         {
             _getVaultPath = getVaultPath;
             _getVaultPathStatic = getVaultPath;
         }
+
         static readonly HashSet<string> TwoPartTlds = new(StringComparer.OrdinalIgnoreCase)
-{
-    "co.uk", "org.uk", "gov.uk", "ac.uk",
-    "com.au", "net.au", "org.au",
-    "co.jp", "ne.jp", "or.jp",
-    "com.br", "com.ar",
-    "co.in", "com.tr"
-};
+        {
+            "co.uk", "org.uk", "gov.uk", "ac.uk",
+            "com.au", "net.au", "org.au",
+            "co.jp", "ne.jp", "or.jp",
+            "com.br", "com.ar",
+            "co.in", "com.tr"
+        };
+
         public void ReloadForCurrentProfile()
         {
             _knownHosts.Clear();
@@ -50,7 +59,6 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             host = (host ?? "").Trim().ToLowerInvariant();
             if (host.StartsWith("www.")) host = host[4..];
 
-            // IP / localhost
             if (host == "localhost" || host.All(c => char.IsDigit(c) || c == '.'))
                 return host;
 
@@ -60,18 +68,13 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
 
             var last2 = parts[^2] + "." + parts[^1];
 
-            // ex: something.co.uk => keep last3
             if (TwoPartTlds.Contains(last2) && parts.Length >= 3)
                 return parts[^3] + "." + last2;
 
-            // default: eTLD+1 simple
             return last2;
         }
 
-        
-
-
-        private void LoadHostIndex()
+        void LoadHostIndex()
         {
             _knownHosts.Clear();
 
@@ -81,35 +84,27 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
 
             try
             {
-                var hosts = JsonSerializer.Deserialize<HashSet<string>>(
-                    File.ReadAllText(indexPath)
-                );
-
+                var hosts = JsonSerializer.Deserialize<HashSet<string>>(File.ReadAllText(indexPath));
                 if (hosts != null)
                 {
                     _knownHosts.Clear();
                     foreach (var h in hosts)
                         _knownHosts.Add(h);
-
                 }
             }
-            catch
-            {
-                // index corrompu → on ignore
-            }
+            catch { }
         }
 
         public void Lock()
         {
             _key = null;
+            _salt = null;
             _cache.Clear();
             IsSessionUnlocked = false;
         }
-        public bool HasCredentialForHost(string host)
-        {
-            return _knownHosts.Contains(NormalizeSiteKey(host));
-        }
 
+        public bool HasCredentialForHost(string host)
+            => _knownHosts.Contains(NormalizeSiteKey(host));
 
         public void RebuildHostIndexFromCache()
         {
@@ -121,53 +116,69 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             var indexPath = Path.ChangeExtension(_getVaultPath(), ".index.json");
             File.WriteAllText(indexPath, JsonSerializer.Serialize(_knownHosts, JsonOpts));
         }
-       
-        public bool TryUnlock(string profilePassword)
+
+        // =====================================================
+        // VAULT: INIT / UNLOCK / CHANGE PASSWORD (INDÉPENDANT)
+        // =====================================================
+
+        public bool TryInitializeNewVault(string vaultPassword)
         {
             try
             {
                 var path = _getVaultPath();
+                if (File.Exists(path))
+                    return true;
 
-                // ===============================
-                // 1️⃣ Vault inexistant → créer un vault vide MAIS COHÉRENT
-                // ===============================
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+                _salt = RandomNumberGenerator.GetBytes(16);
+                _key = DeriveKey(vaultPassword, _salt, out _);
+
+                var emptyList = new List<CredentialEntry>();
+                var json = JsonSerializer.Serialize(emptyList, JsonOpts);
+
+                var env = VaultEnvelope.CreateFromPlaintext(json, _key, _salt);
+                File.WriteAllBytes(path, env.Serialize());
+
+                _cache.Clear();
+                IsSessionUnlocked = true;
+
+                _failedUnlocks = 0;
+                _lockedUntilUtc = DateTime.MinValue;
+
+                return true;
+            }
+            catch
+            {
+                Lock();
+                return false;
+            }
+        }
+
+        public bool TryUnlock(string vaultPassword)
+        {
+            // anti bruteforce (mémoire)
+            var now = DateTime.UtcNow;
+            if (now < _lockedUntilUtc)
+                return false;
+
+            try
+            {
+                var path = _getVaultPath();
                 if (!File.Exists(path))
                 {
-                    var salt = RandomNumberGenerator.GetBytes(16);
-
-                    // 🔑 clé dérivée AVEC le salt
-                    _key = DeriveKey(profilePassword, salt, out _);
-
-                    var emptyList = new List<CredentialEntry>();
-                    var json = JsonSerializer.Serialize(emptyList, JsonOpts);
-
-                    var env = VaultEnvelope.CreateFromPlaintext(
-                        json,
-                        _key,
-                        salt
-                    );
-
-                    File.WriteAllBytes(path, env.Serialize());
-
-                    _cache.Clear();
-                    IsSessionUnlocked = true;
-                    return true;
+                    // pas de vault => pas d'unlock ici
+                    Lock();
+                    return false;
                 }
 
-                // ===============================
-                // 2️⃣ Vault existant → unlock normal
-                // ===============================
                 var bytes = File.ReadAllBytes(path);
-                var envExisting = VaultEnvelope.Deserialize(bytes);
+                var env = VaultEnvelope.Deserialize(bytes);
 
-                // 🔑 clé dérivée AVEC le salt stocké
-                _key = DeriveKey(profilePassword, envExisting.Salt, out _);
+                _salt = env.Salt;
+                _key = DeriveKey(vaultPassword, env.Salt, out _);
 
-                var decryptedJson = DecryptToString(
-                    _key,
-                    envExisting.Nonce,
-                    envExisting.Ciphertext
-                );
+                var decryptedJson = DecryptToString(_key, env.Nonce, env.Ciphertext);
 
                 var list = JsonSerializer.Deserialize<List<CredentialEntry>>(decryptedJson, JsonOpts)
                            ?? new List<CredentialEntry>();
@@ -177,16 +188,63 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                 RebuildHostIndexFromCache();
 
                 IsSessionUnlocked = true;
+
+                // reset bruteforce
+                _failedUnlocks = 0;
+                _lockedUntilUtc = DateTime.MinValue;
+
                 return true;
             }
             catch
             {
-                _key = null;
-                _cache.Clear();
-                IsSessionUnlocked = false;
+                RegisterUnlockFail();
+                Lock();
                 return false;
             }
         }
+
+        public bool TryChangeVaultPassword(string currentVaultPassword, string newVaultPassword)
+        {
+            try
+            {
+                if (!TryUnlock(currentVaultPassword))
+                    return false;
+
+                // nouveau salt + nouvelle clé (meilleure hygiène)
+                var newSalt = RandomNumberGenerator.GetBytes(16);
+                var newKey = DeriveKey(newVaultPassword, newSalt, out _);
+
+                _salt = newSalt;
+                _key = newKey;
+
+                Save(); // réécrit l'enveloppe avec newSalt/newKey
+                RebuildHostIndexFromCache();
+
+                IsSessionUnlocked = true;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        void RegisterUnlockFail()
+        {
+            _failedUnlocks++;
+
+            // délai progressif à partir de 3 échecs, cap 60s
+            if (_failedUnlocks >= 3)
+            {
+                var pow = Math.Min(_failedUnlocks - 3, 6); // 2^0..2^6
+                var delaySeconds = Math.Min(60, 1 << pow);
+                _lockedUntilUtc = DateTime.UtcNow.AddSeconds(delaySeconds);
+            }
+        }
+
+        // =====================================================
+        // DATA
+        // =====================================================
 
         public IReadOnlyList<CredentialEntry> GetAll()
             => _cache.OrderByDescending(x => x.UpdatedAt).ToList();
@@ -204,8 +262,10 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
 
             host = NormalizeSiteKey(host);
 
+            var existing = _cache.FirstOrDefault(x =>
+                NormalizeHost(x.Host) == host &&
+                string.Equals(x.Username, username, StringComparison.OrdinalIgnoreCase));
 
-            var existing = _cache.FirstOrDefault(x => NormalizeHost(x.Host) == host && string.Equals(x.Username, username, StringComparison.OrdinalIgnoreCase));
             if (existing == null)
             {
                 existing = new CredentialEntry
@@ -217,7 +277,6 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                     UpdatedAt = DateTime.UtcNow,
                     AlwaysSave = alwaysSave,
                     NeverSave = neverSave
-
                 };
                 _cache.Add(existing);
             }
@@ -232,21 +291,16 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
 
             Save();
             UpdateHostIndex(host);
-
         }
+
         void UpdateHostIndex(string host)
         {
             host = NormalizeSiteKey(host);
             _knownHosts.Add(host);
 
             var indexPath = Path.ChangeExtension(_getVaultPath(), ".index.json");
-            File.WriteAllText(
-                indexPath,
-                JsonSerializer.Serialize(_knownHosts, JsonOpts)
-            );
+            File.WriteAllText(indexPath, JsonSerializer.Serialize(_knownHosts, JsonOpts));
         }
-
-
 
         public void Delete(string host, string username)
         {
@@ -264,26 +318,14 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
 
         void Save()
         {
-            if (_key == null)
-                throw new InvalidOperationException("Vault verrouillé.");
+            if (_key == null || _salt == null || _salt.Length == 0)
+                throw new InvalidOperationException("Vault verrouillé ou salt manquant.");
 
             var json = JsonSerializer.Serialize(_cache, JsonOpts);
 
-            // Si c'est un nouveau vault : créer un salt persistant dans l'enveloppe
+            var env = VaultEnvelope.CreateFromPlaintext(json, _key, _salt);
+
             var path = _getVaultPath();
-            VaultEnvelope env;
-
-            if (File.Exists(path))
-            {
-                // garder le salt existant
-                var old = VaultEnvelope.Deserialize(File.ReadAllBytes(path));
-                env = VaultEnvelope.CreateFromPlaintext(json, _key, old.Salt);
-            }
-            else
-            {
-                env = VaultEnvelope.CreateFromPlaintext(json, _key, salt: null);
-            }
-
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllBytes(path, env.Serialize());
         }
@@ -295,9 +337,9 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             return host;
         }
 
-        static byte[] DeriveKey(string password, byte[]? salt, out byte[] usedSalt)
+        static byte[] DeriveKey(string password, byte[] salt, out byte[] usedSalt)
         {
-            usedSalt = salt ?? RandomNumberGenerator.GetBytes(16);
+            usedSalt = salt;
 
             using var pbkdf2 = new Rfc2898DeriveBytes(
                 password,
@@ -305,12 +347,11 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                 200_000,
                 HashAlgorithmName.SHA256);
 
-            return pbkdf2.GetBytes(32); // AES-256
+            return pbkdf2.GetBytes(32);
         }
 
         static string DecryptToString(byte[] key, byte[] nonce, byte[] ciphertext)
         {
-            // ciphertext = TAG(16) + DATA
             var tag = ciphertext[..16];
             var data = ciphertext[16..];
 
@@ -331,7 +372,6 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             using var aes = new AesGcm(key);
             aes.Encrypt(nonce, plaintextUtf8, cipher, tag);
 
-            // store TAG + DATA
             return tag.Concat(cipher).ToArray();
         }
 
@@ -343,7 +383,6 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
 
             public byte[] Serialize()
             {
-                // format binaire minimal : [saltLen][salt][nonceLen][nonce][ctLen][ct]
                 using var ms = new MemoryStream();
                 using var bw = new BinaryWriter(ms);
 
@@ -371,28 +410,14 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                 return new VaultEnvelope { Salt = salt, Nonce = nonce, Ciphertext = ct };
             }
 
-          
-
-
-            public static VaultEnvelope CreateFromPlaintext(string json, byte[] key, byte[]? salt)
+            public static VaultEnvelope CreateFromPlaintext(string json, byte[] key, byte[] salt)
             {
-                var usedKey = key;
-
-                byte[] usedSalt;
-                if (salt == null || salt.Length == 0)
-                {
-                    usedSalt = RandomNumberGenerator.GetBytes(16);
-                }
-                else usedSalt = salt;
-
-                // IMPORTANT : le key fourni doit déjà être dérivé avec usedSalt côté caller
-                // Ici on ne redérive pas, on chiffre juste.
                 var plain = Encoding.UTF8.GetBytes(json);
-                var ct = EncryptFromString(usedKey, plain, out var nonce);
+                var ct = EncryptFromString(key, plain, out var nonce);
 
                 return new VaultEnvelope
                 {
-                    Salt = usedSalt,
+                    Salt = salt,
                     Nonce = nonce,
                     Ciphertext = ct
                 };

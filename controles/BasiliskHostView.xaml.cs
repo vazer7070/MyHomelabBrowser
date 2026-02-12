@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 
 namespace MyHomelabBrowser.controles
 {
@@ -9,6 +10,9 @@ namespace MyHomelabBrowser.controles
         public event Action? RetryRequested;
         public event Action? SettingsRequested;
         public ExternalWindowDock? GetHost() => Host;
+        private bool _attachScheduled;
+        private DispatcherTimer? _pendingAttachTimer;
+        private int _pendingAttachTicks;
 
 
         private IntPtr _pendingHwnd = IntPtr.Zero;
@@ -30,7 +34,7 @@ namespace MyHomelabBrowser.controles
                     _pendingHwnd = IntPtr.Zero;
                 }
             };
-
+            
             Unloaded += (_, _) =>
             {
                 try { Host.DetachExternalWindow(); } catch { }
@@ -53,19 +57,33 @@ namespace MyHomelabBrowser.controles
 
         public void AttachExternalWindow(IntPtr hwnd)
         {
-            MessageBox.Show("BasiliskHostView.AttachExternalWindow called");
-
-            if (hwnd == IntPtr.Zero) return;
-
-            if (!IsLoaded)
-            {
-                _pendingHwnd = hwnd;
+            if (hwnd == IntPtr.Zero)
                 return;
-            }
 
-            Host.Attach(hwnd);
-            _pendingHwnd = IntPtr.Zero;
+            _pendingHwnd = hwnd;
+
+            if (_attachScheduled)
+                return;
+
+            _attachScheduled = true;
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _attachScheduled = false;
+
+                if (_pendingHwnd == IntPtr.Zero)
+                    return;
+
+                // CONDITION UNIQUE ET SUFFISANTE
+                if (!IsVisible || Host.HostHandle == IntPtr.Zero)
+                    return;
+
+                Host.Attach(_pendingHwnd);
+                _pendingHwnd = IntPtr.Zero;
+
+            }), DispatcherPriority.ContextIdle);
         }
+
 
         public void DetachExternalWindow()
         {

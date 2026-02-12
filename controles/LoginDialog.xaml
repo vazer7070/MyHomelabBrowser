@@ -10,31 +10,46 @@
         AllowsTransparency="True"
         Background="Transparent">
 
-    <Border Padding="20"
-            Width="360"
-            Background="#1E1E1E"
-            CornerRadius="12">
+    <Border Padding="30"
+            Width="420"
+            Background="#1C1C1C"
+            CornerRadius="16"
+            BorderBrush="#2E2E2E"
+            BorderThickness="1">
 
         <StackPanel>
+
+            <!-- ===== TITRE ===== -->
             <TextBlock Text="Connexion"
                        Foreground="White"
-                       FontSize="18"
+                       FontSize="22"
                        FontWeight="SemiBold"
-                       Margin="0,0,0,12"/>
+                       Margin="0,0,0,24"/>
 
-            <!-- Username + watermark -->
+            <!-- ===== USERNAME ===== -->
+            <TextBlock Text="Nom d’utilisateur"
+                       Foreground="#CFCFCF"
+                       FontSize="13"
+                       Margin="0,0,0,6"/>
+
             <Grid>
-                <TextBox x:Name="UsernameBox"
-                         Height="34"
-                         Padding="10,6"
-                         Background="#262626"
-                         Foreground="White"
-                         BorderThickness="0"/>
+                <Border Background="#252525"
+                        CornerRadius="10"
+                        BorderBrush="#343434"
+                        BorderThickness="1">
+                    <TextBox x:Name="UsernameBox"
+                             Height="42"
+                             Padding="14,10"
+                             Background="Transparent"
+                             Foreground="White"
+                             BorderThickness="0"/>
+                </Border>
 
-                <TextBlock Text="Nom d’utilisateur"
-                           Margin="12,0,0,0"
+                <!-- Placeholder -->
+                <TextBlock Text="Entrez votre nom"
+                           Margin="16,0,0,0"
                            VerticalAlignment="Center"
-                           Foreground="#9CA3AF"
+                           Foreground="#6B7280"
                            IsHitTestVisible="False">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
@@ -49,36 +64,100 @@
                 </TextBlock>
             </Grid>
 
-            <PasswordBox x:Name="PasswordBox"
-             Height="34"
-             Padding="10,6"
-             Margin="0,8,0,0"
-             Background="#262626"
-             Foreground="White"
-             BorderThickness="1"
-             BorderBrush="#3A3A3A">
-                <PasswordBox.RenderTransform>
-                    <TranslateTransform x:Name="PasswordShakeTransform"/>
-                </PasswordBox.RenderTransform>
-            </PasswordBox>
+            <!-- ===== PASSWORD ===== -->
+            <TextBlock Text="Mot de passe"
+                       Foreground="#CFCFCF"
+                       FontSize="13"
+                       Margin="0,18,0,6"/>
 
+            <Border Background="#252525"
+                    CornerRadius="10"
+                    BorderBrush="#343434"
+                    BorderThickness="1">
 
+                <PasswordBox x:Name="PasswordBox"
+                             Height="42"
+                             Padding="14,10"
+                             Background="Transparent"
+                             Foreground="White"
+                             BorderThickness="0">
+
+                    <PasswordBox.RenderTransform>
+                        <TranslateTransform x:Name="PasswordShakeTransform"/>
+                    </PasswordBox.RenderTransform>
+
+                </PasswordBox>
+            </Border>
+
+            <!-- ===== ERREUR ===== -->
             <TextBlock x:Name="PasswordErrorText"
-           Text="Mot de passe incorrect"
-           Foreground="#FF6B6B"
-           FontSize="12"
-           Margin="4,4,0,0"
-           Visibility="Collapsed"/>
+                       Text="Mot de passe incorrect"
+                       Foreground="#FF6B6B"
+                       FontSize="12"
+                       Margin="6,6,0,0"
+                       Visibility="Collapsed"/>
 
+            <!-- ===== BOUTONS ===== -->
+            <Grid Margin="0,28,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition/>
+                </Grid.ColumnDefinitions>
 
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-                <Button Content="Annuler" Margin="0,0,8,0" Padding="10,6" Click="Cancel_Click"/>
-                <Button x:Name="LoginButton"
-        Content="Se connecter"
-        Click="Login_Click"
-        IsEnabled="False"/>
+                <!-- Annuler -->
+                <Button Grid.Column="0"
+                        Content="Annuler"
+                        Height="44"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Background="#2A2A2A"
+                        Foreground="#E5E5E5"
+                        BorderBrush="#3A3A3A"
+                        BorderThickness="1"
+                        Cursor="Hand"
+                        Click="Cancel_Click">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="10">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
 
-            </StackPanel>
+                <!-- Se connecter -->
+                <Button Grid.Column="2"
+                        x:Name="LoginButton"
+                        Content="Se connecter"
+                        Height="44"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Background="#3B82F6"
+                        Foreground="White"
+                        BorderBrush="#3B82F6"
+                        BorderThickness="1"
+                        Cursor="Hand"
+                        Click="Login_Click"
+                        IsEnabled="False">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="10">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Grid>
+
         </StackPanel>
     </Border>
 </Window>

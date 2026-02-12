@@ -174,7 +174,7 @@ namespace MyHomelabBrowser
         {
             InitializeComponent();
 
-            
+
             // timers + settings
             _suspendTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
             _suspendTimer.Tick += (_, _) => AutoSuspendTabs();
@@ -254,7 +254,7 @@ namespace MyHomelabBrowser
                     RefreshProfileUI();
                     RefreshFavoritesBar();
                     UpdateFavoriteButton();
-                    
+
 
                 });
             };
@@ -268,7 +268,7 @@ namespace MyHomelabBrowser
             // 🔥 INSTANCE UNIQUE DES PARAMÈTRES
             var settingsView = new SettingsView(_settings);
 
-           _startPage.NavigateRequested += url =>
+            _startPage.NavigateRequested += url =>
             {
                 _ = CreateTabInternal(url);
             };
@@ -314,7 +314,7 @@ namespace MyHomelabBrowser
             }
             catch
             {
-                _updates = null; 
+                _updates = null;
             }
 
             UpdateDownloadsBadge();
@@ -326,7 +326,7 @@ namespace MyHomelabBrowser
             LoadFavorites();
             RefreshFavoritesBar();
             UpdateFavoriteButton();
-            
+
 
             _startPage.SetHistory(_history);
 
@@ -407,7 +407,7 @@ namespace MyHomelabBrowser
             }
         }
 
-        
+
 
         void SwitchProfile_Click(object sender, RoutedEventArgs e)
         {
@@ -426,7 +426,7 @@ namespace MyHomelabBrowser
             if (dlg.ShowDialog() != true)
                 return;
 
-           
+
             _profileService.LoginSilent(profile);
 
             RefreshProfileUI();
@@ -466,7 +466,7 @@ namespace MyHomelabBrowser
                     Width = 24,
                     Height = 24,
                     CornerRadius = new CornerRadius(12),
-                    Background = GetAvatarBrush(username), 
+                    Background = GetAvatarBrush(username),
                     Child = new TextBlock
                     {
                         Text = username.Trim()[0].ToString().ToUpperInvariant(),
@@ -490,10 +490,6 @@ namespace MyHomelabBrowser
                 parent.Items.Add(item);
             }
         }
-
-
-
-
 
 
         void RefreshProfileUI()
@@ -781,7 +777,7 @@ namespace MyHomelabBrowser
             if (_profileService.Current == null)
                 return;
 
-            var dlg = new ProfileSettingsDialog(_profileService)
+            var dlg = new ProfileSettingsDialog(_profileService, _vault)
             {
                 Owner = this
 
@@ -791,16 +787,39 @@ namespace MyHomelabBrowser
                 if (_profileService.Current == null)
                     return;
 
-                // 1) demander le mdp du profil pour unlock vault
+                // 🧠 Si aucun mot de passe vault défini → on le configure
+                if (_profileService.Current.VaultPasswordHash == null ||
+                    _profileService.Current.VaultSalt == null)
+                {
+                    var setup = new LoginDialog(_profileService.Current.Username)
+                    {
+                        Owner = this,
+                        Title = "Définir un mot de passe pour le coffre",
+                        ValidateLogin = (_, newVaultPassword) =>
+                        {
+                            if (string.IsNullOrWhiteSpace(newVaultPassword))
+                                return false;
+
+                            _profileService.SetVaultPassword(newVaultPassword);
+                            return true;
+                        }
+                    };
+
+                    if (setup.ShowDialog() != true)
+                        return;
+                }
+
+                // 🔐 Ensuite seulement → demande mot de passe vault pour déverrouiller
                 var ask = new LoginDialog(_profileService.Current.Username)
                 {
                     Owner = this,
-                    Title = "Déverrouiller les mots de passe",
-                    ValidateLogin = (_, p) =>
+                    Title = "Déverrouiller le coffre des mots de passe",
+                    ValidateLogin = (_, vaultPassword) =>
                     {
-                        // vérif mdp profil (hash/salt)
-                        return _profileService.Current != null && _profileService.VerifyPassword(_profileService.Current, p)
-                               && _vault.TryUnlock(p);
+                        if (!_profileService.TryUnlockVault(vaultPassword))
+                            return false;
+
+                        return _vault.TryUnlock(vaultPassword);
                     }
                 };
 
@@ -811,9 +830,10 @@ namespace MyHomelabBrowser
                 {
                     Owner = this
                 };
-                win.ShowDialog();
 
+                win.ShowDialog();
             };
+
 
 
             dlg.ShowDialog();
@@ -832,7 +852,7 @@ namespace MyHomelabBrowser
 
 
 
-       
+
 
 
 
@@ -956,7 +976,7 @@ namespace MyHomelabBrowser
 
             view.RetryRequested += async () =>
             {
-               Debug.WriteLine("About to call TryAttachBasiliskToViewAsync");
+                Debug.WriteLine("About to call TryAttachBasiliskToViewAsync");
 
                 view.SetStatus("⏳ Nouvelle tentative…");
                 var r = await TryAttachBasiliskToViewAsync(url, view, header);
@@ -982,7 +1002,7 @@ namespace MyHomelabBrowser
         }
 
 
-        
+
 
         async Task<(bool ok, Process? proc)> TryAttachBasiliskToViewAsync(
     Uri url,
@@ -1077,14 +1097,14 @@ namespace MyHomelabBrowser
             return found;
         }
 
-        
+
 
         private void MainWindow_DockTick(object? sender, EventArgs e)
         {
             RefreshLegacyDock();
         }
 
-        
+
 
         void DockBasiliskWindowToTarget(IntPtr hwnd, FrameworkElement target)
         {
@@ -1243,7 +1263,7 @@ namespace MyHomelabBrowser
 
         void SetFlashButton(bool visible, FlashMode mode = FlashMode.Ruffle, WebTabContent content = null)
         {
-            
+
             FlashModeBtn.Visibility = Visibility.Collapsed;
         }
 
@@ -1388,7 +1408,7 @@ namespace MyHomelabBrowser
                     UpdateManualLegacyButton();
                     UpdateNavButtons();
 
-                   
+
                 };
 
                 // ✅ Go !
@@ -2271,37 +2291,63 @@ namespace MyHomelabBrowser
             }
             catch { }
         }
-        void CreateEmptyStartTab()
-        {
-            var view = new EmptyStartPage();
+       void CreateEmptyStartTab()
+{
+    var view = new EmptyStartPage();
 
-            // 🔥 OBLIGATOIRE : brancher CE QUI EST AFFICHÉ
-            view.SetHistory(_history);
-            view.NavigateRequested += url =>
+    view.SetHistory(_history);
+    view.NavigateRequested += url =>
+    {
+        _ = CreateTabInternal(url);
+    };
+
+    var header = new BrowserTabHeader();
+    header.SetTitle("Accueil");
+    header.SetIcon(new BitmapImage(
+        new Uri("pack://application:,,,/Assets/logo.png", UriKind.Absolute)));
+
+            // ✅ UTILISER WebTabContent (même sans WebView)
+            var content = new WebTabContent
             {
-                _ = CreateTabInternal(url);
+                IsCustomView = true,
+                IsPinned = false,
+                IsSuspended = false,
+                LastActivated = DateTime.Now,
+
+                CreateView = () =>
+                {
+                    var view = new EmptyStartPage();
+                    view.SetHistory(_history);
+                    view.NavigateRequested += url => _ = CreateTabInternal(url);
+                    return view;
+                }
             };
 
-            var header = new BrowserTabHeader();
-            header.SetTitle("Accueil");
-            header.SetIcon(new BitmapImage(new Uri("pack://application:,,,/Assets/logo.png", UriKind.Absolute)));
+            content.HostGrid.Children.Add(content.CreateView());
+
+
             var tab = new TabItem
-            {
-                Header = header,
-                Tag = new ViewTabContent { View = view }
-            };
+    {
+        Header = header,
+        Tag = content
+    };
 
-            Tabs.Items.Add(tab);
-            Tabs.SelectedItem = tab;
-            SyncWebHostWithSelection();
+    Tabs.Items.Add(tab);
+    Tabs.SelectedItem = tab;
+    SyncWebHostWithSelection();
 
-            header.CloseRequested += () => CloseTab(tab);
-            header.DetachRequested += () =>
-            {
-                if (_isDocking) return;
-                DetachTab(tab);
-            };
-        }
+    // ✅ brancher EXACTEMENT comme les autres onglets
+    header.CloseRequested += () => CloseTab(tab);
+
+    header.DetachRequested += () =>
+    {
+        if (_isDocking) return;
+        DetachTab(tab);
+    };
+
+    header.ReorderRequested += dir => ReorderTab(tab, dir);
+}
+
 
 
 
@@ -2313,7 +2359,7 @@ namespace MyHomelabBrowser
             var web = new WebView2();
             DownloadHook.Attach(web, isPrivate: false);
 
-           
+
 
             // ===============================
             // 🕒 HISTORIQUE : URL STABILISÉE (PAR ONGLET)
@@ -2624,7 +2670,7 @@ namespace MyHomelabBrowser
             CreatePrivateTab(GetNewTabUrl());
         }
 
-        void AddHistoryEntryFinal(WebView2 web,string url)
+        void AddHistoryEntryFinal(WebView2 web, string url)
         {
             var now = DateTime.Now;
 
@@ -2668,7 +2714,7 @@ namespace MyHomelabBrowser
             var web = new WebView2(); // pas de Source ici
             DownloadHook.Attach(web, isPrivate: true);
 
-            
+
 
 
             var header = new BrowserTabHeader();
@@ -2695,7 +2741,7 @@ namespace MyHomelabBrowser
                 Interval = TimeSpan.FromMilliseconds(800)
             };
 
-           
+
 
             historyDebounce.Tick += (_, _) =>
             {
@@ -2762,7 +2808,7 @@ namespace MyHomelabBrowser
 
 
 
-       
+
 
 
         void AnimatePrivateTransition()
@@ -2917,11 +2963,27 @@ namespace MyHomelabBrowser
                 else
                 {
                     // Web normal (SAFE)
-                    webTab.HostGrid.Children.Clear();
-
                     if (webTab.Web != null)
                     {
-                        webTab.HostGrid.Children.Add(webTab.Web);
+                        if (webTab.HostGrid.Children.Count != 1 ||
+                            !ReferenceEquals(webTab.HostGrid.Children[0], webTab.Web))
+                        {
+                            webTab.HostGrid.Children.Clear();
+                            webTab.HostGrid.Children.Add(webTab.Web);
+                        }
+                    }
+
+                else if (webTab.IsCustomView)
+                    {
+                        // Cas spécial de la page d'accueil custom (sans WebView)
+                        var empty = new EmptyStartPage();
+                        empty.SetHistory(_history);
+                        empty.NavigateRequested += url =>
+                        {
+                            _ = CreateTabInternal(url);
+                        };
+                        webTab.HostGrid.Children.Add(empty);
+
                     }
                     else
                     {
@@ -2973,6 +3035,9 @@ namespace MyHomelabBrowser
 
                 AddressBar.Background = new SolidColorBrush(Color.FromRgb(72, 68, 68));
 
+                // 🔧 FIX CRITIQUE : détacher avant rattachement
+                DetachFromParent(viewTab.View);
+
                 WebHost.Content = viewTab.View;
 
                 UpdateAddressBarFromTab();
@@ -2982,10 +3047,38 @@ namespace MyHomelabBrowser
                 return;
             }
 
+
             WebHost.Content = null;
             PrivateIndicator.Visibility = Visibility.Collapsed;
             FlashModeBtn.Visibility = Visibility.Collapsed;
             UpdateFavoriteButton();
+        }
+        static void DetachFromParent(UIElement element)
+        {
+            if (element == null)
+                return;
+
+            var parent = VisualTreeHelper.GetParent(element);
+
+            if (parent is ContentControl cc)
+            {
+                if (ReferenceEquals(cc.Content, element))
+                    cc.Content = null;
+                return;
+            }
+
+            if (parent is Decorator d)
+            {
+                if (ReferenceEquals(d.Child, element))
+                    d.Child = null;
+                return;
+            }
+
+            if (parent is Panel p)
+            {
+                p.Children.Remove(element);
+                return;
+            }
         }
 
 
@@ -3044,35 +3137,35 @@ namespace MyHomelabBrowser
                     ShowWindow(_legacyDockHwnd, SW_HIDE);
             }
             UpdateManualLegacyButton();
-            UpdateNavButtonsFast(); 
-            
+            UpdateNavButtonsFast();
+
             Dispatcher.BeginInvoke(UpdateFillCredentialButtonState);
         }
 
 
 
         void OpenInitialTab()
+        {
+            switch (_settings.Settings.Startup)
             {
-                switch (_settings.Settings.Startup)
-                {
-                    case StartupMode.EmptyTab:
+                case StartupMode.EmptyTab:
+                    CreateEmptyStartTab();
+                    break;
+
+                case StartupMode.CustomPage:
+                    if (!string.IsNullOrWhiteSpace(_settings.Settings.StartPage))
+                        _ = CreateTabInternal(_settings.Settings.StartPage);
+                    else
                         CreateEmptyStartTab();
-                        break;
+                    break;
 
-                    case StartupMode.CustomPage:
-                        if (!string.IsNullOrWhiteSpace(_settings.Settings.StartPage))
-                            _ = CreateTabInternal(_settings.Settings.StartPage);
-                        else
-                            CreateEmptyStartTab();
-                        break;
-
-                    case StartupMode.RestoreSession:
-                        _ = RestoreSessionIfAnyAsync();
-                        break;
-                }
+                case StartupMode.RestoreSession:
+                    _ = RestoreSessionIfAnyAsync();
+                    break;
             }
+        }
 
-        
+
 
 
         string GetNewTabUrl()
@@ -3375,7 +3468,7 @@ namespace MyHomelabBrowser
         // ---------------------------
         // History
         // ---------------------------
-        
+
 
         void LoadHistory()
         {
@@ -3442,7 +3535,7 @@ namespace MyHomelabBrowser
                 if (items != null)
                 {
                     foreach (var fav in items)
-                        _favorites.Add(fav); 
+                        _favorites.Add(fav);
                 }
 
                 _favoritesLoaded = true;
@@ -3700,7 +3793,7 @@ namespace MyHomelabBrowser
                 try
                 {
                     try { LegacyLauncher.KillAllBasiliskProcesses(); } catch { }
-                    
+
 
                 }
                 catch { }
@@ -3708,21 +3801,22 @@ namespace MyHomelabBrowser
 
             Tabs.Items.Remove(tab);
 
-            
+
             if (wasPrivate && !HasAnyPrivateTab())
             {
-               
+
                 DownloadManager.Instance.ClearPrivateDownloads();
 
-                
+
                 UpdateDownloadsBadge();
             }
 
             if (Tabs.Items.Count == 0)
             {
-                Close();
+                CreateEmptyStartTab();
                 return;
             }
+
 
             if (wasSelected)
                 Tabs.SelectedIndex = Math.Max(0, Tabs.SelectedIndex);
@@ -3761,7 +3855,7 @@ namespace MyHomelabBrowser
 
         void NavigateOrSearch(string input)
         {
-            
+
             if (!input.StartsWith("http", StringComparison.OrdinalIgnoreCase) &&
                 !input.Contains("."))
             {
@@ -4127,27 +4221,36 @@ namespace MyHomelabBrowser
 
             _navigatingFromHistory = fromHistory;
 
-            // 🔹 Si l’onglet courant est un WebView → naviguer dedans
+            // 🔹 Onglet sélectionné ?
             if (Tabs.SelectedItem is TabItem tab &&
                 tab.Tag is WebTabContent state)
             {
-                // ✅ FIX CRITIQUE : cacher l’overlay de l’ancienne page
-                state.FlashOverlay?.Hide();
+                // 🔀 CAS 1 : ONGLET WEB → naviguer dedans
+                if (state.Web != null)
+                {
+                    // ✅ cacher overlay précédent
+                    state.FlashOverlay?.Hide();
 
-                // 🔥 Reset état Flash pour la nouvelle page
-                state.FlashRequired = false;
-                state.FlashChecked = false; 
-                state.FlashMode = FlashMode.None;
+                    // 🔄 reset état Flash
+                    state.FlashRequired = false;
+                    state.FlashChecked = false;
+                    state.FlashMode = FlashMode.None;
 
-                UpdateFlashModeButton(state);
+                    UpdateFlashModeButton(state);
 
-                state.Web.Source = new Uri(url);
+                    state.Web.Source = new Uri(url);
+                    return;
+                }
+
+                // 🔀 CAS 2 : ONGLET CUSTOM → ouvrir un nouvel onglet
+                CreateTab(url);
                 return;
             }
 
-            // 🔹 Sinon (History, Settings, etc.) → nouvel onglet
+            // 🔹 Aucun onglet valide → nouvel onglet
             CreateTab(url);
         }
+
 
 
 
@@ -4348,6 +4451,44 @@ namespace MyHomelabBrowser
         }
 
 
+        void RedockWebTab(WebTabContent state)
+        {
+            EndDockingMode();
+
+            var header = new BrowserTabHeader();
+            header.SetTitle(state.Web?.CoreWebView2?.DocumentTitle ?? "Onglet");
+
+            var tab = new TabItem
+            {
+                Header = header,
+                Tag = state
+            };
+
+            header.CloseRequested += () => CloseTab(tab);
+
+            header.DetachRequested += () =>
+            {
+                if (_isDocking)
+                {
+                    header.ResetVisualState();
+                    return;
+                }
+                DetachTab(tab);
+            };
+
+            header.PinRequested += () =>
+            {
+                state.IsPinned = !state.IsPinned;
+                ApplyPinState(tab, header, state.IsPinned);
+            };
+
+            header.ReorderRequested += dir => ReorderTab(tab, dir);
+
+            Tabs.Items.Add(tab);
+            Tabs.SelectedItem = tab;
+
+            SyncWebHostWithSelection(); // 🔥 Basilisk revient ici
+        }
 
 
         // ---------------------------
@@ -4364,40 +4505,91 @@ namespace MyHomelabBrowser
             if (tab.Tag is not WebTabContent state)
                 return;
 
+            // 🔀 ONGLET CUSTOM
+            if (state.IsCustomView)
+            {
+                Tabs.Items.Remove(tab);
+                OpenDetachedCustomTab(state);
+                return;
+            }
+
+            // 🔀 ONGLET WEB
             var web = state.Web;
+            if (web == null)
+                return;
+
             bool wasSelected = Equals(Tabs.SelectedItem, tab);
 
+            // 1️⃣ Retirer l’onglet de la barre (UI seulement)
             Tabs.Items.Remove(tab);
 
-            BeginDockingMode();
+            // 2️⃣ Créer la fenêtre détachée AVANT de toucher au WebView
+            var win = new DetachedWindow(this, state)   // ✅ on passe state, pas web
+            {
+                Owner = this
+            };
 
-            if (ReferenceEquals(WebHost.Content, web))
+            // ✅ redock = réinjecter le state complet
+            win.RequestRedock = RedockWebTab;
+
+            // 3️⃣ Maintenant seulement, retirer le HostGrid du host principal
+            if (ReferenceEquals(WebHost.Content, state.HostGrid))
                 WebHost.Content = null;
-
-            var win = new DetachedWindow(this, web);
-
-            win.Closed += (_, _) => EndDockingMode();
-            win.RequestRedock += RedockWebView;
-
-            POINT p;
-            GetCursorPos(out p);
-
-            win.Left = p.X - 100;
-            win.Top = p.Y - 10;
 
             win.Show();
 
-            if (Tabs.Items.Count == 0)
-                return;
-
-            if (wasSelected)
+            // 4️⃣ Réactiver un autre onglet si besoin
+            if (Tabs.Items.Count > 0 && wasSelected)
             {
                 Tabs.SelectedIndex = 0;
                 SyncWebHostWithSelection();
             }
         }
+
+
+
+
+
         bool IsActiveTab(WebTabContent c) =>
     Tabs.SelectedItem is TabItem t && ReferenceEquals(t.Tag, c);
+
+        void OpenDetachedCustomTab(WebTabContent content)
+        {
+            var win = new DetachedCustomWindow();
+
+            // ✅ MAINTENANT ça compile
+            var view = content.CreateView!();
+
+            win.SetContent(view);
+
+            win.RequestRedock += restoredView =>
+            {
+                RestoreCustomTab(restoredView);
+            };
+
+
+            win.Show();
+        }
+
+        void RestoreCustomTab(UserControl view)
+        {
+            var header = new BrowserTabHeader();
+            header.SetTitle("Accueil");
+
+            var tab = new TabItem
+            {
+                Header = header,
+                Tag = new ViewTabContent
+                {
+                    View = view
+                }
+            };
+
+            Tabs.Items.Add(tab);
+            Tabs.SelectedItem = tab;
+            SyncWebHostWithSelection();
+        }
+
 
         private async Task<bool> TryLaunchLegacy(
      WebTabContent content,
@@ -4433,7 +4625,7 @@ namespace MyHomelabBrowser
         {
             if (web.Source == null || content.FlashService == null)
                 return;
-            
+
             var uri = web.Source;
             FlashDbg($"HandleFlashAsync ENTER url={uri}");
 
@@ -4442,7 +4634,7 @@ namespace MyHomelabBrowser
             bool forcedLegacy =
     (rule == FlashRuleMode.Legacy) ||
     content.ForceLegacyOnce;
-            
+
             if (content.ForceLegacyOnce)
                 content.ForceLegacyOnce = false;
             // =======================================================
@@ -4541,12 +4733,12 @@ namespace MyHomelabBrowser
             // =======================================================
             // ✅ CAS 0 : LEGACY FORCÉ -> BYPASS TOTAL + même pipeline
             // =======================================================
-          
-                if (forcedLegacy)
-                {
-                    LaunchLegacySameWayAsFallback();
-                    return;
-                }
+
+            if (forcedLegacy)
+            {
+                LaunchLegacySameWayAsFallback();
+                return;
+            }
             // ✅ PERF : on skip seulement si on a déjà check ce site (FlashChecked)
             // ET qu’on a conclu qu’il n’y a pas besoin de Flash.
             if (!forcedLegacy &&
@@ -5014,15 +5206,15 @@ namespace MyHomelabBrowser
 
 
         private void DownloadsBtn_Click(object sender, RoutedEventArgs e)
-    {
-        DownloadsPopup.IsOpen = !DownloadsPopup.IsOpen;
-    }
+        {
+            DownloadsPopup.IsOpen = !DownloadsPopup.IsOpen;
+        }
 
-    private void DownloadItem_Open(object sender, MouseButtonEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
-            DownloadManager.Instance.OpenFile(it);
-    }
+        private void DownloadItem_Open(object sender, MouseButtonEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
+                DownloadManager.Instance.OpenFile(it);
+        }
         private void DownloadItem_Remove(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
@@ -5032,31 +5224,31 @@ namespace MyHomelabBrowser
 
 
         private void DownloadItem_OpenFolder(object sender, RoutedEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
-            DownloadManager.Instance.OpenContainingFolder(it);
-    }
+        {
+            if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
+                DownloadManager.Instance.OpenContainingFolder(it);
+        }
 
-    private void DownloadItem_Pause(object sender, RoutedEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
-            DownloadManager.Instance.Pause(it);
-    }
+        private void DownloadItem_Pause(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
+                DownloadManager.Instance.Pause(it);
+        }
 
-    private void DownloadItem_ResumeOrRetry(object sender, RoutedEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
-            DownloadManager.Instance.Retry(it);
-    }
+        private void DownloadItem_ResumeOrRetry(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
+                DownloadManager.Instance.Retry(it);
+        }
 
-    private void DownloadItem_Cancel(object sender, RoutedEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
-            DownloadManager.Instance.Cancel(it);
-    }
+        private void DownloadItem_Cancel(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is DownloadItem it)
+                DownloadManager.Instance.Cancel(it);
+        }
 
 
-    void ApplyPrivateTheme(bool isPrivate)
+        void ApplyPrivateTheme(bool isPrivate)
         {
             Resources["FluentSurface"] =
                 isPrivate
@@ -5075,10 +5267,13 @@ namespace MyHomelabBrowser
                 .OfType<TabItem>()
                 .Any(t => t.Tag is WebTabContent w && w.IsPrivate);
         }
-      
 
-        void RedockWebView(WebView2 web)
+
+       public void RedockWebView(WebView2 web)
         {
+            if (web == null)
+                return;
+
             DownloadHook.Attach(web, isPrivate: false);
 
             Dispatcher.Invoke(() =>
@@ -5127,9 +5322,14 @@ namespace MyHomelabBrowser
 
                 Tabs.Items.Add(tab);
                 Tabs.SelectedItem = tab;
+
+                WebHost.Content = web;
+
                 SyncWebHostWithSelection();
             });
         }
+
+
 
         private const int GW_OWNER = 4;
 
@@ -5535,7 +5735,7 @@ namespace MyHomelabBrowser
 
         [DllImport("user32.dll")]
         static extern bool GetCursorPos(out POINT lpPoint);
-        
+
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
@@ -5546,20 +5746,20 @@ namespace MyHomelabBrowser
         [DllImport("user32.dll", SetLastError = true)]
         static extern IntPtr GetParent(IntPtr hWnd);
 
-        
-        
+
+
 
         const uint SWP_NOMOVE = 0x0002;
         const uint SWP_NOSIZE = 0x0001;
 
-       
+
 
         // ===============================
         // CONTENU D’ONGLET (BASE PROPRE)
         // ===============================
-        abstract class TabContent { }
+        public abstract class TabContent { }
 
-        class WebTabContent : TabContent
+       public class WebTabContent : TabContent
         {
             public WebView2 Web { get; init; } = null!;
             public bool IsPinned { get; set; }
@@ -5580,6 +5780,9 @@ namespace MyHomelabBrowser
             public bool IsLegacyEmbedded { get; set; }
             public IntPtr LegacyHwnd { get; set; } = IntPtr.Zero;
             public ExternalWindowDock? LegacyHost;
+            public bool IsCustomView { get; set; }
+            public Func<UserControl>? CreateView { get; set; }
+
             public Process? LegacyProc { get; set; }
             public IntPtr LegacyTopHwnd { get; set; } = IntPtr.Zero;
             public bool LegacyDocked { get; set; }

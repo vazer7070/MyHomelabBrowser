@@ -251,7 +251,7 @@ namespace MyHomelabBrowser.controles
 
         private void EnsureEmbedded()
         {
-           
+
             if (_hwnd == IntPtr.Zero) return;
             if (_embedded) return;
             if (HostHandle == IntPtr.Zero) return;

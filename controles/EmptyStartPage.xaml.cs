@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using System.Windows.Media.Animation;
 
 namespace MyHomelabBrowser.controles
 {
@@ -14,7 +15,6 @@ namespace MyHomelabBrowser.controles
         readonly DispatcherTimer _debounce;
         bool _mouseDownInSuggestions;
         public event Action<string>? NavigateRequested;
-
 
         IReadOnlyList<HistoryEntry> _history = Array.Empty<HistoryEntry>();
         List<OmniboxSuggestion> _currentSuggestions = new();
@@ -35,12 +35,22 @@ namespace MyHomelabBrowser.controles
         }
 
         // =========================
+        // 🎬 LOGO SPLASH LOOP
+        // =========================
+        void LogoHost_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (Resources["SparkleLoop"] is Storyboard sb)
+                sb.Begin();
+        }
+
+        // =========================
         // 🔗 INJECTION HISTORIQUE
         // =========================
         public void SetHistory(IReadOnlyList<HistoryEntry> history)
         {
             _history = history ?? Array.Empty<HistoryEntry>();
         }
+
         void SuggestionsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (SuggestionsList.SelectedItem is OmniboxSuggestion s)
@@ -56,7 +66,6 @@ namespace MyHomelabBrowser.controles
             else
                 System.Diagnostics.Debug.WriteLine("[EmptyStartPage] NavigateRequested non branché: " + url);
         }
-
 
         void SearchBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
         {
@@ -86,7 +95,6 @@ namespace MyHomelabBrowser.controles
         // =========================
         // UI EVENTS
         // =========================
-
         void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             _debounce.Stop();
@@ -136,7 +144,6 @@ namespace MyHomelabBrowser.controles
             }
         }
 
-
         void ClearSearch_Click(object sender, RoutedEventArgs e)
         {
             SearchBox.Clear();
@@ -147,7 +154,6 @@ namespace MyHomelabBrowser.controles
         // =========================
         // OMNIBOX CORE
         // =========================
-
         void UpdateSuggestions()
         {
             var input = SearchBox.Text?.Trim();
@@ -171,7 +177,7 @@ namespace MyHomelabBrowser.controles
         {
             var list = new List<OmniboxSuggestion>();
 
-            // 1️⃣ HISTORIQUE DU PROFIL COURANT
+            // 1️⃣ HISTORIQUE
             var historyMatches =
                 _history
                 .Where(h =>
@@ -196,7 +202,7 @@ namespace MyHomelabBrowser.controles
                 });
             }
 
-            // 2️⃣ GOOGLE (fallback)
+            // 2️⃣ GOOGLE
             list.Add(new OmniboxSuggestion
             {
                 Icon = "🔍",

@@ -1,4 +1,5 @@
 ﻿using MyHomelabBrowser.classes.Profiles;
+using MyHomelabBrowser.classes.Profiles.Credentials;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -37,6 +38,30 @@ public class ProfileService
         Directory.CreateDirectory(_rootDir);
         LoadProfiles();
         LoadLastProfile();
+    }
+    const int MaxAttempts = 5;
+    static readonly TimeSpan BaseLockDuration = TimeSpan.FromSeconds(10);
+
+    void RegisterLoginFailure(UserProfile profile)
+    {
+        profile.FailedLoginAttempts++;
+
+        if (profile.FailedLoginAttempts >= MaxAttempts)
+        {
+            var backoff = TimeSpan.FromSeconds(
+                BaseLockDuration.TotalSeconds * Math.Pow(2, profile.FailedLoginAttempts - MaxAttempts)
+            );
+
+            profile.LoginLockUntilUtc = DateTime.UtcNow.Add(backoff);
+        }
+
+        SaveProfiles();
+    }
+
+    void ResetLoginProtection(UserProfile profile)
+    {
+        profile.FailedLoginAttempts = 0;
+        profile.LoginLockUntilUtc = null;
     }
 
 
@@ -89,28 +114,115 @@ public class ProfileService
             profile.Salt
         );
     }
+    public void SetVaultPassword(string vaultPassword)
+    {
+        if (Current == null)
+            throw new Exception("Aucun profil connecté.");
+
+        var (hash, salt) = PasswordHasher.Hash(vaultPassword);
+
+        Current.VaultPasswordHash = hash;
+        Current.VaultSalt = salt;
+
+        SaveProfiles();
+    }
+    public bool VerifyVaultPassword(string vaultPassword)
+    {
+        if (Current == null)
+            return false;
+
+        if (Current.VaultLockUntilUtc.HasValue &&
+            Current.VaultLockUntilUtc > DateTime.UtcNow)
+            return false;
+
+        if (Current.VaultPasswordHash == null ||
+            Current.VaultSalt == null)
+            return false;
+
+        if (!PasswordHasher.Verify(
+                vaultPassword,
+                Current.VaultPasswordHash,
+                Current.VaultSalt))
+        {
+            RegisterVaultFailure(Current);
+            return false;
+        }
+
+        ResetVaultProtection(Current);
+        return true;
+    }
+
+    void RegisterVaultFailure(UserProfile profile)
+    {
+        profile.FailedVaultAttempts++;
+
+        if (profile.FailedVaultAttempts >= MaxAttempts)
+        {
+            var backoff = TimeSpan.FromSeconds(
+                BaseLockDuration.TotalSeconds * Math.Pow(2, profile.FailedVaultAttempts - MaxAttempts)
+            );
+
+            profile.VaultLockUntilUtc = DateTime.UtcNow.Add(backoff);
+        }
+
+        SaveProfiles();
+    }
+
+    void ResetVaultProtection(UserProfile profile)
+    {
+        profile.FailedVaultAttempts = 0;
+        profile.VaultLockUntilUtc = null;
+    }
 
     public bool Login(string username, string password)
     {
-
-        //MessageBox.Show("LOGIN called for username: " + username);
         username = (username ?? "").Trim();
         if (username.Length == 0)
             return false;
 
         var key = username.ToLowerInvariant();
-       // MessageBox.Show($"LOGIN attempt for '{username}' and key: '{key}'");
 
         if (!_profiles.TryGetValue(key, out var profile))
             return false;
-       
-        // sécurité: si profil invalide (hash/salt vides), refus net
+
+        // sécurité hash invalide
         if (profile.PasswordHash == null || profile.PasswordHash.Length == 0 ||
             profile.Salt == null || profile.Salt.Length == 0)
             return false;
 
-        if (!PasswordHasher.Verify(password, profile.PasswordHash, profile.Salt))
+        // 🔒 Vérifier lock temporaire
+        if (profile.LoginLockUntilUtc.HasValue &&
+            profile.LoginLockUntilUtc > DateTime.UtcNow)
+        {
             return false;
+        }
+
+        // 🔐 Vérification mot de passe
+        if (!PasswordHasher.Verify(password, profile.PasswordHash, profile.Salt))
+        {
+            // 🔴 Échec → incrément tentative
+            profile.FailedLoginAttempts++;
+
+            const int MaxAttempts = 5;
+            const int BaseDelaySeconds = 10;
+
+            if (profile.FailedLoginAttempts >= MaxAttempts)
+            {
+                var exponent = profile.FailedLoginAttempts - MaxAttempts;
+                var delay = TimeSpan.FromSeconds(
+                    BaseDelaySeconds * Math.Pow(2, exponent)
+                );
+
+                profile.LoginLockUntilUtc = DateTime.UtcNow.Add(delay);
+            }
+
+            SaveProfiles();
+            return false;
+        }
+
+        // 🟢 Succès → reset protection
+        profile.FailedLoginAttempts = 0;
+        profile.LoginLockUntilUtc = null;
 
         Current = profile;
         IsLocked = false;
@@ -118,6 +230,51 @@ public class ProfileService
         AppDataContext.UseProfile(profile.Username);
         SaveLastProfile();
         ProfileChanged?.Invoke(Current);
+
+        return true;
+    }
+
+    public bool TryUnlockVault(string vaultPassword)
+    {
+        if (Current == null)
+            return false;
+
+        if (Current.VaultLockUntilUtc.HasValue &&
+            Current.VaultLockUntilUtc > DateTime.UtcNow)
+            return false;
+
+        if (Current.VaultPasswordHash == null ||
+            Current.VaultSalt == null)
+            return false;
+
+        if (!PasswordHasher.Verify(
+                vaultPassword,
+                Current.VaultPasswordHash,
+                Current.VaultSalt))
+        {
+            Current.FailedVaultAttempts++;
+
+            const int MaxAttempts = 5;
+            const int BaseDelaySeconds = 10;
+
+            if (Current.FailedVaultAttempts >= MaxAttempts)
+            {
+                var exponent = Current.FailedVaultAttempts - MaxAttempts;
+                var delay = TimeSpan.FromSeconds(
+                    BaseDelaySeconds * Math.Pow(2, exponent)
+                );
+
+                Current.VaultLockUntilUtc = DateTime.UtcNow.Add(delay);
+            }
+
+            SaveProfiles();
+            return false;
+        }
+
+        // Succès
+        Current.FailedVaultAttempts = 0;
+        Current.VaultLockUntilUtc = null;
+        SaveProfiles();
 
         return true;
     }
@@ -228,6 +385,10 @@ public class ProfileService
         AppDataContext.UseProfile(Current.Username);
         ProfileChanged?.Invoke(Current);
     }
+
+
+
+
 
     // =====================
     // PERSISTENCE

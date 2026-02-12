@@ -3,6 +3,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows;
 
 namespace MyHomelabBrowser
@@ -41,6 +42,34 @@ namespace MyHomelabBrowser
                 try { p.Kill(true); } catch { }
             }
         }
+        // =====================
+        // EnumWindows
+        // =====================
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+       
+
         private void EnsureLegacyProfileReady(string profileDir)
         {
             void Log(string s) => Dbg("[LegacyProfile] " + s);
@@ -170,18 +199,7 @@ user_pref(""app.update.enabled"", false);
                 log("Impossible de supprimer " + Path.GetFileName(path) + ": " + ex.Message);
             }
         }
-        private string GetPortableProfileDirFromBasiliskPath()
-        {
-            var exe = _settings.Settings.BasiliskPath;
-            var root = Path.GetDirectoryName(exe);
 
-            // si exe invalide -> fallback vide
-            if (string.IsNullOrWhiteSpace(root))
-                return "";
-
-            // ✅ correspond EXACTEMENT à ton chemin about:support
-            return Path.Combine(root, "Bin", "basilisk", "Profiles", "Default");
-        }
         // ===============================
         // LANCEMENT
         // ===============================
@@ -192,14 +210,15 @@ user_pref(""app.update.enabled"", false);
 
             var exe = _settings.Settings.BasiliskPath;
 
-            // ✅ PROD : profil portable officiel (confirmé about:support)
-            profileDir = GetPortableProfileDirFromBasiliskPath();
+            if (string.IsNullOrWhiteSpace(profileDir))
+                throw new ArgumentException(nameof(profileDir));
 
-            // ✅ préparer le profil (UI clean + stop updates + locks)
+            // ✅ préparer le profil fourni par l'appelant
             EnsureLegacyProfileReady(profileDir);
 
-            // ✅ args
-            string args = $"-no-remote \"{url}\"";
+            // ✅ args : PROFIL EXPLICITE
+            string args = $"-new-instance -no-remote  -profile \"{profileDir}\" \"{url}\"";
+
 
             return Process.Start(new ProcessStartInfo
             {
@@ -208,6 +227,8 @@ user_pref(""app.update.enabled"", false);
                 UseShellExecute = false
             });
         }
+
+
 
 
     }

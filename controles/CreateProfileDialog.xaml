@@ -10,75 +10,135 @@
         AllowsTransparency="True"
         Background="Transparent">
 
-    <Border Padding="20"
-            Width="360"
-            Background="#1E1E1E"
-            CornerRadius="12">
+    <Border Padding="30"
+            Width="420"
+            Background="#1C1C1C"
+            CornerRadius="16"
+            BorderBrush="#2E2E2E"
+            BorderThickness="1">
 
         <StackPanel>
+
+            <!-- ===== TITRE ===== -->
             <TextBlock Text="Créer un profil"
                        Foreground="White"
-                       FontSize="18"
+                       FontSize="22"
                        FontWeight="SemiBold"
-                       Margin="0,0,0,12"/>
+                       Margin="0,0,0,20"/>
 
-            <!-- Username -->
-            <Grid>
+            <!-- ===== USERNAME ===== -->
+            <TextBlock Text="Nom d’utilisateur"
+                       Foreground="#CFCFCF"
+                       FontSize="13"
+                       Margin="0,0,0,6"/>
+
+            <Border Background="#252525"
+                    CornerRadius="10"
+                    BorderBrush="#343434"
+                    BorderThickness="1">
                 <TextBox x:Name="UsernameBox"
-                         Height="34"
-                         Padding="10,6"
-                         Background="#262626"
+                         Height="42"
+                         Padding="14,10"
+                         Background="Transparent"
                          Foreground="White"
                          BorderThickness="0"/>
+            </Border>
 
-                <TextBlock Text="Nom d’utilisateur"
-                           Margin="12,0,0,0"
-                           VerticalAlignment="Center"
-                           Foreground="#9CA3AF"
-                           IsHitTestVisible="False">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Text, ElementName=UsernameBox}"
-                                             Value="">
-                                    <Setter Property="Visibility" Value="Visible"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+            <!-- ===== PASSWORD ===== -->
+            <TextBlock Text="Mot de passe"
+                       Foreground="#CFCFCF"
+                       FontSize="13"
+                       Margin="0,18,0,6"/>
+
+            <Border Background="#252525"
+                    CornerRadius="10"
+                    BorderBrush="#343434"
+                    BorderThickness="1">
+                <PasswordBox x:Name="PasswordBox"
+                             Height="42"
+                             Padding="14,10"
+                             Background="Transparent"
+                             Foreground="White"
+                             BorderThickness="0"/>
+            </Border>
+
+            <!-- ===== CONFIRM ===== -->
+            <TextBlock Text="Confirmer le mot de passe"
+                       Foreground="#CFCFCF"
+                       FontSize="13"
+                       Margin="0,18,0,6"/>
+
+            <Border Background="#252525"
+                    CornerRadius="10"
+                    BorderBrush="#343434"
+                    BorderThickness="1">
+                <PasswordBox x:Name="ConfirmBox"
+                             Height="42"
+                             Padding="14,10"
+                             Background="Transparent"
+                             Foreground="White"
+                             BorderThickness="0"/>
+            </Border>
+
+            <!-- ===== BOUTONS ===== -->
+            <Grid Margin="0,28,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Annuler -->
+                <Button Grid.Column="0"
+                        Content="Annuler"
+                        Height="44"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Background="#2A2A2A"
+                        Foreground="#E5E5E5"
+                        BorderBrush="#3A3A3A"
+                        BorderThickness="1"
+                        Cursor="Hand"
+                        Click="Cancel_Click">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="10">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+
+                <!-- Créer -->
+                <Button Grid.Column="2"
+                        Content="Créer"
+                        Height="44"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Background="#3B82F6"
+                        Foreground="White"
+                        BorderBrush="#3B82F6"
+                        BorderThickness="1"
+                        Cursor="Hand"
+                        Click="Create_Click">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="10">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
             </Grid>
 
-            <!-- Password -->
-            <PasswordBox x:Name="PasswordBox"
-                         Height="34"
-                         Padding="10,6"
-                         Margin="0,8,0,0"
-                         Background="#262626"
-                         Foreground="White"
-                         BorderThickness="0"/>
-
-            <!-- Confirm -->
-            <PasswordBox x:Name="ConfirmBox"
-                         Height="34"
-                         Padding="10,6"
-                         Margin="0,8,0,0"
-                         Background="#262626"
-                         Foreground="White"
-                         BorderThickness="0"/>
-
-            <StackPanel Orientation="Horizontal"
-                        HorizontalAlignment="Right"
-                        Margin="0,12,0,0">
-                <Button Content="Annuler"
-                        Margin="0,0,8,0"
-                        Padding="10,6"
-                        Click="Cancel_Click"/>
-                <Button Content="Créer"
-                        Padding="10,6"
-                        Click="Create_Click"/>
-            </StackPanel>
         </StackPanel>
     </Border>
 </Window>

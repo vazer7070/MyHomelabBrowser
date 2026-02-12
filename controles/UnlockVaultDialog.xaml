@@ -5,37 +5,113 @@
         SizeToContent="WidthAndHeight"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
-        Background="#1E1E1E">
+        Background="Transparent"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        ShowInTaskbar="False">
 
-    <Border Padding="20" CornerRadius="10">
-        <StackPanel Width="320">
+    <Border Padding="30"
+            Width="420"
+            Background="#1C1C1C"
+            CornerRadius="16"
+            BorderBrush="#2E2E2E"
+            BorderThickness="1">
+
+        <StackPanel>
+
+            <!-- ===== TITRE ===== -->
             <TextBlock Text="🔒 Coffre-fort verrouillé"
-                       FontSize="16"
+                       FontSize="20"
                        FontWeight="SemiBold"
                        Margin="0,0,0,10"
                        Foreground="White"/>
 
             <TextBlock Text="Entrez le mot de passe du profil pour enregistrer ce mot de passe."
                        TextWrapping="Wrap"
-                       Margin="0,0,0,15"
-                       Foreground="#CCCCCC"/>
+                       Margin="0,0,0,22"
+                       Foreground="#BDBDBD"
+                       FontSize="13"/>
 
-            <PasswordBox x:Name="PasswordBox"
-                         Height="32"
-                         Margin="0,0,0,15"/>
+            <!-- ===== PASSWORD ===== -->
+            <TextBlock Text="Mot de passe du profil"
+                       Foreground="#CFCFCF"
+                       FontSize="13"
+                       Margin="0,0,0,6"/>
 
-            <StackPanel Orientation="Horizontal"
-                        HorizontalAlignment="Right">
-                <Button Content="Annuler"
-                        Width="90"
-                        Margin="0,0,10,0"
-                        Click="Cancel_Click"/>
+            <Border Background="#252525"
+                    CornerRadius="10"
+                    BorderBrush="#343434"
+                    BorderThickness="1"
+                    Margin="0,0,0,28">
 
-                <Button Content="Déverrouiller"
-                        Width="110"
+                <PasswordBox x:Name="PasswordBox"
+                             Height="42"
+                             Padding="14,10"
+                             Background="Transparent"
+                             Foreground="White"
+                             BorderThickness="0"/>
+            </Border>
+
+            <!-- ===== BOUTONS ===== -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Annuler -->
+                <Button Grid.Column="0"
+                        Content="Annuler"
+                        Height="44"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Background="#2A2A2A"
+                        Foreground="#E5E5E5"
+                        BorderBrush="#3A3A3A"
+                        BorderThickness="1"
+                        Cursor="Hand"
+                        Click="Cancel_Click">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="10">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+
+                <!-- Déverrouiller -->
+                <Button Grid.Column="2"
+                        Content="Déverrouiller"
+                        Height="44"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Background="#3B82F6"
+                        Foreground="White"
+                        BorderBrush="#3B82F6"
+                        BorderThickness="1"
+                        Cursor="Hand"
                         IsDefault="True"
-                        Click="Unlock_Click"/>
-            </StackPanel>
+                        Click="Unlock_Click">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="10">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Grid>
+
         </StackPanel>
     </Border>
 </Window>

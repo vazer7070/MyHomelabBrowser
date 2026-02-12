@@ -1,0 +1,27 @@
+﻿<Window x:Class="MyHomelabBrowser.controles.DetachedCustomWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Onglet détaché"
+        Width="900"
+        Height="600"
+        Background="#171717">
+
+    <DockPanel>
+
+        <!-- Barre haute (identique au web) -->
+        <Border DockPanel.Dock="Top"
+                Height="32"
+                Background="#222"
+                MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+
+            <Button Content="↩ Rattacher"
+                    HorizontalAlignment="Right"
+                    Margin="6"
+                    Padding="6,0"
+                    Click="Redock_Click"/>
+        </Border>
+
+        <!-- Contenu custom -->
+        <Grid x:Name="Root"/>
+    </DockPanel>
+</Window>
