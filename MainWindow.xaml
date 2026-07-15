@@ -649,12 +649,7 @@
 
                         <TextBox x:Name="AddressBar"
                                  Grid.Column="2"
-                                 Background="Transparent"
-                                 Foreground="{StaticResource TextPrimaryBrush}"
-                                 BorderThickness="0"
-                                 Padding="1,5,12,5"
-                                 MinHeight="0"
-                                 FontSize="13.5"
+                                 Style="{StaticResource AddressBarTextBoxStyle}"
                                  KeyDown="AddressBar_KeyDown"
                                  TextChanged="AddressBar_TextChanged"
                                  PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown"
@@ -737,27 +732,48 @@
                     </Button>
 
                     <Button x:Name="FavoriteButton"
-                            Style="{StaticResource ToolbarIconButtonStyle}"
-                            Content="★"
-                            Margin="0,0,4,0"
-                            Click="ToggleFavorite_Click"
+                            Style="{StaticResource ToolbarFeatureButtonStyle}"
+                            Margin="0,0,5,0"
+                            Click="ToggleFavoriteSafe_Click"
                             Foreground="{StaticResource TextTertiaryBrush}"
-                            ToolTip="Ajouter ou retirer des favoris"/>
+                            ToolTip="Ajouter ou retirer des favoris">
+                        <Viewbox Width="18" Height="18">
+                            <Path Stretch="Uniform"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                                  Data="M12,2.7 L14.83,8.43 L21.15,9.35 L16.58,13.8 L17.66,20.08 L12,17.1 L6.34,20.08 L7.42,13.8 L2.85,9.35 L9.17,8.43 Z"/>
+                        </Viewbox>
+                    </Button>
 
                     <Button x:Name="ManualLegacyButton"
-                            Style="{StaticResource ToolbarIconButtonStyle}"
-                            Content="⚡"
-                            Margin="0,0,4,0"
+                            Style="{StaticResource ToolbarAmberButtonStyle}"
+                            Margin="0,0,5,0"
                             Click="ManualLegacyButton_Click"
-                            Foreground="{StaticResource TextTertiaryBrush}"
-                            ToolTip="Forcer Flash Legacy avec Basilisk"/>
+                            ToolTip="Ouvrir ce site avec Flash Legacy dans Basilisk">
+                        <Viewbox Width="18" Height="18">
+                            <!-- Jaune fixe volontaire : ce module doit rester distinct des modules bleus. -->
+                            <Path Stretch="Uniform"
+                                  Fill="#FBBF24"
+                                  Data="M13.15,1.8 L4.7,13.2 L10.55,13.2 L8.95,22.2 L19.3,9.75 L13.35,9.75 Z"/>
+                        </Viewbox>
+                    </Button>
 
                     <Button x:Name="FlashModeBtn"
-                            Content="⚡ Auto"
+                            Style="{StaticResource ToolbarAmberPillButtonStyle}"
                             Visibility="Collapsed"
-                            Margin="3,0,4,0"
+                            Margin="0,0,5,0"
                             Click="FlashModeBtn_Click"
-                            ToolTip="Forcer ou libérer le mode Flash pour ce site"/>
+                            ToolTip="Forcer ou libérer le mode Flash pour ce site">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Viewbox Width="15" Height="15" Margin="0,0,6,0">
+                                <Path Stretch="Uniform"
+                                      Fill="#FBBF24"
+                                      Data="M13.15,1.8 L4.7,13.2 L10.55,13.2 L8.95,22.2 L19.3,9.75 L13.35,9.75 Z"/>
+                            </Viewbox>
+                            <TextBlock Text="Auto"
+                                       Foreground="#FDE68A"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
 
                     <Button x:Name="ProfileButton"
                             Width="34"

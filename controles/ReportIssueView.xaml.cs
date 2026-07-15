@@ -2,10 +2,10 @@
 using MyHomelabBrowser.classes.AdBlock.Services;
 using MyHomelabBrowser.classes.CloudTorrent.Models;
 using MyHomelabBrowser.classes.CloudTorrent.Services;
+using MyHomelabBrowser.classes.Support;
+using MyHomelabBrowser.classes.Support.Models;
 using System;
-using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -86,22 +86,13 @@ namespace MyHomelabBrowser.controles
             }
 
             MessageBoxResult confirm = MessageBox.Show(
-                $"Envoyer ce rapport concernant {GetModuleLabel(module)} sur le support Discord ?",
+                $"Envoyer ce rapport concernant {GetModuleLabel(module)} au support ?",
                 "Confirmation",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
 
             if (confirm != MessageBoxResult.Yes)
                 return;
-
-            string webhook = DiscordWebhooks.GetWebhook(issueType);
-            if (string.IsNullOrWhiteSpace(webhook))
-            {
-                ShowDialog(
-                    "Erreur interne",
-                    "Aucun webhook n’est configuré pour ce type de demande.");
-                return;
-            }
 
             string appVersion = System.Reflection.Assembly
                 .GetExecutingAssembly()
@@ -111,48 +102,28 @@ namespace MyHomelabBrowser.controles
                 ?? "inconnue";
 
             string reportId = GenerateReportId();
-            string technicalInformation = BuildExtraInformation(module);
             string moduleLabel = GetModuleLabel(module);
             string issueLabel = GetIssueTypeLabel(issueType);
 
-            var payload = new
+            var report = new SupportReportRequest
             {
-                username = "PommeBrowser Support",
-                embeds = new[]
-                {
-                    new
-                    {
-                        title = $"{GetModuleIcon(module)} {moduleLabel} — {issueLabel}",
-                        description =
-$"""
-🆔 **ID rapport :** `{reportId}`
-🧭 **Version navigateur :** `{appVersion}`
-🧩 **Module :** {moduleLabel}
-🏷️ **Type :** {issueLabel}
-
-**Titre :** {title}
-
-**Description :**
-{description}
-""",
-                        color = GetModuleColor(module),
-                        fields = new[]
-                        {
-                            new
-                            {
-                                name = "Informations techniques",
-                                value = LimitForDiscordField(technicalInformation),
-                                inline = false
-                            }
-                        },
-                        footer = new
-                        {
-                            text = "PommeBrowser – Support utilisateur"
-                        },
-                        timestamp = DateTimeOffset.UtcNow
-                    }
-                }
+                ClientReportId = reportId,
+                ClientVersion = appVersion,
+                Module = GetModuleKey(module),
+                ModuleLabel = moduleLabel,
+                Category = GetIssueTypeKey(issueType),
+                CategoryLabel = issueLabel,
+                Title = title,
+                Description = description,
+                TechnicalInformation = BuildExtraInformation(module),
+                Context = BuildStructuredContext(),
+                CreatedAtUtc = DateTimeOffset.UtcNow
             };
+
+            SupportAttachment? attachment = BuildLogAttachment(
+                reportId,
+                appVersion,
+                moduleLabel);
 
             SetSendingState(true);
             _sending = true;
@@ -160,92 +131,20 @@ $"""
 
             try
             {
-                using var http = new HttpClient
-                {
-                    Timeout = TimeSpan.FromSeconds(30)
-                };
-
-                HttpResponseMessage response;
-
-                if (_options.IncludeLogs)
-                {
-                    string logs = RuntimeLogBuffer.GetSnapshot();
-                    if (string.IsNullOrWhiteSpace(logs))
-                    {
-                        logs =
-$"""
-PommeBrowser – Runtime snapshot
-Version : {appVersion}
-Date    : {DateTime.Now:yyyy-MM-dd HH:mm:ss}
-Module  : {moduleLabel}
-
-Aucun log console n’a été généré pour cette session.
-(Application WPF – Console non utilisée)
-""";
-                    }
-
-                    string tempFile = Path.Combine(
-                        Path.GetTempPath(),
-                        $"pommebrowser-log-{reportId}-{DateTime.Now:yyyyMMdd-HHmmss}.txt");
-
-                    try
-                    {
-                        File.WriteAllText(tempFile, logs, Encoding.UTF8);
-
-                        using var form = new MultipartFormDataContent();
-                        form.Add(
-                            new StringContent(
-                                System.Text.Json.JsonSerializer.Serialize(payload),
-                                Encoding.UTF8,
-                                "application/json"),
-                            "payload_json");
-
-                        form.Add(
-                            new ByteArrayContent(await File.ReadAllBytesAsync(tempFile)),
-                            "file",
-                            Path.GetFileName(tempFile));
-
-                        response = await http.PostAsync(webhook, form);
-                    }
-                    finally
-                    {
-                        try
-                        {
-                            if (File.Exists(tempFile))
-                                File.Delete(tempFile);
-                        }
-                        catch
-                        {
-                            // Le rapport a déjà été envoyé : l'échec de nettoyage n'est pas bloquant.
-                        }
-                    }
-                }
-                else
-                {
-                    string json = System.Text.Json.JsonSerializer.Serialize(payload);
-                    response = await http.PostAsync(
-                        webhook,
-                        new StringContent(json, Encoding.UTF8, "application/json"));
-                }
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    string responseBody = await response.Content.ReadAsStringAsync();
-                    string details = string.IsNullOrWhiteSpace(responseBody)
-                        ? response.ReasonPhrase ?? "Réponse Discord inconnue"
-                        : responseBody;
-
-                    if (details.Length > 300)
-                        details = details[..300];
-
-                    throw new Exception($"Erreur HTTP {(int)response.StatusCode} : {details}");
-                }
+                SupportSubmissionResult result = await SupportSubmissionHost.Current
+                    .SendAsync(report, attachment);
 
                 ShowDialog(
                     "Message envoyé",
-                    $"Merci pour le signalement.\n\nID du rapport : {reportId}");
+                    $"Merci pour le signalement.\n\nID du rapport : {result.ReportId}");
 
                 CloseRequested?.Invoke();
+            }
+            catch (SupportApiRejectedException ex)
+            {
+                ShowDialog(
+                    "Rapport refusé",
+                    ex.Message);
             }
             catch (Exception ex)
             {
@@ -258,6 +157,63 @@ Aucun log console n’a été généré pour cette session.
                 _sending = false;
                 SetSendingState(false);
             }
+        }
+
+        private SupportAttachment? BuildLogAttachment(
+            string reportId,
+            string appVersion,
+            string moduleLabel)
+        {
+            if (!_options.IncludeLogs)
+                return null;
+
+            string logs = RuntimeLogBuffer.GetSnapshot();
+            if (string.IsNullOrWhiteSpace(logs))
+            {
+                logs =
+$"""
+PommeBrowser – Runtime snapshot
+Version : {appVersion}
+Date    : {DateTime.Now:yyyy-MM-dd HH:mm:ss}
+Module  : {moduleLabel}
+
+Aucun log console n’a été généré pour cette session.
+(Application WPF – Console non utilisée)
+""";
+            }
+
+            return new SupportAttachment
+            {
+                FileName = $"pommebrowser-log-{reportId}-{DateTime.Now:yyyyMMdd-HHmmss}.txt",
+                ContentType = "text/plain; charset=utf-8",
+                Content = Encoding.UTF8.GetBytes(logs)
+            };
+        }
+
+        private SupportReportContext? BuildStructuredContext()
+        {
+            if (!_options.IncludeMode || _options.Context == null)
+                return null;
+
+            BrowserContext context = _options.Context;
+            string browserMode = context.IsLegacy
+                ? "legacy"
+                : context.IsPrivate
+                    ? "private"
+                    : "normal";
+
+            return new SupportReportContext
+            {
+                BrowserMode = browserMode,
+                FlashMode = context.FlashMode,
+                CurrentUrl = string.IsNullOrWhiteSpace(context.CurrentUrl)
+                    ? null
+                    : SanitizeUrl(context.CurrentUrl),
+                PageTitle = string.IsNullOrWhiteSpace(context.PageTitle)
+                    ? null
+                    : Limit(context.PageTitle, 180),
+                TabId = context.TabId?.ToString()
+            };
         }
 
         private string BuildExtraInformation(ReportModule module)
@@ -447,18 +403,11 @@ Aucun log console n’a été généré pour cette session.
             _ => "PommeBrowser"
         };
 
-        private static string GetModuleIcon(ReportModule module) => module switch
+        private static string GetModuleKey(ReportModule module) => module switch
         {
-            ReportModule.AdBlock => "🛡️",
-            ReportModule.CloudTorrent => "☁️",
-            _ => "🌐"
-        };
-
-        private static int GetModuleColor(ReportModule module) => module switch
-        {
-            ReportModule.AdBlock => 0x3973C6,
-            ReportModule.CloudTorrent => 0x2F80ED,
-            _ => 0xB03030
+            ReportModule.AdBlock => "adblock",
+            ReportModule.CloudTorrent => "cloudtorrent",
+            _ => "browser"
         };
 
         private static string GetIssueTypeLabel(IssueType type) => type switch
@@ -469,6 +418,16 @@ Aucun log console n’a été généré pour cette session.
             IssueType.UiUx => "Interface ou ergonomie",
             IssueType.Performance => "Performance",
             _ => "Autre"
+        };
+
+        private static string GetIssueTypeKey(IssueType type) => type switch
+        {
+            IssueType.Bug => "bug",
+            IssueType.MissingFeature => "missing_feature",
+            IssueType.FeatureRequest => "feature_request",
+            IssueType.UiUx => "ui_ux",
+            IssueType.Performance => "performance",
+            _ => "other"
         };
 
         private static string GetCloudTorrentStatusLabel(CloudTorrentConnectionStatus status) => status switch
@@ -523,18 +482,6 @@ Aucun log console n’a été généré pour cette session.
         }
 
 
-        private static string LimitForDiscordField(string? value)
-        {
-            const int maxLength = 1024;
-            string text = string.IsNullOrWhiteSpace(value)
-                ? "Aucune information technique jointe."
-                : value.Trim();
-
-            return text.Length <= maxLength
-                ? text
-                : text[..(maxLength - 1)] + "…";
-        }
-
         private static string YesNo(bool value) => value ? "oui" : "non";
 
         public enum IssueType
@@ -548,30 +495,4 @@ Aucun log console n’a été généré pour cette session.
         }
     }
 
-    static class DiscordWebhooks
-    {
-        public static string GetWebhook(ReportIssueView.IssueType type)
-        {
-            return type switch
-            {
-                ReportIssueView.IssueType.Bug =>
-                    "https://discord.com/api/webhooks/1466856163688845413/SNN4ZMroiwUejaUgIHDLtbvb8ovVebpT1tigZjuS_zGIc2CE0SLkT78cIJH3NS_gDxC4",
-
-                ReportIssueView.IssueType.MissingFeature =>
-                    "https://discord.com/api/webhooks/1466856296002228235/HguCY5QSmLSzbVaomvsWuJGusjmg8dK_axxkBGWYCmIMXIszVPO6QKKNBrtvc2x-iiTo",
-
-                ReportIssueView.IssueType.FeatureRequest =>
-                    "https://discord.com/api/webhooks/1466856426881421364/Q9tepiS8kF1jV0wetkr4TKtN0vZNOP_5FRlEwzeycfbzu_1_kvZbciYiR1toLjCkL19L",
-
-                ReportIssueView.IssueType.UiUx =>
-                    "https://discord.com/api/webhooks/1466856539980566764/Zo5Q8BRkNH2XxrZmQ2jneF3GSDsdvpVco-JxggullC8XiCxrKGHBayvY5y6lC4S_mywg",
-
-                ReportIssueView.IssueType.Performance =>
-                    "https://discord.com/api/webhooks/1466856656121106614/2xq3neD_NLWcWbHmX37HyMHq90utWOtY-wlVhBoSUXmJakBL01o6BC6pVxEAdFbWAIrX",
-
-                _ =>
-                    "https://discord.com/api/webhooks/1466856775859834880/pfgE0hXTaEzaRXKjl1_P-IOvuFlcNK7ES3-fKv0FvwCKVepmWJ3Ac3eY2PEQCsSexF8O",
-            };
-        }
-    }
 }

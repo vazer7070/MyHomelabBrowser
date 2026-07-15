@@ -220,7 +220,7 @@
                        FontSize="26"
                        FontWeight="SemiBold"
                        Foreground="White"/>
-            <TextBlock Text="Le rapport est envoyé sur le canal de support Discord avec les informations techniques autorisées dans les paramètres."
+            <TextBlock Text="Le rapport est envoyé par le canal de support disponible avec les informations techniques autorisées dans les paramètres."
                        FontSize="13"
                        Foreground="#929CAB"
                        TextWrapping="Wrap"

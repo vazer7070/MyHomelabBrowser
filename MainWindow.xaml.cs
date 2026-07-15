@@ -3918,47 +3918,51 @@ namespace MyHomelabBrowser
 
         void CloseTab(TabItem tab)
         {
-            bool wasPrivate =
-                tab.Tag is WebTabContent w && w.IsPrivate;
-
-            bool wasSelected = Equals(Tabs.SelectedItem, tab);
-            if (tab.Tag is WebTabContent wr && wr.IsLegacyExternal)
-            {
-                try
-                {
-                    try { LegacyLauncher.KillAllBasiliskProcesses(); } catch { }
-
-
-                }
-                catch { }
-            }
-
-            if (tab.Tag is WebTabContent closingWebTab)
-                _cloudTorrentBrowser.Detach(closingWebTab.Web);
-
-            Tabs.Items.Remove(tab);
-
-
-            if (wasPrivate && !HasAnyPrivateTab())
-            {
-
-                DownloadManager.Instance.ClearPrivateDownloads();
-
-
-                UpdateDownloadsBadge();
-            }
-
-            if (Tabs.Items.Count == 0)
-            {
-                CreateEmptyStartTab();
+            if (tab == null || !_tabsBeingClosed.Add(tab))
                 return;
+
+            try
+            {
+                bool wasPrivate =
+                    tab.Tag is WebTabContent privateTab && privateTab.IsPrivate;
+
+                bool wasSelected = Equals(Tabs.SelectedItem, tab);
+                WebTabContent? closingWebTab = tab.Tag as WebTabContent;
+
+                if (closingWebTab?.IsLegacyExternal == true)
+                {
+                    try { LegacyLauncher.KillAllBasiliskProcesses(); }
+                    catch { }
+                }
+
+                // Le son est coupé avant le premier await, puis le WebView2 est
+                // détaché et détruit sans bloquer l'interface.
+                if (closingWebTab != null)
+                    _ = ShutdownWebTabAsync(closingWebTab);
+
+                Tabs.Items.Remove(tab);
+
+                if (wasPrivate && !HasAnyPrivateTab())
+                {
+                    DownloadManager.Instance.ClearPrivateDownloads();
+                    UpdateDownloadsBadge();
+                }
+
+                if (Tabs.Items.Count == 0)
+                {
+                    CreateEmptyStartTab();
+                    return;
+                }
+
+                if (wasSelected)
+                    Tabs.SelectedIndex = Math.Max(0, Tabs.SelectedIndex);
+
+                SyncWebHostWithSelection();
             }
-
-
-            if (wasSelected)
-                Tabs.SelectedIndex = Math.Max(0, Tabs.SelectedIndex);
-
-            SyncWebHostWithSelection();
+            finally
+            {
+                _tabsBeingClosed.Remove(tab);
+            }
         }
 
 

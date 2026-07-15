@@ -115,6 +115,14 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
                 documentHost = AdBlockDomain.NormalizeHost(_webView.Source.Host);
 
             AdBlockResourceType resourceType = MapResourceType(e.ResourceContext);
+
+            // Les flux audio et vidéo YouTube utilisent souvent des requêtes séparées.
+            // Bloquer l'une d'elles peut laisser l'audio jouer avec une zone vidéo vide.
+            // Ces flux de lecture sont donc toujours préservés ; les publicités YouTube
+            // restent traitées par les règles visuelles sûres ci-dessous.
+            if (IsProtectedPlaybackRequest(requestUri, documentHost, resourceType))
+                return;
+
             if (!_module.ShouldBlock(requestUri, documentHost, resourceType))
                 return;
 
@@ -213,7 +221,15 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
                 ? _module.GetCosmeticSelectors(_documentHost)
                 : Array.Empty<string>();
 
-            IReadOnlyList<string> selectorBlocks = BuildSelectorBlocks(selectors);
+            bool isYouTubeDocument = IsYouTubeHost(_documentHost);
+
+            // Les sélecteurs génériques d'EasyList peuvent devenir trop agressifs sur
+            // le lecteur YouTube, dont la structure change fréquemment. Sur YouTube,
+            // on utilise uniquement une liste cosmétique ciblée et sûre dans le script.
+            IReadOnlyList<string> selectorBlocks = isYouTubeDocument
+                ? Array.Empty<string>()
+                : BuildSelectorBlocks(selectors);
+
             string[] blockedUrls;
 
             lock (_blockedUrlsLock)
@@ -230,6 +246,10 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
     const enabled = {{enabledJson}};
     const selectorBlocks = {{jsonSelectorBlocks}};
     const blockedUrls = {{jsonBlockedUrls}};
+    const currentHost = (location.hostname || '').toLowerCase().replace(/^www\./, '');
+    const isYouTube = currentHost === 'youtube.com'
+        || currentHost.endsWith('.youtube.com')
+        || currentHost === 'youtu.be';
     const stateKey = '__pommeBrowserAdBlockCosmetic';
     const styleAttribute = '{{CosmeticStyleAttribute}}';
     const collapsedAttribute = 'data-pomme-adblock-collapsed';
@@ -299,7 +319,7 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
     const adHintPattern = /(?:^|[\s_\-.:/])(ad(?:s|vert(?:isement|ising)?)?|banner|sponsor(?:ed|isé|ise)?|promo(?:tion)?|publicit(?:é|e)|dfp|gpt)(?:$|[\s_\-.:/\d])/i;
     const harmlessTextPattern = /^(?:publicit(?:é|e)|advertisement|sponsor(?:ed|isé|ise)?|annonce|ad|ads|fermer|close|x|×|—|-)$/i;
 
-    const commonAdSelectors = [
+    const genericAdSelectors = [
         'ins.adsbygoogle',
         '[data-ad]',
         '[data-ads]',
@@ -332,7 +352,45 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
         '[class*="sponsorisé" i]',
         '[class*="publicite" i]',
         '[class*="publicité" i]'
-    ].join(',');
+    ];
+
+    const youtubeAdSelectors = [
+        '#masthead-ad',
+        '#player-ads',
+        'ytd-ad-slot-renderer',
+        'ytd-display-ad-renderer',
+        'ytd-promoted-video-renderer',
+        'ytd-promoted-sparkles-web-renderer',
+        'ytd-in-feed-ad-layout-renderer',
+        'ytd-companion-slot-renderer',
+        '.ytp-ad-module',
+        '.ytp-ad-overlay-container',
+        '.video-ads.ytp-ad-module'
+    ];
+
+    const commonAdSelectors = (isYouTube ? youtubeAdSelectors : genericAdSelectors).join(',');
+    const protectedPlayerSelectors = isYouTube
+        ? '#movie_player,#player,#player-container,#player-container-inner,#ytd-player,ytd-player,.html5-video-player,.html5-main-video,video.video-stream,#primary-inner,#columns'
+        : 'video,audio';
+
+    function isProtectedPlayerElement(element) {
+        if (!(element instanceof Element))
+            return false;
+
+        try {
+            if (element.matches(protectedPlayerSelectors))
+                return true;
+
+            const protectedAncestor = element.closest(protectedPlayerSelectors);
+            if (protectedAncestor) {
+                // Sur YouTube, on ne protège que le lecteur lui-même et ses descendants.
+                // Hors YouTube, un élément média principal ne doit jamais être replié.
+                return true;
+            }
+        } catch (_) { }
+
+        return false;
+    }
 
     function normalizeUrl(value) {
         if (!value)
@@ -436,10 +494,24 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
         if (visibleText(element).length > 32)
             return true;
 
-        const meaningfulSelector = 'button,input,textarea,select,video:not([data-pomme-adblock-collapsed]),canvas,svg,a[href]';
+        const meaningfulSelector = 'button,input,textarea,select,video:not([data-pomme-adblock-collapsed]),audio:not([data-pomme-adblock-collapsed]),iframe:not([data-pomme-adblock-collapsed]),canvas,svg,a[href]';
         try {
             for (const node of element.querySelectorAll(meaningfulSelector)) {
-                if (!isAlreadyInvisible(node) && visibleText(node).length > 0)
+                if (isAlreadyInvisible(node))
+                    continue;
+
+                const tag = node.tagName;
+                const rect = node.getBoundingClientRect();
+                const isVisualMedia = tag === 'VIDEO'
+                    || tag === 'AUDIO'
+                    || tag === 'IFRAME'
+                    || tag === 'CANVAS'
+                    || tag === 'SVG';
+
+                if (isVisualMedia && rect.width > 24 && rect.height > 18)
+                    return true;
+
+                if (visibleText(node).length > 0)
                     return true;
             }
         } catch (_) { }
@@ -473,7 +545,7 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
     function collapse(element, reason) {
         if (!(element instanceof HTMLElement) && !(element instanceof SVGElement))
             return false;
-        if (protectedTags.has(element.tagName))
+        if (protectedTags.has(element.tagName) || isProtectedPlayerElement(element))
             return false;
 
         if (element.getAttribute(collapsedAttribute) === '1')
@@ -490,11 +562,16 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
 
         for (let depth = 0; depth < 4; depth++) {
             const parent = current && current.parentElement;
-            if (!parent || protectedTags.has(parent.tagName))
+            if (!parent || protectedTags.has(parent.tagName) || isProtectedPlayerElement(parent))
                 break;
 
             const strongHint = hasAdHint(parent);
             const emptyAfterChild = isEffectivelyEmpty(parent);
+
+            // Sur YouTube, le repli par simple détection de vide peut remonter jusqu'au
+            // lecteur. On ne replie donc un parent que s'il porte un indice publicitaire.
+            if (isYouTube && !strongHint)
+                break;
             const childCount = Array.from(parent.children)
                 .filter(child => !ignoredEmptyTags.has(child.tagName))
                 .length;
@@ -543,14 +620,19 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
 
     function scanSelectorMatches(root) {
         for (const selectorBlock of selectorBlocks) {
-            for (const element of queryWithin(root, selectorBlock))
-                collapseAdElement(element, 'filter-list');
+            for (const element of queryWithin(root, selectorBlock)) {
+                if (!isProtectedPlayerElement(element))
+                    collapseAdElement(element, 'filter-list');
+            }
         }
     }
 
     function scanCommonAdSlots(root) {
         for (const element of queryWithin(root, commonAdSelectors)) {
-            if (element.matches('ins.adsbygoogle,[data-ad],[data-ad-slot],[data-ad-unit],[id^="google_ads_"],[id*="div-gpt-ad" i]')
+            if (isProtectedPlayerElement(element))
+                continue;
+
+            if (element.matches('ins.adsbygoogle,[data-ad],[data-ad-slot],[data-ad-unit],[id^="google_ads_"],[id*="div-gpt-ad" i],#masthead-ad,#player-ads,ytd-ad-slot-renderer,ytd-display-ad-renderer,ytd-promoted-video-renderer,ytd-promoted-sparkles-web-renderer,ytd-in-feed-ad-layout-renderer,ytd-companion-slot-renderer,.ytp-ad-module,.ytp-ad-overlay-container')
                 || isEffectivelyEmpty(element)
                 || isBlockedResourceElement(element)) {
                 collapseAdElement(element, 'ad-slot');
@@ -561,7 +643,7 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
     function scanBlockedResources(root) {
         const selector = 'img[src],img[data-src],iframe[src],video[src],audio[src],source[src],embed[src],object[data],ins iframe[src]';
         for (const element of queryWithin(root, selector)) {
-            if (isBlockedResourceElement(element))
+            if (!isProtectedPlayerElement(element) && isBlockedResourceElement(element))
                 collapseAdElement(element, 'blocked-resource');
         }
     }
@@ -640,7 +722,9 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
 
     const errorHandler = event => {
         const target = event.target;
-        if (!(target instanceof Element) || !visualResourceTags.has(target.tagName))
+        if (!(target instanceof Element)
+            || !visualResourceTags.has(target.tagName)
+            || isProtectedPlayerElement(target))
             return;
 
         if (isBlockedResourceElement(target) || hasAdHint(target) || hasAdHint(target.parentElement))
@@ -772,6 +856,44 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
                 _documentHost = AdBlockDomain.NormalizeHost(uri.Host);
             else
                 _documentHost = string.Empty;
+        }
+
+        private static bool IsYouTubeHost(string? host)
+        {
+            string normalized = AdBlockDomain.NormalizeHost(host ?? string.Empty);
+            return normalized.Equals("youtube.com", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith(".youtube.com", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("youtu.be", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsProtectedPlaybackRequest(
+            Uri requestUri,
+            string documentHost,
+            AdBlockResourceType resourceType)
+        {
+            if (!IsYouTubeHost(documentHost))
+                return false;
+
+            string requestHost = AdBlockDomain.NormalizeHost(requestUri.Host);
+            bool isGoogleVideo = requestHost.Equals("googlevideo.com", StringComparison.OrdinalIgnoreCase)
+                || requestHost.EndsWith(".googlevideo.com", StringComparison.OrdinalIgnoreCase);
+
+            if (isGoogleVideo
+                && requestUri.AbsolutePath.Contains("/videoplayback", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            // L'API player fournit les informations nécessaires au démarrage et au
+            // changement de qualité. La bloquer peut produire un lecteur vide.
+            if (requestHost.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase)
+                && requestUri.AbsolutePath.Contains("/youtubei/v1/player", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return resourceType == AdBlockResourceType.Media
+                && (isGoogleVideo || requestHost.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase));
         }
 
         private static AdBlockResourceType MapResourceType(CoreWebView2WebResourceContext context)

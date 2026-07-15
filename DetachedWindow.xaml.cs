@@ -89,6 +89,11 @@ namespace MyHomelabBrowser
                         _main.RedockWebView(_web); // fallback (au cas où)
                 });
             }
+            else
+            {
+                Host.Content = null;
+                _ = _main.ShutdownDetachedWebTabAsync(_state);
+            }
         }
 
 
