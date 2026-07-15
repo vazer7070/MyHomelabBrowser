@@ -36,7 +36,9 @@ namespace MyHomelabBrowser.controles
             SetTitle("🕶️ " + Title.Text);
         }
 
-        public void SetTitle(string title) => Title.Text = title;
+        public string TabTitle => Title.Text ?? string.Empty;
+
+        public void SetTitle(string title) => Title.Text = title ?? string.Empty;
         public void SetIcon(ImageSource icon) => Icon.Source = icon;
         bool _pinned;
         Point _dragStart;

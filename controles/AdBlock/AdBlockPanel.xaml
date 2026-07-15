@@ -1,0 +1,191 @@
+<UserControl x:Class="MyHomelabBrowser.controles.AdBlock.AdBlockPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MinWidth="360"
+             MaxWidth="400"
+             Background="Transparent">
+    <Border Background="{StaticResource PanelBrush}"
+            BorderBrush="{StaticResource BorderStrongBrush}"
+            BorderThickness="1"
+            CornerRadius="16">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    Padding="17,15"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="0,0,0,1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border x:Name="ShieldTile"
+                            Width="38"
+                            Height="38"
+                            CornerRadius="11"
+                            Background="{StaticResource AccentSoftBrush}">
+                        <Viewbox Width="21" Height="21">
+                            <Path x:Name="ShieldPath"
+                                  Fill="{StaticResource AccentBrush}"
+                                  Data="M12,2 L20,5 V11 C20,16.1 16.8,20.2 12,22 C7.2,20.2 4,16.1 4,11 V5 Z M12,5.1 L7,7 V11 C7,14.5 9,17.3 12,18.8 C15,17.3 17,14.5 17,11 V7 Z"/>
+                        </Viewbox>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
+                        <TextBlock Text="Protection web"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock x:Name="HeaderStatusText"
+                                   Margin="0,2,0,0"
+                                   FontSize="12"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Text="Protection active"/>
+                    </StackPanel>
+
+                    <Button Grid.Column="2"
+                            Width="34"
+                            Height="34"
+                            Style="{StaticResource IconButtonStyle}"
+                            Content="⚙"
+                            ToolTip="Paramètres du bloqueur"
+                            Click="SettingsButton_Click"/>
+                </Grid>
+            </Border>
+
+            <StackPanel Grid.Row="1" Margin="14">
+                <Border Style="{StaticResource ModernCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel>
+                            <TextBlock Text="Site actuel"
+                                       FontSize="11"
+                                       Foreground="{StaticResource TextTertiaryBrush}"/>
+                            <TextBlock x:Name="CurrentSiteText"
+                                       Margin="0,4,0,0"
+                                       FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       Text="Aucun site"/>
+                            <TextBlock x:Name="SiteProtectionText"
+                                       Margin="0,5,0,0"
+                                       FontSize="12"
+                                       LineHeight="17"
+                                       TextWrapping="Wrap"
+                                       TextTrimming="None"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Text="Ouvrez une page web pour voir son état."/>
+                        </StackPanel>
+
+                        <Button x:Name="ToggleSiteButton"
+                                Grid.Column="1"
+                                Margin="12,0,0,0"
+                                MinWidth="124"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Content="Autoriser ce site"
+                                Click="ToggleSiteButton_Click"/>
+                    </Grid>
+                </Border>
+
+                <Grid Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource ModernCardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="Cette page"
+                                       FontSize="11"
+                                       Foreground="{StaticResource TextTertiaryBrush}"/>
+                            <TextBlock x:Name="PageBlockedText"
+                                       Margin="0,5,0,0"
+                                       FontSize="22"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       Text="0"/>
+                            <TextBlock Text="requêtes bloquées"
+                                       Margin="0,2,0,0"
+                                       FontSize="11"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="2" Style="{StaticResource ModernCardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="Session"
+                                       FontSize="11"
+                                       Foreground="{StaticResource TextTertiaryBrush}"/>
+                            <TextBlock x:Name="SessionBlockedText"
+                                       Margin="0,5,0,0"
+                                       FontSize="22"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       Text="0"/>
+                            <TextBlock Text="requêtes bloquées"
+                                       Margin="0,2,0,0"
+                                       FontSize="11"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <Border Margin="0,10,0,0" Style="{StaticResource ModernCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="Moteur de filtrage"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock x:Name="RulesText"
+                                   Margin="0,5,0,0"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Text="Chargement des listes…"/>
+                        <TextBlock x:Name="UpdateText"
+                                   Margin="0,4,0,0"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextTertiaryBrush}"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <Border Grid.Row="2"
+                    Padding="14"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="0,1,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button x:Name="GlobalToggleButton"
+                            Grid.Column="0"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Content="Désactiver partout"
+                            Click="GlobalToggleButton_Click"/>
+                    <Button x:Name="UpdateListsButton"
+                            Grid.Column="2"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Content="Mettre à jour"
+                            Click="UpdateListsButton_Click"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

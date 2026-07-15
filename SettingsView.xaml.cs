@@ -1,6 +1,8 @@
 ﻿using Microsoft.Win32;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Flash;
+using MyHomelabBrowser.classes.CloudTorrent.Services;
+using MyHomelabBrowser.classes.AdBlock.Services;
 using MyHomelabBrowser.controles;
 using MyHomelabBrowser.controles.settings;
 using System;
@@ -15,8 +17,10 @@ namespace MyHomelabBrowser
     public partial class SettingsView : UserControl
     {
         readonly SettingsService _service;
+        readonly CloudTorrentModuleService _cloudTorrent;
         BrowserSettings _original;
         BrowserSettings _working;
+        private int _requestedSectionIndex;
         public bool FlashDebugEnabled { get; set; } = false;
 
         public event Action? OpenHistoryRequested;
@@ -98,10 +102,20 @@ namespace MyHomelabBrowser
                 InstallUpdateBtn.IsEnabled = available;
         }
 
+        /// <summary>
+        /// Constructeur compatible avec les appels existants du navigateur.
+        /// Toutes les vues de paramètres partagent la même instance CloudTorrent.
+        /// </summary>
         public SettingsView(SettingsService service)
+            : this(service, CloudTorrentModuleHost.Current)
+        {
+        }
+
+        public SettingsView(SettingsService service, CloudTorrentModuleService cloudTorrent)
         {
             InitializeComponent();
             _service = service;
+            _cloudTorrent = cloudTorrent;
 
             _original = _service.Settings.Clone();
             _working = _service.Settings.Clone();
@@ -139,15 +153,80 @@ namespace MyHomelabBrowser
         private void SettingsView_Loaded(object sender, RoutedEventArgs e)
         {
             Loaded -= SettingsView_Loaded;
-            LoadSection(0);
+            SelectSection(_requestedSectionIndex);
         }
+
+        public void SelectSection(string sectionName)
+        {
+            int section = sectionName switch
+            {
+                "Téléchargements" => 1,
+                "Historique" => 2,
+                "Mises à jour" => 3,
+                "Bloqueur de publicités" or "AdBlock" => 4,
+                "CloudTorrent" => 5,
+                "Avancé" or "⚠ Avancé" => 6,
+                _ => 0
+            };
+
+            SelectSection(section);
+        }
+
+        private void SelectSection(int section)
+        {
+            _requestedSectionIndex = Math.Clamp(section, 0, 6);
+            if (!IsLoaded)
+                return;
+
+            int navIndex = _requestedSectionIndex == 6 ? 7 : _requestedSectionIndex;
+            if (NavList.SelectedIndex != navIndex)
+                NavList.SelectedIndex = navIndex;
+            else
+                LoadSection(_requestedSectionIndex);
+        }
+
+
+        private void SettingsSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (SettingsSearchPlaceholder != null)
+                SettingsSearchPlaceholder.Visibility = string.IsNullOrEmpty(SettingsSearchBox.Text)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+        }
+
+        private void SettingsSearchBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key != System.Windows.Input.Key.Enter)
+                return;
+
+            string query = (SettingsSearchBox.Text ?? string.Empty).Trim().ToLowerInvariant();
+            if (query.Length == 0)
+                return;
+
+            int section = query switch
+            {
+                var value when ContainsAny(value, "pub", "publicité", "adblock", "easylist", "traqueur", "tracker", "protection") => 4,
+                var value when ContainsAny(value, "cloud", "torrent", "api", "clé", "analyse", "1fichier", "vidéo") => 5,
+                var value when ContainsAny(value, "télécharg", "dossier", "fichier") => 1,
+                var value when ContainsAny(value, "historique", "navigation", "données") => 2,
+                var value when ContainsAny(value, "mise à jour", "version", "update", "changelog") => 3,
+                var value when ContainsAny(value, "flash", "basilisk", "avancé", "debug", "legacy") => 6,
+                _ => 0
+            };
+
+            SelectSection(section);
+            e.Handled = true;
+        }
+
+        private static bool ContainsAny(string value, params string[] terms)
+            => terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
 
         void NavList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (NavList.SelectedItem is not ListBoxItem item)
                 return;
 
-            var text = item.Content?.ToString() ?? "";
+            var text = item.Tag?.ToString() ?? item.Content?.ToString() ?? "";
 
             int section = text switch
             {
@@ -155,7 +234,9 @@ namespace MyHomelabBrowser
                 "Téléchargements" => 1,
                 "Historique" => 2,
                 "Mises à jour" => 3,
-                "⚠ Avancé" => 4,
+                "Bloqueur de publicités" => 4,
+                "CloudTorrent" => 5,
+                "⚠ Avancé" => 6,
                 _ => 0
             };
 
@@ -171,7 +252,9 @@ namespace MyHomelabBrowser
                 1 => new SettingsDownloadsView(),
                 2 => new SettingsHistoryView(),
                 3 => new SettingsUpdatesView(),
-                4 => new SettingsAdvancedView(),
+                4 => new SettingsAdBlockView(AdBlockModuleHost.Current),
+                5 => new SettingsCloudTorrentView(_cloudTorrent),
+                6 => new SettingsAdvancedView(),
                 _ => null
             };
 
@@ -257,11 +340,23 @@ namespace MyHomelabBrowser
         }
         private void OpenReportIssue_Click(object sender, RoutedEventArgs e)
         {
+            ReportModule module = ReportModule.Browser;
+
+            if (NavList.SelectedItem is ListBoxItem selectedItem &&
+                selectedItem.Tag is string selectedSection)
+            {
+                if (selectedSection.Equals("Bloqueur de publicités", StringComparison.OrdinalIgnoreCase))
+                    module = ReportModule.AdBlock;
+                else if (selectedSection.Equals("CloudTorrent", StringComparison.OrdinalIgnoreCase))
+                    module = ReportModule.CloudTorrent;
+            }
+
             var options = new ReportIssueOptions
             {
                 IncludeLogs = _working.ReportIncludeLogs,
                 IncludePcInfo = _working.ReportIncludePcInfo,
-                IncludeMode = _working.ReportIncludeMode
+                IncludeMode = _working.ReportIncludeMode,
+                Module = module
             };
 
             OpenReportIssueRequested?.Invoke(options);

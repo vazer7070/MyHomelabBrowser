@@ -19,7 +19,7 @@
 
                 <TextBlock x:Name="UrlText"
                            Margin="0,8,0,0"
-                           Foreground="#D0D0D0"
+                           Foreground="{StaticResource TextPrimaryBrush}"
                            FontSize="13"/>
 
                 <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
@@ -38,7 +38,7 @@
 
                 <TextBlock x:Name="ErrorText"
                            Margin="0,12,0,0"
-                           Foreground="#FF6B6B"
+                           Foreground="{StaticResource DangerBrush}"
                            FontSize="13"
                            TextWrapping="Wrap"
                            Visibility="Collapsed"/>

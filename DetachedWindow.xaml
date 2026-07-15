@@ -4,7 +4,7 @@
         Title="Onglet détaché"
         Width="1200"
         Height="800"
-        Background="#1E1E1E">
+        Background="{StaticResource PanelBrush}">
 
 
     <Grid>
@@ -13,7 +13,7 @@
             <!-- Barre simple -->
             <Border DockPanel.Dock="Top"
                 Height="32"
-                Background="#222"
+                Background="{StaticResource PanelBrush}"
                 MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
 
                 <StackPanel Orientation="Horizontal"

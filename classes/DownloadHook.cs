@@ -1,7 +1,9 @@
-﻿using System;
+using System;
 using System.IO;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
+using MyHomelabBrowser.classes.Profiles;
+using MyHomelabBrowser.classes.Security;
 
 namespace MyHomelabBrowser.classes
 {
@@ -27,6 +29,9 @@ namespace MyHomelabBrowser.classes
 
         private static void AttachToCore(CoreWebView2 core, bool isPrivate)
         {
+            // La confiance privée est capturée au moment où le WebView du profil est initialisé.
+            BrowserCertificateTrustHost.Current.Attach(core, AppDataContext.Root);
+
             // ⚠️ méthode NOMMÉE → détachable
             core.DownloadStarting -= Core_DownloadStarting;
             core.DownloadStarting += Core_DownloadStarting;

@@ -23,21 +23,21 @@
                     <CheckBox x:Name="EnableFlashSupportBox"
                               Content="Activer le support Flash (Ruffle / Legacy)"
                               IsChecked="{Binding EnableFlashSupport}"
-                              Foreground="#E6E6E6"
+                              Foreground="{StaticResource TextPrimaryBrush}"
                               Margin="0,6"/>
 
                     <CheckBox x:Name="PreferRuffleBox"
                               Content="Tenter Ruffle avant Basilisk"
                               IsChecked="{Binding PreferRuffle}"
                               IsEnabled="{Binding EnableFlashSupport}"
-                              Foreground="#E6E6E6"
+                              Foreground="{StaticResource TextPrimaryBrush}"
                               Margin="0,4"/>
 
                     <CheckBox x:Name="FlashDebugEnabledBox"
                               Content="Mode debug Flash (logs / overlay)"
                               IsChecked="{Binding FlashDebugEnabled}"
                               IsEnabled="{Binding EnableFlashSupport}"
-                              Foreground="#E6E6E6"
+                              Foreground="{StaticResource TextPrimaryBrush}"
                               Margin="0,4"/>
 
                     <Button x:Name="OpenFlashConsoleBtn"
@@ -67,7 +67,7 @@
                     </StackPanel>
 
                     <TextBlock Text="Utilisé uniquement si un site nécessite Flash réel (MMO anciens)."
-                               Foreground="#9E9E9E"
+                               Foreground="{StaticResource TextSecondaryBrush}"
                                FontSize="12"
                                Margin="0,6,0,0"/>
 
@@ -77,14 +77,14 @@
                                Style="{StaticResource SettingsLabel}"/>
 
                     <TextBlock Text="Ces sites seront toujours ouverts avec Basilisk, même si Ruffle est disponible."
-                               Foreground="#9E9E9E"
+                               Foreground="{StaticResource TextSecondaryBrush}"
                                FontSize="12"
                                Margin="0,0,0,8"/>
 
                     <ListBox x:Name="FlashLegacyList"
                              Height="140"
-                             Background="#2B2B2B"
-                             Foreground="#E0E0E0"
+                             Background="{StaticResource SurfaceRaisedBrush}"
+                             Foreground="{StaticResource TextPrimaryBrush}"
                              BorderThickness="0"/>
 
                     <StackPanel Orientation="Horizontal" Margin="0,10,0,0">

@@ -9,7 +9,7 @@
         Width="420"
         Height="220">
 
-    <Border Background="#1E1E1E"
+    <Border Background="{StaticResource PanelBrush}"
             CornerRadius="14"
             Padding="18">
 
@@ -31,7 +31,7 @@
             <TextBlock x:Name="MessageText"
                        Grid.Row="1"
                        TextWrapping="Wrap"
-                       Foreground="#DDDDDD"
+                       Foreground="{StaticResource TextPrimaryBrush}"
                        FontSize="14"/>
 
             <!-- BOUTON -->

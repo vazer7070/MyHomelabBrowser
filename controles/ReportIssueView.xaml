@@ -4,157 +4,136 @@
              Background="{StaticResource FluentBg}">
 
     <UserControl.Resources>
-
-        <!-- ===================== -->
-        <!-- Labels -->
-        <!-- ===================== -->
         <Style x:Key="FormLabel" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Margin" Value="0,12,0,4"/>
-            <Setter Property="Foreground" Value="#CCCCCC"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,14,0,6"/>
+            <Setter Property="Foreground" Value="#D5D9E0"/>
         </Style>
 
-        <!-- ===================== -->
-        <!-- TextBox -->
-        <!-- ===================== -->
+        <Style x:Key="FormHint" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#8F9AAA"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="2,6,0,2"/>
+        </Style>
+
         <Style x:Key="FormTextBox" TargetType="TextBox">
-            <Setter Property="Height" Value="40"/>
-            <Setter Property="Padding" Value="12"/>
+            <Setter Property="MinHeight" Value="42"/>
+            <Setter Property="Padding" Value="12,8"/>
             <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Background" Value="#2B2B2B"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="#1C212B"/>
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CaretBrush" Value="White"/>
+            <Setter Property="SelectionBrush" Value="#3B82F6"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#303744"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Stretch"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="Border" Property="BorderBrush" Value="#4C9AFF"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="BorderBrush" Value="#465164"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
-        <!-- ===================== -->
-        <!-- ComboBox Fluent++ -->
-        <!-- ===================== -->
         <Style x:Key="FormComboBox" TargetType="ComboBox">
-            <Setter Property="Height" Value="40"/>
+            <Setter Property="Height" Value="42"/>
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Background" Value="#2B2B2B"/>
+            <Setter Property="Background" Value="#1C212B"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="#3A3A3A"/>
-            <Setter Property="Padding" Value="10,0"/>
-            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="BorderBrush" Value="#303744"/>
+            <Setter Property="Padding" Value="12,0"/>
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
-
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBox">
                         <Grid>
-
-                            <!-- Main box -->
                             <Border x:Name="Border"
-            Background="{TemplateBinding Background}"
-            BorderBrush="{TemplateBinding BorderBrush}"
-            BorderThickness="{TemplateBinding BorderThickness}"
-            CornerRadius="6"/>
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="8"/>
 
-                            <!-- Click handler -->
                             <ToggleButton x:Name="Toggle"
-              Background="Transparent"
-              BorderThickness="0"
-              OverridesDefaultStyle="True"
-              IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-              Focusable="False"
-              HorizontalAlignment="Stretch"
-              VerticalAlignment="Stretch">
-
+                                          Background="Transparent"
+                                          BorderThickness="0"
+                                          OverridesDefaultStyle="True"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                          Focusable="False"
+                                          HorizontalAlignment="Stretch"
+                                          VerticalAlignment="Stretch">
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="ToggleButton">
-                                        <!-- zone cliquable invisible -->
                                         <Border Background="Transparent"/>
                                     </ControlTemplate>
                                 </ToggleButton.Template>
-
                             </ToggleButton>
 
-                            <!-- Selected item -->
-                            <ContentPresenter
-        Margin="10,0,36,0"
-        VerticalAlignment="Center"
-        HorizontalAlignment="Left"
-        Content="{TemplateBinding SelectionBoxItem}"/>
+                            <ContentPresenter Margin="12,0,38,0"
+                                              VerticalAlignment="Center"
+                                              HorizontalAlignment="Left"
+                                              Content="{TemplateBinding SelectionBoxItem}"/>
 
-                            <!-- Arrow -->
-                            <TextBlock Text="▾"
-               FontSize="14"
-               Foreground="#CCCCCC"
-               VerticalAlignment="Center"
-               HorizontalAlignment="Right"
-               Margin="0,0,12,0"/>
+                            <Path Data="M 0 0 L 5 5 L 10 0"
+                                  Stroke="#B7C0CE"
+                                  StrokeThickness="1.5"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center"
+                                  Margin="0,0,14,0"/>
 
-                            <!-- Popup -->
                             <Popup x:Name="Popup"
-           Placement="Bottom"
-           IsOpen="{TemplateBinding IsDropDownOpen}"
-           AllowsTransparency="True"
-           Focusable="False"
-           PopupAnimation="None">
-
+                                   Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="Fade">
                                 <Border x:Name="DropDownBorder"
-                Background="#2B2B2B"
-                BorderBrush="#3A3A3A"
-                BorderThickness="1"
-                CornerRadius="6"
-                Padding="4"
-                Opacity="0"
-                RenderTransformOrigin="0.5,0">
-
-                                    <Border.RenderTransform>
-                                        <TranslateTransform Y="-6"/>
-                                    </Border.RenderTransform>
-
-                                    <ScrollViewer>
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        MaxHeight="320"
+                                        Background="#171B23"
+                                        BorderBrush="#303744"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        Padding="5"
+                                        Margin="0,4,0,0">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
                                         <ItemsPresenter/>
                                     </ScrollViewer>
                                 </Border>
                             </Popup>
-
                         </Grid>
 
                         <ControlTemplate.Triggers>
-
                             <Trigger SourceName="Toggle" Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Border"
-            Property="BorderBrush"
-            Value="#5A5A5A"/>
+                                <Setter TargetName="Border" Property="BorderBrush" Value="#465164"/>
                             </Trigger>
-
                             <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="Border"
-                                        Property="BorderBrush"
-                                        Value="#7A7A7A"/>
+                                <Setter TargetName="Border" Property="BorderBrush" Value="#4C9AFF"/>
                             </Trigger>
-
-                            <Trigger Property="IsDropDownOpen" Value="True">
-                                <Trigger.EnterActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-
-                                            <DoubleAnimation
-                                                Storyboard.TargetName="DropDownBorder"
-                                                Storyboard.TargetProperty="Opacity"
-                                                From="0" To="1"
-                                                Duration="0:0:0.12"/>
-
-                                            <DoubleAnimation
-                                                Storyboard.TargetName="DropDownBorder"
-                                                Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
-                                                From="-6" To="0"
-                                                Duration="0:0:0.12"/>
-
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.EnterActions>
-                            </Trigger>
-
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.5"/>
                             </Trigger>
-
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -164,21 +143,25 @@
                 <Setter.Value>
                     <Style TargetType="ComboBoxItem">
                         <Setter Property="Foreground" Value="White"/>
-                        <Setter Property="Padding" Value="10,6"/>
-                        <Setter Property="Background" Value="#2B2B2B"/>
+                        <Setter Property="Padding" Value="12,9"/>
+                        <Setter Property="Margin" Value="0,1"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="ComboBoxItem">
-                                    <Border Background="{TemplateBinding Background}"
-                                            CornerRadius="4">
-                                        <ContentPresenter/>
+                                    <Border x:Name="ItemBorder"
+                                            Background="{TemplateBinding Background}"
+                                            CornerRadius="6"
+                                            Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter VerticalAlignment="Center"/>
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsHighlighted" Value="True">
-                                            <Setter Property="Background" Value="#3A3A3A"/>
+                                            <Setter TargetName="ItemBorder" Property="Background" Value="#252C38"/>
                                         </Trigger>
                                         <Trigger Property="IsSelected" Value="True">
-                                            <Setter Property="Background" Value="#505050"/>
+                                            <Setter TargetName="ItemBorder" Property="Background" Value="#244B78"/>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
@@ -189,40 +172,40 @@
             </Setter>
         </Style>
 
-        <!-- ===================== -->
-        <!-- Buttons -->
-        <!-- ===================== -->
         <Style x:Key="FormButton" TargetType="Button">
             <Setter Property="Height" Value="42"/>
             <Setter Property="MinWidth" Value="110"/>
             <Setter Property="Padding" Value="20,0"/>
             <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Background" Value="#3A3A3A"/>
+            <Setter Property="Background" Value="#2A303B"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                CornerRadius="6">
-                            <ContentPresenter
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"/>
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#505050"/>
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.88"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#606060"/>
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.72"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
-
     </UserControl.Resources>
 
     <Grid Margin="40">
@@ -232,73 +215,107 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Text="🐞 Signaler un problème"
-                   FontSize="26"
-                   FontWeight="SemiBold"
-                   Foreground="White"
-                   Margin="0,0,0,24"/>
-
-        <StackPanel Grid.Row="1">
-
-            <TextBlock Text="Titre" Style="{StaticResource FormLabel}"/>
-            <TextBox x:Name="TitleBox"
-                     Style="{StaticResource FormTextBox}"/>
-
-            <TextBlock Text="Type" Style="{StaticResource FormLabel}"/>
-            <ComboBox x:Name="TypeBox"
-                      Style="{StaticResource FormComboBox}">
-                <ComboBoxItem Content="🐞 Bug / dysfonctionnement" Tag="Bug"/>
-                <ComboBoxItem Content="✨ Fonctionnalité manquante" Tag="MissingFeature"/>
-                <ComboBoxItem Content="➕ Demande d'ajout" Tag="FeatureRequest"/>
-                <ComboBoxItem Content="🎨 UX / UI" Tag="UiUx"/>
-                <ComboBoxItem Content="⚡ Performance" Tag="Performance"/>
-                <ComboBoxItem Content="❓ Autre" Tag="Other"/>
-            </ComboBox>
-
-            <TextBlock Text="Description" Style="{StaticResource FormLabel}"/>
-            <TextBox x:Name="DescriptionBox"
-                     Style="{StaticResource FormTextBox}"
-                     AcceptsReturn="True"
-                     TextWrapping="Wrap"
-                     Height="200"/>
-
-        </StackPanel>
-
-        <StackPanel Grid.Row="2"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right"
-                    Margin="0,24,0,0">
-
-            <Button Content="Annuler"
-                    Style="{StaticResource FormButton}"
-                    Margin="0,0,12,0"
-                    Click="Cancel_Click"/>
-
-            <Button x:Name="SendButton"
-                    Content="Envoyer"
-                    Style="{StaticResource FormButton}"
-                    Background="#B03030"
-                    Click="Send_Click"/>
-        </StackPanel>
-
-        <StackPanel x:Name="SendingPanel"
-                    Grid.Row="2"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right"
-                    Margin="0,72,0,0"
-                    Visibility="Collapsed">
-
-            <ProgressBar Width="70"
-                         Height="6"
-                         IsIndeterminate="True"
-                         VerticalAlignment="Center"/>
-
-            <TextBlock Text="Envoi en cours…"
-                       Foreground="#AAAAAA"
+        <StackPanel>
+            <TextBlock Text="Signaler un problème"
+                       FontSize="26"
+                       FontWeight="SemiBold"
+                       Foreground="White"/>
+            <TextBlock Text="Le rapport est envoyé sur le canal de support Discord avec les informations techniques autorisées dans les paramètres."
                        FontSize="13"
-                       Margin="10,0,0,0"
-                       VerticalAlignment="Center"/>
+                       Foreground="#929CAB"
+                       TextWrapping="Wrap"
+                       Margin="0,7,0,24"/>
         </StackPanel>
 
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="0,0,12,0">
+                <TextBlock Text="Module concerné" Style="{StaticResource FormLabel}" Margin="0,0,0,6"/>
+                <ComboBox x:Name="ModuleBox"
+                          Style="{StaticResource FormComboBox}"
+                          SelectedIndex="0"
+                          SelectionChanged="ModuleBox_SelectionChanged">
+                    <ComboBoxItem Content="PommeBrowser — navigation et interface" Tag="Browser"/>
+                    <ComboBoxItem Content="Bloqueur de publicités" Tag="AdBlock"/>
+                    <ComboBoxItem Content="CloudTorrent" Tag="CloudTorrent"/>
+                </ComboBox>
+                <TextBlock x:Name="ModuleHint"
+                           Style="{StaticResource FormHint}"
+                           Text="Pour un problème général du navigateur, des onglets, des téléchargements ou de l’interface."/>
+
+                <TextBlock Text="Titre" Style="{StaticResource FormLabel}"/>
+                <TextBox x:Name="TitleBox"
+                         Style="{StaticResource FormTextBox}"
+                         MaxLength="140"/>
+
+                <TextBlock Text="Type de demande" Style="{StaticResource FormLabel}"/>
+                <ComboBox x:Name="TypeBox"
+                          Style="{StaticResource FormComboBox}"
+                          SelectedIndex="0">
+                    <ComboBoxItem Content="Bug ou dysfonctionnement" Tag="Bug"/>
+                    <ComboBoxItem Content="Fonctionnalité absente" Tag="MissingFeature"/>
+                    <ComboBoxItem Content="Demande d’ajout" Tag="FeatureRequest"/>
+                    <ComboBoxItem Content="Interface ou ergonomie" Tag="UiUx"/>
+                    <ComboBoxItem Content="Performance" Tag="Performance"/>
+                    <ComboBoxItem Content="Autre" Tag="Other"/>
+                </ComboBox>
+
+                <TextBlock Text="Description" Style="{StaticResource FormLabel}"/>
+                <TextBox x:Name="DescriptionBox"
+                         Style="{StaticResource FormTextBox}"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         VerticalContentAlignment="Top"
+                         MinHeight="190"
+                         Height="220"
+                         MaxLength="3500"
+                         VerticalScrollBarVisibility="Auto"/>
+
+                <Border Background="#151A22"
+                        BorderBrush="#29313D"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="12"
+                        Margin="0,16,0,4">
+                    <TextBlock x:Name="DiagnosticNotice"
+                               Text="Le rapport indiquera le module choisi et son état, sans jamais inclure de clé API."
+                               Foreground="#9BA7B8"
+                               FontSize="12"
+                               TextWrapping="Wrap"/>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Grid Grid.Row="2" Margin="0,22,0,0">
+            <StackPanel x:Name="SendingPanel"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Visibility="Collapsed">
+                <ProgressBar Width="70"
+                             Height="6"
+                             IsIndeterminate="True"
+                             VerticalAlignment="Center"/>
+                <TextBlock Text="Envoi en cours…"
+                           Foreground="#AAAAAA"
+                           FontSize="13"
+                           Margin="10,0,0,0"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right">
+                <Button Content="Annuler"
+                        Style="{StaticResource FormButton}"
+                        Margin="0,0,12,0"
+                        Click="Cancel_Click"/>
+                <Button x:Name="SendButton"
+                        Content="Envoyer"
+                        Style="{StaticResource FormButton}"
+                        Background="#B03030"
+                        Click="Send_Click"/>
+            </StackPanel>
+        </Grid>
     </Grid>
 </UserControl>

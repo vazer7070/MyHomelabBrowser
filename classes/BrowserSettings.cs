@@ -13,6 +13,11 @@ namespace MyHomelabBrowser.classes
         public string StartPage { get; set; } = "https://google.com";
         public string NewTabPage { get; set; } = "https://duckduckgo.com";
 
+        // DNS sécurisé WebView2. Le changement est appliqué au prochain démarrage.
+        public SecureDnsMode DnsMode { get; set; } = SecureDnsMode.System;
+        public SecureDnsProvider DnsProvider { get; set; } = SecureDnsProvider.Cloudflare;
+        public string SecureDnsCustomTemplate { get; set; } = string.Empty;
+
         // --------------------
         // Commandes
         // --------------------
@@ -68,6 +73,10 @@ namespace MyHomelabBrowser.classes
                 CustomStartupPage = CustomStartupPage,
                 Startup = Startup,
 
+                DnsMode = DnsMode,
+                DnsProvider = DnsProvider,
+                SecureDnsCustomTemplate = SecureDnsCustomTemplate,
+
                 EnableSuspension = EnableSuspension,
                 SuspendDelayMinutes = SuspendDelayMinutes,
 
@@ -96,6 +105,22 @@ namespace MyHomelabBrowser.classes
             };
 
         }
+        public enum SecureDnsMode
+        {
+            System,
+            Automatic,
+            Secure
+        }
+
+        public enum SecureDnsProvider
+        {
+            Cloudflare,
+            Google,
+            Quad9,
+            AdGuard,
+            Custom
+        }
+
         public enum StartupMode
         {
             EmptyTab,

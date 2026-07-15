@@ -77,7 +77,7 @@
                 <TextBlock x:Name="PinIcon"
                            Text="📌"
                            FontSize="12"
-                           Foreground="#777"
+                           Foreground="{StaticResource TextTertiaryBrush}"
                            VerticalAlignment="Center"
                            HorizontalAlignment="Center"/>
             </Button>
@@ -93,14 +93,14 @@
                     VerticalAlignment="Center"
                     Background="Transparent"
                     BorderThickness="0"
-                    Foreground="#AAAAAA"
+                    Foreground="{StaticResource TextSecondaryBrush}"
                     Cursor="Hand"
                     ToolTip="Fermer l’onglet"
                     Content="✕">
 
                 <Button.Style>
                     <Style TargetType="Button">
-                        <Setter Property="Foreground" Value="#AAAAAA"/>
+                        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
                         <Setter Property="Background" Value="Transparent"/>
                         <Setter Property="Template">
                             <Setter.Value>
@@ -117,8 +117,7 @@
                                             <Setter TargetName="Root"
                                                     Property="Background"
                                                     Value="#402020"/>
-                                            <Setter Property="Foreground"
-                                                    Value="#FF6666"/>
+                                            <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>

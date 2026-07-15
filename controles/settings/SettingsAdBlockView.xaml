@@ -1,0 +1,176 @@
+<UserControl x:Class="MyHomelabBrowser.controles.settings.SettingsAdBlockView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,0,8,18">
+            <TextBlock Text="Bloqueur de publicités"
+                       FontSize="21"
+                       FontWeight="SemiBold"
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
+            <TextBlock Margin="0,5,0,0"
+                       MaxWidth="760"
+                       TextWrapping="Wrap"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       Text="Protection intégrée au navigateur. Les requêtes publicitaires et de suivi sont bloquées avant leur chargement, puis les emplacements résiduels sont masqués dans la page."/>
+
+            <Border Margin="0,18,0,0" Style="{StaticResource ModernCardStyle}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="Protection globale"
+                                   FontSize="15"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock Margin="0,5,20,0"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Text="Activée par défaut pour tous les profils et tous les onglets, y compris la navigation privée."/>
+                    </StackPanel>
+                    <CheckBox x:Name="EnabledCheckBox"
+                              Grid.Column="1"
+                              VerticalAlignment="Center"
+                              Content="Activée"
+                              Checked="GeneralSetting_Changed"
+                              Unchecked="GeneralSetting_Changed"/>
+                </Grid>
+            </Border>
+
+            <TextBlock Margin="0,22,0,8"
+                       Text="Protection"
+                       FontSize="13"
+                       FontWeight="SemiBold"
+                       Foreground="{StaticResource TextSecondaryBrush}"/>
+
+            <Border Style="{StaticResource ModernCardStyle}">
+                <StackPanel>
+                    <CheckBox x:Name="EasyListCheckBox"
+                              Content="Bloquer les publicités avec EasyList"
+                              Checked="SubscriptionSetting_Changed"
+                              Unchecked="SubscriptionSetting_Changed"/>
+                    <TextBlock Margin="27,4,0,12"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextTertiaryBrush}"
+                               Text="Filtres réseau et règles visuelles utilisés par les principaux bloqueurs de contenu."/>
+
+                    <CheckBox x:Name="EasyPrivacyCheckBox"
+                              Content="Bloquer les traqueurs avec EasyPrivacy"
+                              Checked="SubscriptionSetting_Changed"
+                              Unchecked="SubscriptionSetting_Changed"/>
+                    <TextBlock Margin="27,4,0,12"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextTertiaryBrush}"
+                               Text="Réduit les mesures publicitaires, pixels de suivi et appels analytiques tiers."/>
+
+                    <CheckBox x:Name="CosmeticFilteringCheckBox"
+                              Content="Masquer les emplacements publicitaires restants"
+                              Checked="GeneralSetting_Changed"
+                              Unchecked="GeneralSetting_Changed"/>
+                    <TextBlock Margin="27,4,0,12"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextTertiaryBrush}"
+                               Text="Injecte uniquement des règles CSS de masquage. Aucun code natif n’est exposé aux pages."/>
+
+                    <CheckBox x:Name="BypassPrivateNetworksCheckBox"
+                              Content="Ne pas filtrer les adresses locales et privées"
+                              Checked="GeneralSetting_Changed"
+                              Unchecked="GeneralSetting_Changed"/>
+                    <TextBlock Margin="27,4,0,0"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextTertiaryBrush}"
+                               Text="Évite de casser les services du homelab : localhost, domaines .lan/.local et réseaux privés."/>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Margin="0,22,0,8"
+                       Text="Listes de filtres"
+                       FontSize="13"
+                       FontWeight="SemiBold"
+                       Foreground="{StaticResource TextSecondaryBrush}"/>
+
+            <Border Style="{StaticResource ModernCardStyle}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <CheckBox x:Name="AutoUpdateCheckBox"
+                                  Content="Mettre à jour automatiquement les listes"
+                                  Checked="GeneralSetting_Changed"
+                                  Unchecked="GeneralSetting_Changed"/>
+                        <TextBlock x:Name="RuleCountText"
+                                   Margin="0,10,18,0"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock x:Name="LastUpdateText"
+                                   Margin="0,4,18,0"
+                                   Foreground="{StaticResource TextTertiaryBrush}"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock x:Name="UpdateStatusText"
+                                   Margin="0,4,18,0"
+                                   Foreground="{StaticResource AccentBrush}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <Button x:Name="UpdateNowButton"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Content="Mettre à jour maintenant"
+                            Click="UpdateNowButton_Click"/>
+                </Grid>
+            </Border>
+
+            <TextBlock Margin="0,22,0,8"
+                       Text="Sites autorisés"
+                       FontSize="13"
+                       FontWeight="SemiBold"
+                       Foreground="{StaticResource TextSecondaryBrush}"/>
+
+            <Border Style="{StaticResource ModernCardStyle}">
+                <StackPanel>
+                    <TextBlock TextWrapping="Wrap"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Text="La protection est désactivée uniquement sur les domaines ci-dessous. Les sous-domaines sont également autorisés."/>
+
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="10"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="AllowlistDomainBox"
+                                 MinHeight="40"
+                                 VerticalContentAlignment="Center"
+                                 ToolTip="Exemple : exemple.fr"
+                                 KeyDown="AllowlistDomainBox_KeyDown"/>
+                        <Button Grid.Column="2"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Content="Ajouter"
+                                Click="AddAllowlistButton_Click"/>
+                    </Grid>
+
+                    <ListBox x:Name="AllowlistList"
+                             Margin="0,12,0,0"
+                             MinHeight="70"
+                             MaxHeight="190"
+                             Background="{StaticResource SurfaceRaisedBrush}"
+                             BorderBrush="{StaticResource BorderBrush}"
+                             BorderThickness="1"
+                             Foreground="{StaticResource TextPrimaryBrush}"/>
+
+                    <Button Margin="0,10,0,0"
+                            HorizontalAlignment="Left"
+                            Style="{StaticResource DangerButtonStyle}"
+                            Content="Retirer le site sélectionné"
+                            Click="RemoveAllowlistButton_Click"/>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

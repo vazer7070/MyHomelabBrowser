@@ -10,8 +10,8 @@
         Background="Transparent">
 
     <Border CornerRadius="12"
-            Background="#1E1E1E"
-            BorderBrush="#2A2A2A"
+            Background="{StaticResource PanelBrush}"
+            BorderBrush="{StaticResource BorderBrush}"
             BorderThickness="1">
 
         <Grid>
@@ -23,7 +23,7 @@
 
             <!-- ================= HEADER ================= -->
             <Grid Grid.Row="0"
-                  Background="#202020">
+                  Background="{StaticResource PanelBrush}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition/>
                     <ColumnDefinition Width="48"/>
@@ -43,7 +43,7 @@
                         Margin="8"
                         Background="Transparent"
                         BorderThickness="0"
-                        Foreground="#AAA"
+                        Foreground="{StaticResource TextSecondaryBrush}"
                         Click="Cancel_Click"/>
             </Grid>
 
@@ -53,32 +53,32 @@
                         VerticalAlignment="Top">
 
                 <TextBlock Text="Titre"
-                           Foreground="#B0B0B0"
+                           Foreground="{StaticResource TextSecondaryBrush}"
                            Margin="0,0,0,4"/>
 
                 <TextBox x:Name="TitleBox"
                          Height="34"
                          Padding="10,4"
-                         Background="#2A2A2A"
+                         Background="{StaticResource SurfaceRaisedBrush}"
                          Foreground="White"
                          BorderThickness="0"
                          Margin="0,0,0,16"/>
 
                 <TextBlock Text="Dossier (optionnel)"
-                           Foreground="#B0B0B0"
+                           Foreground="{StaticResource TextSecondaryBrush}"
                            Margin="0,0,0,4"/>
 
                 <TextBox x:Name="FolderBox"
                          Height="34"
                          Padding="10,4"
-                         Background="#2A2A2A"
+                         Background="{StaticResource SurfaceRaisedBrush}"
                          Foreground="White"
                          BorderThickness="0"/>
             </StackPanel>
 
             <!-- ================= FOOTER ================= -->
             <Grid Grid.Row="2"
-                  Background="#202020">
+                  Background="{StaticResource PanelBrush}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition/>
                     <ColumnDefinition Width="Auto"/>
@@ -91,7 +91,7 @@
                         Content="Supprimer"
                         Margin="16,-3,16,3"
                         Padding="14,6"
-                        Foreground="#FF6B6B"
+                        Foreground="{StaticResource DangerBrush}"
                         Background="#332020"
                         BorderThickness="0"
                         Click="Delete_Click"/>
@@ -101,7 +101,7 @@
                         Content="Annuler"
                         Margin="0,-3,8,3"
                         Padding="14,6"
-                        Background="#2A2A2A"
+                        Background="{StaticResource SurfaceRaisedBrush}"
                         Foreground="White"
                         BorderThickness="0"
                         Click="Cancel_Click"/>
@@ -111,7 +111,7 @@
                         Content="OK"
                         Margin="0,-4,16,4"
                         Padding="16,6"
-                        Background="#3A7AFE"
+                        Background="{StaticResource AccentStrongBrush}"
                         Foreground="White"
                         BorderThickness="0"
                         Click="Ok_Click"/>

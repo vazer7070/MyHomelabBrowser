@@ -5,7 +5,7 @@
         Width="420" Height="190"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        Background="#1E1E1E"
+        Background="{StaticResource PanelBrush}"
         Foreground="White">
 
     <Grid Margin="16">
@@ -26,9 +26,9 @@
                  Height="34"
                  FontSize="14"
                  Padding="10,6"
-                 Background="#2A2A2A"
+                 Background="{StaticResource SurfaceRaisedBrush}"
                  Foreground="White"
-                 BorderBrush="#444"
+                 BorderBrush="{StaticResource BorderStrongBrush}"
                  BorderThickness="1"
                  Text=""/>
 

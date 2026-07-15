@@ -1,8 +1,11 @@
 ﻿using MyHomelabBrowser.classes;
+using MyHomelabBrowser.classes.AdBlock.Services;
+using MyHomelabBrowser.classes.CloudTorrent.Models;
+using MyHomelabBrowser.classes.CloudTorrent.Services;
 using System;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
-using System.Net.NetworkInformation;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -13,10 +16,10 @@ namespace MyHomelabBrowser.controles
     {
         public event Action? CloseRequested;
 
-        static DateTime _lastSend = DateTime.MinValue;
-        static bool _sending = false;
+        private static DateTime _lastSend = DateTime.MinValue;
+        private static bool _sending;
 
-        readonly ReportIssueOptions _options;
+        private readonly ReportIssueOptions _options;
 
         public ReportIssueView(ReportIssueOptions options)
         {
@@ -27,8 +30,12 @@ namespace MyHomelabBrowser.controles
                 IncludeLogs = options.IncludeLogs,
                 IncludePcInfo = options.IncludePcInfo,
                 IncludeMode = options.IncludeMode,
+                Module = options.Module,
                 Context = options.Context
             };
+
+            SelectModule(_options.Module);
+            UpdateModuleHelp(_options.Module);
         }
 
         public void Cancel_Click(object sender, RoutedEventArgs e)
@@ -36,89 +43,50 @@ namespace MyHomelabBrowser.controles
             CloseRequested?.Invoke();
         }
 
+        private void ModuleBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded && ModuleHint == null)
+                return;
+
+            UpdateModuleHelp(GetSelectedModule());
+        }
+
         private async void Send_Click(object sender, RoutedEventArgs e)
         {
-
-            var appVersion =
-    System.Reflection.Assembly
-        .GetExecutingAssembly()
-        .GetName()
-        .Version?
-        .ToString()
-    ?? "inconnue"; 
-
             if (_sending)
                 return;
 
             if (DateTime.UtcNow - _lastSend < TimeSpan.FromSeconds(10))
             {
-                ShowDialog("Trop rapide",
+                ShowDialog(
+                    "Trop rapide",
                     "Merci d’attendre quelques secondes avant un nouvel envoi.");
                 return;
             }
-            var extra = new StringBuilder();
 
-            if (_options.IncludeLogs)
-                extra.AppendLine("📄 Logs récents : inclus");
+            string title = TitleBox.Text.Trim();
+            string description = DescriptionBox.Text.Trim();
+            IssueType issueType = GetSelectedIssueType();
+            ReportModule module = GetSelectedModule();
 
-            if (_options.IncludePcInfo)
+            if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(description))
             {
-                extra.AppendLine("💻 Informations PC :");
-                extra.AppendLine($"- OS : {Environment.OSVersion}");
-            }
-
-            if (_options.IncludeMode)
-            {
-                var ctx = _options.Context;
-
-                if (ctx == null)
-                {
-                    extra.AppendLine("🧭 Mode navigateur : inconnu");
-                }
-                else
-                {
-                    string mode =
-                        ctx.IsLegacy ? "legacy" :
-                        ctx.IsPrivate ? "privé" :
-                        "normal";
-
-                    extra.AppendLine($"🧭 Mode navigateur : {mode}");
-                    extra.AppendLine($"⚡ Flash : {ctx.FlashMode}");
-
-                    if (!string.IsNullOrWhiteSpace(ctx.CurrentUrl))
-                        extra.AppendLine($"🌐 URL : {ctx.CurrentUrl}");
-
-                    if (!string.IsNullOrWhiteSpace(ctx.PageTitle))
-                        extra.AppendLine($"📝 Titre : {ctx.PageTitle}");
-
-                    if (ctx.TabId != null)
-                        extra.AppendLine($"🆔 Onglet : {ctx.TabId}");
-                }
-            }
-
-            string extraBlock = extra.Length > 0
-                ? "\n\n**Informations jointes :**\n" + extra
-                : "";
-            var title = TitleBox.Text.Trim();
-            var desc = DescriptionBox.Text.Trim();
-            var issueType = GetSelectedIssueType();
-
-            if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(desc))
-            {
-                ShowDialog("Champs manquants",
+                ShowDialog(
+                    "Champs manquants",
                     "Merci de remplir le titre et la description avant l’envoi.");
                 return;
             }
 
-            if (desc.Length > 3500)
+            if (description.Length > 3500)
             {
-                ShowDialog("Message trop long",
+                ShowDialog(
+                    "Message trop long",
                     "La description est trop longue pour être envoyée.");
                 return;
             }
 
-            var confirm = MessageBox.Show(
-                "Confirmer l’envoi du message.?",
+            MessageBoxResult confirm = MessageBox.Show(
+                $"Envoyer ce rapport concernant {GetModuleLabel(module)} sur le support Discord ?",
                 "Confirmation",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
@@ -126,109 +94,153 @@ namespace MyHomelabBrowser.controles
             if (confirm != MessageBoxResult.Yes)
                 return;
 
-            var webhook = DiscordWebhooks.GetWebhook(issueType);
+            string webhook = DiscordWebhooks.GetWebhook(issueType);
             if (string.IsNullOrWhiteSpace(webhook))
             {
-                ShowDialog("Erreur interne",
+                ShowDialog(
+                    "Erreur interne",
                     "Aucun webhook n’est configuré pour ce type de demande.");
                 return;
             }
 
-            // 🆔 ID unique du rapport
-            var reportId = GenerateReportId();
+            string appVersion = System.Reflection.Assembly
+                .GetExecutingAssembly()
+                .GetName()
+                .Version?
+                .ToString()
+                ?? "inconnue";
+
+            string reportId = GenerateReportId();
+            string technicalInformation = BuildExtraInformation(module);
+            string moduleLabel = GetModuleLabel(module);
+            string issueLabel = GetIssueTypeLabel(issueType);
+
+            var payload = new
+            {
+                username = "PommeBrowser Support",
+                embeds = new[]
+                {
+                    new
+                    {
+                        title = $"{GetModuleIcon(module)} {moduleLabel} — {issueLabel}",
+                        description =
+$"""
+🆔 **ID rapport :** `{reportId}`
+🧭 **Version navigateur :** `{appVersion}`
+🧩 **Module :** {moduleLabel}
+🏷️ **Type :** {issueLabel}
+
+**Titre :** {title}
+
+**Description :**
+{description}
+""",
+                        color = GetModuleColor(module),
+                        fields = new[]
+                        {
+                            new
+                            {
+                                name = "Informations techniques",
+                                value = LimitForDiscordField(technicalInformation),
+                                inline = false
+                            }
+                        },
+                        footer = new
+                        {
+                            text = "PommeBrowser – Support utilisateur"
+                        },
+                        timestamp = DateTimeOffset.UtcNow
+                    }
+                }
+            };
 
             SetSendingState(true);
             _sending = true;
             _lastSend = DateTime.UtcNow;
 
-
-            var payload = new
-            {
-                embeds = new[]
-                {
-        new
-        {
-            title = $"📣 {issueType}",
-           description =
-$"""
-🆔 **ID rapport :** `{reportId}`
-🧭 **Version navigateur :** `{appVersion}`
-
-**Titre :** {title}
-**Type :** {issueType}
-
-**Description :**
-{desc}
-{extraBlock}
-""",
-            color = 0xB03030,
-            footer = new
-            {
-                text = "PommeBrowser – Rapport utilisateur"
-            }
-        }
-    }
-            };
-
             try
             {
-                using var http = new HttpClient();
+                using var http = new HttpClient
+                {
+                    Timeout = TimeSpan.FromSeconds(30)
+                };
 
-                HttpResponseMessage res;
+                HttpResponseMessage response;
 
                 if (_options.IncludeLogs)
                 {
-                    var logs = RuntimeLogBuffer.GetSnapshot();
-
+                    string logs = RuntimeLogBuffer.GetSnapshot();
                     if (string.IsNullOrWhiteSpace(logs))
                     {
                         logs =
-            $"""
+$"""
 PommeBrowser – Runtime snapshot
 Version : {appVersion}
 Date    : {DateTime.Now:yyyy-MM-dd HH:mm:ss}
+Module  : {moduleLabel}
 
 Aucun log console n’a été généré pour cette session.
 (Application WPF – Console non utilisée)
 """;
                     }
 
-                    var tempFile = Path.Combine(
+                    string tempFile = Path.Combine(
                         Path.GetTempPath(),
-                        $"pommebrowser-log-{DateTime.Now:yyyyMMdd-HHmmss}.txt");
+                        $"pommebrowser-log-{reportId}-{DateTime.Now:yyyyMMdd-HHmmss}.txt");
 
-                    File.WriteAllText(tempFile, logs, Encoding.UTF8);
+                    try
+                    {
+                        File.WriteAllText(tempFile, logs, Encoding.UTF8);
 
-                    using var form = new MultipartFormDataContent();
+                        using var form = new MultipartFormDataContent();
+                        form.Add(
+                            new StringContent(
+                                System.Text.Json.JsonSerializer.Serialize(payload),
+                                Encoding.UTF8,
+                                "application/json"),
+                            "payload_json");
 
-                    form.Add(
-                        new StringContent(
-                            System.Text.Json.JsonSerializer.Serialize(payload),
-                            Encoding.UTF8,
-                            "application/json"),
-                        "payload_json");
+                        form.Add(
+                            new ByteArrayContent(await File.ReadAllBytesAsync(tempFile)),
+                            "file",
+                            Path.GetFileName(tempFile));
 
-                    form.Add(
-                        new ByteArrayContent(File.ReadAllBytes(tempFile)),
-                        "file",
-                        Path.GetFileName(tempFile));
-
-                    res = await http.PostAsync(webhook, form);
-
-                    File.Delete(tempFile);
+                        response = await http.PostAsync(webhook, form);
+                    }
+                    finally
+                    {
+                        try
+                        {
+                            if (File.Exists(tempFile))
+                                File.Delete(tempFile);
+                        }
+                        catch
+                        {
+                            // Le rapport a déjà été envoyé : l'échec de nettoyage n'est pas bloquant.
+                        }
+                    }
                 }
                 else
                 {
-                    var json = System.Text.Json.JsonSerializer.Serialize(payload);
-                    res = await http.PostAsync(
+                    string json = System.Text.Json.JsonSerializer.Serialize(payload);
+                    response = await http.PostAsync(
                         webhook,
                         new StringContent(json, Encoding.UTF8, "application/json"));
                 }
 
-                if (!res.IsSuccessStatusCode)
-                    throw new Exception("Erreur HTTP " + res.StatusCode);
+                if (!response.IsSuccessStatusCode)
+                {
+                    string responseBody = await response.Content.ReadAsStringAsync();
+                    string details = string.IsNullOrWhiteSpace(responseBody)
+                        ? response.ReasonPhrase ?? "Réponse Discord inconnue"
+                        : responseBody;
 
-                // ✅ SUCCÈS CONFIRMÉ ICI SEULEMENT
+                    if (details.Length > 300)
+                        details = details[..300];
+
+                    throw new Exception($"Erreur HTTP {(int)response.StatusCode} : {details}");
+                }
+
                 ShowDialog(
                     "Message envoyé",
                     $"Merci pour le signalement.\n\nID du rapport : {reportId}");
@@ -247,18 +259,174 @@ Aucun log console n’a été généré pour cette session.
                 SetSendingState(false);
             }
         }
-        
-        // =====================
-        // Helpers
-        // =====================
 
-        void SetSendingState(bool sending)
+        private string BuildExtraInformation(ReportModule module)
+        {
+            var extra = new StringBuilder();
+
+            if (_options.IncludeLogs)
+                extra.AppendLine("- Logs récents : joints au message");
+
+            if (_options.IncludePcInfo)
+            {
+                extra.AppendLine($"- Système : {Environment.OSVersion}");
+                extra.AppendLine($"- Architecture : {System.Runtime.InteropServices.RuntimeInformation.OSArchitecture}");
+                extra.AppendLine($"- .NET : {Environment.Version}");
+            }
+
+            if (_options.IncludeMode)
+                AppendBrowserContext(extra);
+
+            AppendModuleDiagnostics(extra, module);
+
+            return extra.Length == 0
+                ? "Aucune information technique jointe."
+                : extra.ToString().TrimEnd();
+        }
+
+        private void AppendBrowserContext(StringBuilder extra)
+        {
+            BrowserContext? context = _options.Context;
+            if (context == null)
+            {
+                extra.AppendLine("- Mode navigateur : inconnu");
+                return;
+            }
+
+            string mode = context.IsLegacy
+                ? "legacy"
+                : context.IsPrivate
+                    ? "privé"
+                    : "normal";
+
+            extra.AppendLine($"- Mode navigateur : {mode}");
+            extra.AppendLine($"- Mode Flash : {context.FlashMode}");
+
+            if (!string.IsNullOrWhiteSpace(context.CurrentUrl))
+                extra.AppendLine($"- URL active : {SanitizeUrl(context.CurrentUrl)}");
+
+            if (!string.IsNullOrWhiteSpace(context.PageTitle))
+                extra.AppendLine($"- Titre de la page : {Limit(context.PageTitle, 180)}");
+
+            if (context.TabId != null)
+                extra.AppendLine($"- Onglet : {context.TabId}");
+        }
+
+        private static void AppendModuleDiagnostics(StringBuilder extra, ReportModule module)
+        {
+            switch (module)
+            {
+                case ReportModule.AdBlock:
+                {
+                    var snapshot = AdBlockModuleHost.Current.GetSnapshot();
+                    extra.AppendLine($"- Bloqueur activé : {YesNo(snapshot.Enabled)}");
+                    extra.AppendLine($"- Moteur prêt : {YesNo(snapshot.IsReady)}");
+                    extra.AppendLine($"- Règles réseau : {snapshot.NetworkRuleCount:N0}");
+                    extra.AppendLine($"- Règles visuelles : {snapshot.CosmeticRuleCount:N0}");
+                    extra.AppendLine($"- Blocages pendant la session : {snapshot.SessionBlockedCount:N0}");
+                    extra.AppendLine($"- État : {Limit(snapshot.StatusMessage, 220)}");
+                    extra.AppendLine($"- Dernière mise à jour : {FormatDate(snapshot.LastSuccessfulUpdateUtc)}");
+                    break;
+                }
+
+                case ReportModule.CloudTorrent:
+                {
+                    CloudTorrentModuleSnapshot snapshot = CloudTorrentModuleHost.Current.Snapshot;
+                    extra.AppendLine($"- État CloudTorrent : {GetCloudTorrentStatusLabel(snapshot.Status)}");
+                    extra.AppendLine($"- Module actif : {YesNo(snapshot.IsActive)}");
+                    extra.AppendLine($"- Serveur : {GetServerHost(snapshot.ServerUrl)}");
+                    extra.AppendLine($"- Utilisateur : {SafeValue(snapshot.Username)}");
+                    extra.AppendLine($"- Version API : {SafeValue(snapshot.ApiVersion)}");
+                    extra.AppendLine($"- Analyse automatique : {YesNo(snapshot.AutoAnalyzePages)}");
+                    extra.AppendLine($"- Clé enregistrée : {YesNo(snapshot.HasStoredApiKey)}");
+                    extra.AppendLine($"- Dernière validation : {FormatDate(snapshot.LastValidatedAt)}");
+
+                    string permissions = snapshot.Permissions.Count == 0
+                        ? "aucune"
+                        : string.Join(", ", snapshot.Permissions.OrderBy(item => item, StringComparer.Ordinal));
+                    extra.AppendLine($"- Permissions : {Limit(permissions, 500)}");
+                    break;
+                }
+
+                default:
+                    extra.AppendLine("- Composant : cœur du navigateur");
+                    break;
+            }
+        }
+
+        private void SelectModule(ReportModule module)
+        {
+            foreach (object entry in ModuleBox.Items)
+            {
+                if (entry is ComboBoxItem item &&
+                    Enum.TryParse(item.Tag?.ToString(), out ReportModule itemModule) &&
+                    itemModule == module)
+                {
+                    ModuleBox.SelectedItem = item;
+                    return;
+                }
+            }
+
+            ModuleBox.SelectedIndex = 0;
+        }
+
+        private void UpdateModuleHelp(ReportModule module)
+        {
+            if (ModuleHint == null || DiagnosticNotice == null)
+                return;
+
+            switch (module)
+            {
+                case ReportModule.AdBlock:
+                    ModuleHint.Text = "Pour une publicité non bloquée, un site cassé, une liste qui ne se met pas à jour ou un problème de filtrage.";
+                    DiagnosticNotice.Text = "Le rapport ajoutera l’état du bloqueur, le nombre de règles, les statistiques de session et la date de mise à jour des listes.";
+                    break;
+
+                case ReportModule.CloudTorrent:
+                    ModuleHint.Text = "Pour la détection des pages, les téléchargements, les liens 1fichier, l’analyse des médias ou la connexion à l’API.";
+                    DiagnosticNotice.Text = "Le rapport ajoutera l’état de CloudTorrent, la version API et les permissions. La clé API n’est jamais envoyée.";
+                    break;
+
+                default:
+                    ModuleHint.Text = "Pour un problème général du navigateur, des onglets, des téléchargements, des profils ou de l’interface.";
+                    DiagnosticNotice.Text = "Le rapport indiquera le contexte de navigation autorisé dans les paramètres. Aucun mot de passe ni secret n’est envoyé.";
+                    break;
+            }
+        }
+
+        private ReportModule GetSelectedModule()
+        {
+            if (ModuleBox.SelectedItem is ComboBoxItem item &&
+                Enum.TryParse(item.Tag?.ToString(), out ReportModule module))
+            {
+                return module;
+            }
+
+            return ReportModule.Browser;
+        }
+
+        private IssueType GetSelectedIssueType()
+        {
+            if (TypeBox.SelectedItem is ComboBoxItem item &&
+                Enum.TryParse(item.Tag?.ToString(), out IssueType type))
+            {
+                return type;
+            }
+
+            return IssueType.Other;
+        }
+
+        private void SetSendingState(bool sending)
         {
             SendButton.IsEnabled = !sending;
+            ModuleBox.IsEnabled = !sending;
+            TypeBox.IsEnabled = !sending;
+            TitleBox.IsEnabled = !sending;
+            DescriptionBox.IsEnabled = !sending;
             SendingPanel.Visibility = sending ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        void ShowDialog(string title, string message)
+        private void ShowDialog(string title, string message)
         {
             ThemedDialogWindow.Show(
                 Window.GetWindow(this),
@@ -266,11 +434,108 @@ Aucun log console n’a été généré pour cette session.
                 message);
         }
 
-        static string GenerateReportId()
+        private static string GenerateReportId()
         {
-            var rnd = Guid.NewGuid().ToString("N")[..4].ToUpper();
-            return $"PB-{DateTime.UtcNow:yyyyMMdd}-{rnd}";
+            string random = Guid.NewGuid().ToString("N")[..4].ToUpperInvariant();
+            return $"PB-{DateTime.UtcNow:yyyyMMdd}-{random}";
         }
+
+        private static string GetModuleLabel(ReportModule module) => module switch
+        {
+            ReportModule.AdBlock => "Bloqueur de publicités",
+            ReportModule.CloudTorrent => "CloudTorrent",
+            _ => "PommeBrowser"
+        };
+
+        private static string GetModuleIcon(ReportModule module) => module switch
+        {
+            ReportModule.AdBlock => "🛡️",
+            ReportModule.CloudTorrent => "☁️",
+            _ => "🌐"
+        };
+
+        private static int GetModuleColor(ReportModule module) => module switch
+        {
+            ReportModule.AdBlock => 0x3973C6,
+            ReportModule.CloudTorrent => 0x2F80ED,
+            _ => 0xB03030
+        };
+
+        private static string GetIssueTypeLabel(IssueType type) => type switch
+        {
+            IssueType.Bug => "Bug ou dysfonctionnement",
+            IssueType.MissingFeature => "Fonctionnalité absente",
+            IssueType.FeatureRequest => "Demande d’ajout",
+            IssueType.UiUx => "Interface ou ergonomie",
+            IssueType.Performance => "Performance",
+            _ => "Autre"
+        };
+
+        private static string GetCloudTorrentStatusLabel(CloudTorrentConnectionStatus status) => status switch
+        {
+            CloudTorrentConnectionStatus.Active => "actif",
+            CloudTorrentConnectionStatus.Validating => "vérification en cours",
+            CloudTorrentConnectionStatus.InvalidApiKey => "clé API refusée",
+            CloudTorrentConnectionStatus.Forbidden => "permissions insuffisantes",
+            CloudTorrentConnectionStatus.ServerUnavailable => "serveur inaccessible",
+            CloudTorrentConnectionStatus.InvalidConfiguration => "configuration invalide",
+            CloudTorrentConnectionStatus.Error => "erreur",
+            _ => "non configuré"
+        };
+
+        private static string GetServerHost(string serverUrl)
+        {
+            if (Uri.TryCreate(serverUrl, UriKind.Absolute, out Uri? uri))
+                return uri.Host;
+
+            return string.IsNullOrWhiteSpace(serverUrl) ? "non configuré" : "adresse invalide";
+        }
+
+        private static string SanitizeUrl(string value)
+        {
+            if (!Uri.TryCreate(value, UriKind.Absolute, out Uri? uri))
+                return Limit(value, 300);
+
+            var builder = new UriBuilder(uri)
+            {
+                UserName = string.Empty,
+                Password = string.Empty,
+                Query = string.Empty,
+                Fragment = string.Empty
+            };
+
+            return Limit(builder.Uri.ToString(), 300);
+        }
+
+        private static string FormatDate(DateTimeOffset? value)
+            => value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "inconnue";
+
+        private static string SafeValue(string? value)
+            => string.IsNullOrWhiteSpace(value) ? "inconnu" : Limit(value.Trim(), 180);
+
+        private static string Limit(string? value, int maxLength)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return "inconnu";
+
+            string trimmed = value.Trim();
+            return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength] + "…";
+        }
+
+
+        private static string LimitForDiscordField(string? value)
+        {
+            const int maxLength = 1024;
+            string text = string.IsNullOrWhiteSpace(value)
+                ? "Aucune information technique jointe."
+                : value.Trim();
+
+            return text.Length <= maxLength
+                ? text
+                : text[..(maxLength - 1)] + "…";
+        }
+
+        private static string YesNo(bool value) => value ? "oui" : "non";
 
         public enum IssueType
         {
@@ -280,15 +545,6 @@ Aucun log console n’a été généré pour cette session.
             UiUx,
             Performance,
             Other
-        }
-
-        IssueType GetSelectedIssueType()
-        {
-            if (TypeBox.SelectedItem is ComboBoxItem item &&
-                Enum.TryParse<IssueType>(item.Tag?.ToString(), out var type))
-                return type;
-
-            return IssueType.Other;
         }
     }
 

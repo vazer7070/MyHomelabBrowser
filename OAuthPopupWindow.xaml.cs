@@ -1,6 +1,8 @@
-﻿using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using System;
+using MyHomelabBrowser.classes.Profiles;
+using MyHomelabBrowser.classes.Security;
 using System.Threading.Tasks;
 using System.Windows;
 
@@ -18,6 +20,13 @@ namespace MyHomelabBrowser
         public async Task EnsureReadyAsync(CoreWebView2Environment env)
         {
             await PopupWeb.EnsureCoreWebView2Async(env);
+
+            if (PopupWeb.CoreWebView2 is not null)
+            {
+                BrowserCertificateTrustHost.Current.Attach(
+                    PopupWeb.CoreWebView2,
+                    AppDataContext.Root);
+            }
         }
         public void EnableAutoCloseOnSuccess()
         {

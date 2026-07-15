@@ -1,11 +1,19 @@
 ﻿using MyHomelabBrowser.classes;
 
+public enum ReportModule
+{
+    Browser,
+    AdBlock,
+    CloudTorrent
+}
+
 public class ReportIssueOptions
 {
     public bool IncludeLogs { get; set; }
     public bool IncludePcInfo { get; set; }
     public bool IncludeMode { get; set; }
 
-    // 🔥 NOUVEAU
+    public ReportModule Module { get; set; } = ReportModule.Browser;
+
     public BrowserContext? Context { get; set; }
 }

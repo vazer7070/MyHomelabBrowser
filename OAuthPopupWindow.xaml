@@ -6,7 +6,7 @@
         Width="520"
         Height="720"
         WindowStartupLocation="CenterOwner"
-        Background="#111"
+        Background="{StaticResource PanelBrush}"
         ResizeMode="CanResize"
         Topmost="True">
 

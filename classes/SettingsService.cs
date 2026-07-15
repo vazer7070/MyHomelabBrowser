@@ -1,4 +1,5 @@
-﻿using System;
+﻿using MyHomelabBrowser.classes.Profiles;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
@@ -7,113 +8,145 @@ namespace MyHomelabBrowser.classes
 {
     public class SettingsService
     {
-        readonly string _path;
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            WriteIndented = true,
+            PropertyNameCaseInsensitive = true
+        };
 
-        public BrowserSettings Settings { get; set; }
+        public BrowserSettings Settings { get; private set; }
 
-     
         public event Action<BrowserSettings>? SettingsChanged;
 
         public SettingsService()
         {
-            _path = MyHomelabBrowser.classes.Profiles.AppDataContext.GetPath("settings.json");
-
-
-            Settings = Load();
+            Settings = LoadFromCurrentProfile();
         }
+
+        private string SettingsPath => AppDataContext.GetPath("settings.json");
+
         public void Apply(BrowserSettings settings)
         {
+            ArgumentNullException.ThrowIfNull(settings);
+
             Settings = settings;
-            Save();
+            SaveToCurrentProfile();
             SettingsChanged?.Invoke(Settings);
         }
 
-        BrowserSettings Load()
+        public void ReloadForCurrentProfile()
         {
+            Settings = LoadFromCurrentProfile();
+            SettingsChanged?.Invoke(Settings);
+        }
+
+        public void Save()
+        {
+            SaveToCurrentProfile();
+            SettingsChanged?.Invoke(Settings);
+        }
+
+        private BrowserSettings LoadFromCurrentProfile()
+        {
+            string path = SettingsPath;
+
             try
             {
-                BrowserSettings s;
+                BrowserSettings settings;
 
-                if (!File.Exists(_path))
+                if (!File.Exists(path))
                 {
-                    s = CreateDefaults();
+                    settings = CreateDefaults();
                 }
                 else
                 {
-                    s = JsonSerializer.Deserialize<BrowserSettings>(File.ReadAllText(_path))
-                        ?? CreateDefaults();
+                    settings = JsonSerializer.Deserialize<BrowserSettings>(
+                        File.ReadAllText(path),
+                        JsonOptions) ?? CreateDefaults();
                 }
 
-                // ✅ BasiliskPath par défaut (1er lancement / chemin invalide)
-                try
-                {
-                    string defaultBasilisk = GetDefaultBasiliskPortablePath();
-
-                    if (string.IsNullOrWhiteSpace(s.BasiliskPath) || !File.Exists(s.BasiliskPath))
-                    {
-                        if (File.Exists(defaultBasilisk))
-                            s.BasiliskPath = defaultBasilisk;
-                    }
-                }
-                catch { }
-
-                return s;
+                ApplyRuntimeDefaults(settings);
+                return settings;
             }
             catch
             {
-                var s = CreateDefaults();
+                TryBackupBrokenSettings(path);
 
-                // ✅ BasiliskPath par défaut même si JSON cassé
-                try
-                {
-                    string defaultBasilisk = GetDefaultBasiliskPortablePath();
-                    if (File.Exists(defaultBasilisk))
-                        s.BasiliskPath = defaultBasilisk;
-                }
-                catch { }
-
-                return s;
+                BrowserSettings settings = CreateDefaults();
+                ApplyRuntimeDefaults(settings);
+                return settings;
             }
         }
 
-        BrowserSettings CreateDefaults()
+        private void SaveToCurrentProfile()
+        {
+            string path = SettingsPath;
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+            string temporaryPath = path + ".tmp";
+            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(Settings, JsonOptions));
+            File.Move(temporaryPath, path, overwrite: true);
+        }
+
+        private static void ApplyRuntimeDefaults(BrowserSettings settings)
+        {
+            try
+            {
+                string defaultBasilisk = GetDefaultBasiliskPortablePath();
+
+                if ((string.IsNullOrWhiteSpace(settings.BasiliskPath) ||
+                     !File.Exists(settings.BasiliskPath)) &&
+                    File.Exists(defaultBasilisk))
+                {
+                    settings.BasiliskPath = defaultBasilisk;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private BrowserSettings CreateDefaults()
         {
             return new BrowserSettings
             {
                 BasiliskPath = GetDefaultBasiliskPortablePath(),
-
                 EnableSuspension = true,
                 SuspendDelayMinutes = 5,
                 StartPage = "https://google.com",
                 NewTabPage = "https://duckduckgo.com",
                 EnableCommands = true,
                 Commands = new List<CommandSetting>
-        {
-            new() { Key="new", Description="Nouvel onglet", Enabled=true },
-            new() { Key="close", Description="Fermer onglet", Enabled=true },
-            new() { Key="close others", Description="Fermer les autres", Enabled=true },
-            new() { Key="reload", Description="Recharger", Enabled=true },
-            new() { Key="suspend", Description="Suspendre onglet", Enabled=true },
-            new() { Key="resume", Description="Réactiver onglet", Enabled=true },
-        }
+                {
+                    new() { Key = "new", Description = "Nouvel onglet", Enabled = true },
+                    new() { Key = "close", Description = "Fermer onglet", Enabled = true },
+                    new() { Key = "close others", Description = "Fermer les autres", Enabled = true },
+                    new() { Key = "reload", Description = "Recharger", Enabled = true },
+                    new() { Key = "suspend", Description = "Suspendre onglet", Enabled = true },
+                    new() { Key = "resume", Description = "Réactiver onglet", Enabled = true }
+                }
             };
         }
+
         private static string GetDefaultBasiliskPortablePath()
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             return Path.Combine(appData, "PommeBrowser", "Basilisk", "Basilisk-Portable.exe");
         }
-        public void Save()
+
+        private static void TryBackupBrokenSettings(string path)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+            try
+            {
+                if (!File.Exists(path))
+                    return;
 
-            File.WriteAllText(
-                _path,
-                JsonSerializer.Serialize(Settings, new JsonSerializerOptions { WriteIndented = true })
-            );
-
-            SettingsChanged?.Invoke(Settings);
+                string backup = path + ".invalid-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                File.Move(path, backup, overwrite: false);
+            }
+            catch
+            {
+            }
         }
-
     }
 }

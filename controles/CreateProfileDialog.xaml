@@ -12,9 +12,9 @@
 
     <Border Padding="30"
             Width="420"
-            Background="#1C1C1C"
+            Background="{StaticResource PanelBrush}"
             CornerRadius="16"
-            BorderBrush="#2E2E2E"
+            BorderBrush="{StaticResource BorderBrush}"
             BorderThickness="1">
 
         <StackPanel>
@@ -28,13 +28,13 @@
 
             <!-- ===== USERNAME ===== -->
             <TextBlock Text="Nom d’utilisateur"
-                       Foreground="#CFCFCF"
+                       Foreground="{StaticResource TextPrimaryBrush}"
                        FontSize="13"
                        Margin="0,0,0,6"/>
 
-            <Border Background="#252525"
+            <Border Background="{StaticResource SurfaceRaisedBrush}"
                     CornerRadius="10"
-                    BorderBrush="#343434"
+                    BorderBrush="{StaticResource BorderStrongBrush}"
                     BorderThickness="1">
                 <TextBox x:Name="UsernameBox"
                          Height="42"
@@ -46,13 +46,13 @@
 
             <!-- ===== PASSWORD ===== -->
             <TextBlock Text="Mot de passe"
-                       Foreground="#CFCFCF"
+                       Foreground="{StaticResource TextPrimaryBrush}"
                        FontSize="13"
                        Margin="0,18,0,6"/>
 
-            <Border Background="#252525"
+            <Border Background="{StaticResource SurfaceRaisedBrush}"
                     CornerRadius="10"
-                    BorderBrush="#343434"
+                    BorderBrush="{StaticResource BorderStrongBrush}"
                     BorderThickness="1">
                 <PasswordBox x:Name="PasswordBox"
                              Height="42"
@@ -64,13 +64,13 @@
 
             <!-- ===== CONFIRM ===== -->
             <TextBlock Text="Confirmer le mot de passe"
-                       Foreground="#CFCFCF"
+                       Foreground="{StaticResource TextPrimaryBrush}"
                        FontSize="13"
                        Margin="0,18,0,6"/>
 
-            <Border Background="#252525"
+            <Border Background="{StaticResource SurfaceRaisedBrush}"
                     CornerRadius="10"
-                    BorderBrush="#343434"
+                    BorderBrush="{StaticResource BorderStrongBrush}"
                     BorderThickness="1">
                 <PasswordBox x:Name="ConfirmBox"
                              Height="42"
@@ -94,9 +94,9 @@
                         Height="44"
                         FontSize="14"
                         FontWeight="SemiBold"
-                        Background="#2A2A2A"
-                        Foreground="#E5E5E5"
-                        BorderBrush="#3A3A3A"
+                        Background="{StaticResource SurfaceRaisedBrush}"
+                        Foreground="{StaticResource TextPrimaryBrush}"
+                        BorderBrush="{StaticResource BorderStrongBrush}"
                         BorderThickness="1"
                         Cursor="Hand"
                         Click="Cancel_Click">
@@ -119,9 +119,9 @@
                         Height="44"
                         FontSize="14"
                         FontWeight="SemiBold"
-                        Background="#3B82F6"
+                        Background="{StaticResource AccentStrongBrush}"
                         Foreground="White"
-                        BorderBrush="#3B82F6"
+                        BorderBrush="{StaticResource AccentBrush}"
                         BorderThickness="1"
                         Cursor="Hand"
                         Click="Create_Click">

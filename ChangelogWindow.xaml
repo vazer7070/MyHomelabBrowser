@@ -25,7 +25,7 @@
 
             <TextBlock x:Name="TitleText"
                        FontSize="13"
-                       Foreground="#A0A0A0"
+                       Foreground="{StaticResource TextSecondaryBrush}"
                        Margin="0,4,0,0"/>
         </StackPanel>
 
@@ -52,7 +52,7 @@
             <Button Content="Fermer"
                     Padding="22,10"
                     MinWidth="110"
-                    Background="#3A3A3A"
+                    Background="{StaticResource SurfaceHoverBrush}"
                     Foreground="White"
                     BorderThickness="0"
                     Cursor="Hand"

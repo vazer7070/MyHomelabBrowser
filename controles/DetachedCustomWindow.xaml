@@ -4,14 +4,14 @@
         Title="Onglet détaché"
         Width="900"
         Height="600"
-        Background="#171717">
+        Background="{StaticResource WindowBackgroundBrush}">
 
     <DockPanel>
 
         <!-- Barre haute (identique au web) -->
         <Border DockPanel.Dock="Top"
                 Height="32"
-                Background="#222"
+                Background="{StaticResource PanelBrush}"
                 MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
 
             <Button Content="↩ Rattacher"

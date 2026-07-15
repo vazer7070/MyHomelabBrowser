@@ -70,7 +70,7 @@
                                     <!-- flèche sous-menu -->
                                     <TextBlock x:Name="Arrow"
                                        Text="▶"
-                                       Foreground="#AAAAAA"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
                                        FontSize="10"
                                        HorizontalAlignment="Right"
                                        VerticalAlignment="Center"
@@ -86,8 +86,8 @@
                            AllowsTransparency="True"
                            Focusable="False"
                            PopupAnimation="Fade">
-                                <Border Background="#1E1E1E"
-                                BorderBrush="#3A3A3A"
+                                <Border Background="{StaticResource PanelBrush}"
+                                BorderBrush="{StaticResource BorderStrongBrush}"
                                 BorderThickness="1"
                                 CornerRadius="10"
                                 Padding="6">
@@ -110,8 +110,7 @@
                             </Trigger>
 
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Foreground"
-                                Value="#777777"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextTertiaryBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -132,7 +131,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Bd"
-                                Background="#262626"
+                                Background="{StaticResource SurfaceRaisedBrush}"
                                 CornerRadius="10"
                                 Padding="6">
                             <ContentPresenter HorizontalAlignment="Center"
@@ -140,7 +139,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#353535"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SurfaceHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="#404040"/>
@@ -194,8 +193,8 @@
     </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="44"/>
-            <RowDefinition Height="48"/>
+            <RowDefinition Height="46"/>
+            <RowDefinition Height="52"/>
             <RowDefinition Height="32"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
@@ -210,8 +209,8 @@
              ========================= -->
         <Grid Grid.Row="0"
               Grid.ColumnSpan="2"
-              Height="44"
-              Background="{StaticResource FluentSurface}"
+              Height="46"
+              Background="{StaticResource ToolbarBrush}"
               Panel.ZIndex="100">
 
             <Grid.ColumnDefinitions>
@@ -246,7 +245,9 @@
                                 <ControlTemplate TargetType="TabItem">
                                     <Border x:Name="Bd"
                                             Height="32"
-                                            Background="#2A2A2A"
+                                            Background="{StaticResource SurfaceRaisedBrush}"
+                                            BorderBrush="{StaticResource BorderBrush}"
+                                            BorderThickness="1"
                                             CornerRadius="10"
                                             Margin="4,0"
                                             RenderTransformOrigin="0.5,0.5">
@@ -260,6 +261,8 @@
 
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
+                                            <Setter TargetName="Bd" Property="BorderBrush" Value="#31577D"/>
                                             <Trigger.EnterActions>
                                                 <BeginStoryboard>
                                                     <Storyboard>
@@ -293,7 +296,7 @@
                                         <Trigger Property="IsMouseOver" Value="True">
                                             <Setter TargetName="Bd"
                                                     Property="Background"
-                                                    Value="#353535"/>
+                                                    Value="{StaticResource SurfaceHoverBrush}"/>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
@@ -311,36 +314,45 @@
                 <StackPanel Orientation="Horizontal"
                             VerticalAlignment="Center">
 
-                    <Button Content="＋"
-                            Width="36"
-                            Height="32"
+                    <Button Style="{StaticResource ToolbarIconButtonStyle}"
+                            Width="34" Height="32"
                             Margin="0,0,4,0"
                             ToolTip="Nouvel onglet"
-                            Click="NewTab_Click"/>
+                            Click="NewTab_Click">
+                        <Viewbox Width="16" Height="16">
+                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                                  Data="M11,2 L13,2 L13,11 L22,11 L22,13 L13,13 L13,22 L11,22 L11,13 L2,13 L2,11 L11,11 Z"/>
+                        </Viewbox>
+                    </Button>
 
-                    <Button Content="🕶️"
-                            Width="36"
-                            Height="32"
+                    <Button Style="{StaticResource ToolbarIconButtonStyle}"
+                            Width="34" Height="32"
                             Margin="0,0,4,0"
                             ToolTip="Nouvel onglet privé"
-                            Click="NewPrivateTab_Click"/>
+                            Click="NewPrivateTab_Click">
+                        <Viewbox Width="18" Height="18">
+                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                                  Data="M4,4 L20,4 L18,9 L15.5,9 C14.2,9 13.1,9.7 12.5,10.8 C11.9,9.7 10.8,9 9.5,9 L7,9 Z M5,11 L9.5,11 C11.4,11 12,12.5 12,14 C12,16.2 10.2,18 8,18 C5.8,18 4,16.2 4,14 C4,12.8 4.4,11.8 5,11 Z M15.5,11 L20,11 C20.6,11.8 21,12.8 21,14 C21,16.2 19.2,18 17,18 C14.8,18 13,16.2 13,14 C13,12.5 13.6,11 15.5,11 Z"/>
+                        </Viewbox>
+                    </Button>
 
                     <!-- DOWNLOADS -->
                     <Button x:Name="DownloadsBtn"
-                            Width="36"
+                            Style="{StaticResource ToolbarIconButtonStyle}"
+                            Width="34"
                             Height="32"
                             ToolTip="Téléchargements"
                             Click="DownloadsBtn_Click"
                             Cursor="Hand">
                         <Grid>
-                            <TextBlock Text="⬇"
-                                       FontSize="16"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
+                            <Viewbox Width="17" Height="17" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                                      Data="M11,2 L13,2 L13,13 L17,9 L18.5,10.5 L12,17 L5.5,10.5 L7,9 L11,13 Z M4,19 L20,19 L20,21 L4,21 Z"/>
+                            </Viewbox>
 
                             <!-- BADGE -->
                             <Border x:Name="DownloadsBadge"
-                                    Background="#22C55E"
+                                    Background="{StaticResource SuccessBrush}"
                                     CornerRadius="8"
                                     MinWidth="16"
                                     Height="16"
@@ -366,16 +378,16 @@
                         Margin="-150,0,0,0"
                         Height="28"
                         Padding="10,2"
-                        Background="#402B1457"
+                        Background="#32233F"
                         CornerRadius="14"
                         Visibility="Collapsed"
                         IsHitTestVisible="False">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="🕶️"
                                    Margin="0,0,6,0"
-                                   Foreground="#C084FC"/>
+                                   Foreground="#C9A7FF"/>
                         <TextBlock Text="Navigation privée"
-                                   Foreground="#C084FC"
+                                   Foreground="#C9A7FF"
                                    FontWeight="SemiBold"
                                    FontSize="12"/>
                     </StackPanel>
@@ -392,8 +404,8 @@
                     <Border Width="420"
                             Margin="0,6,0,0"
                             Padding="10"
-                            Background="#1E1E1E"
-                            BorderBrush="#444"
+                            Background="{StaticResource PanelBrush}"
+                            BorderBrush="{StaticResource BorderStrongBrush}"
                             BorderThickness="1"
                             CornerRadius="12">
 
@@ -401,7 +413,7 @@
                             <TextBlock Text="Téléchargements"
                                        FontSize="14"
                                        FontWeight="SemiBold"
-                                       Foreground="White"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
                                        Margin="0,0,0,8"/>
                             <Button Content="Effacer les terminés"
                                     Margin="10,0,0,0"
@@ -420,7 +432,9 @@
                                     <DataTemplate>
                                         <Border Padding="10"
                                                 Margin="0,0,0,8"
-                                                Background="#262626"
+                                                Background="{StaticResource SurfaceRaisedBrush}"
+                                                BorderBrush="{StaticResource BorderBrush}"
+                                                BorderThickness="1"
                                                 CornerRadius="10">
 
                                             <Grid>
@@ -444,12 +458,12 @@
                                                     <!-- TAILLE / VITESSE -->
                                                     <TextBlock Text="{Binding SizeText}"
                                                                FontSize="12"
-                                                               Foreground="#BFBFBF"
+                                                               Foreground="{StaticResource TextSecondaryBrush}"
                                                                Margin="0,4,0,0"/>
 
                                                     <TextBlock Text="{Binding SpeedText}"
                                                                FontSize="12"
-                                                               Foreground="#9CA3AF"
+                                                               Foreground="{StaticResource TextTertiaryBrush}"
                                                                Visibility="{Binding IsInProgress,
                                                                             Converter={StaticResource BoolToVisibility}}"/>
 
@@ -464,7 +478,7 @@
 
                                                     <!-- STATUS -->
                                                     <TextBlock Text="✔ Terminé"
-                                                               Foreground="#4ADE80"
+                                                               Foreground="{StaticResource SuccessBrush}"
                                                                FontSize="12"
                                                                FontWeight="SemiBold"
                                                                Margin="0,6,0,0"
@@ -472,7 +486,7 @@
                                                                             Converter={StaticResource BoolToVisibility}}"/>
 
                                                     <TextBlock Text="✖ Échec"
-                                                               Foreground="#EF4444"
+                                                               Foreground="{StaticResource DangerBrush}"
                                                                FontSize="12"
                                                                FontWeight="SemiBold"
                                                                Margin="0,6,0,0"
@@ -547,271 +561,293 @@
                 Grid.ColumnSpan="2"
                 Height="44"
                 Margin="10,4"
-                Background="#30FFFFFF"
-                BorderBrush="#80FFFFFF"
+                Background="#3058A6FF"
+                BorderBrush="{StaticResource AccentBrush}"
                 BorderThickness="2"
                 CornerRadius="8"
                 Visibility="Collapsed"
                 Panel.ZIndex="200"/>
 
         <!-- =========================
-     ADDRESS BAR
-     ========================= -->
-        <Grid Grid.Row="1"
-      Grid.ColumnSpan="2"
-      Height="48"
-      Background="{StaticResource FluentSurface}"
-      Panel.ZIndex="90">
-
-            <Grid Margin="10,6">
+             BARRE DE NAVIGATION
+             ========================= -->
+        <Border Grid.Row="1"
+                Grid.ColumnSpan="2"
+                Height="52"
+                Background="{StaticResource ToolbarBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,0,1"
+                Panel.ZIndex="90">
+            <Grid Margin="10,7">
                 <Grid.ColumnDefinitions>
-                    <!-- ✅ LEFT NAV -->
                     <ColumnDefinition Width="Auto"/>
-                    <!-- ✅ ADDRESS -->
                     <ColumnDefinition Width="*"/>
-                    <!-- ✅ RIGHT BUTTONS -->
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- =========================
-             LEFT : Back + Refresh
-             ========================= -->
-                <StackPanel Grid.Column="0"
-                    Orientation="Horizontal"
-                    VerticalAlignment="Center"
-                    Margin="0,0,10,0">
-
-                    <!-- Back -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,9,0">
                     <Button x:Name="BackBtn"
-                    Width="28"
-                    Height="28"
-                    Margin="0,0,6,0"
-                    ToolTip="Précédent"
-                    Click="BackBtn_Click"
-                    PreviewMouseLeftButtonDown="BackBtn_PreviewMouseLeftButtonDown"
-                    PreviewMouseLeftButtonUp="BackBtn_PreviewMouseLeftButtonUp"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Style="{StaticResource NavIconButtonStyle}"
-                    Cursor="Hand">
+                            Style="{StaticResource ToolbarIconButtonStyle}"
+                            Margin="0,0,4,0"
+                            ToolTip="Précédent"
+                            Click="BackBtn_Click"
+                            PreviewMouseLeftButtonDown="BackBtn_PreviewMouseLeftButtonDown"
+                            PreviewMouseLeftButtonUp="BackBtn_PreviewMouseLeftButtonUp">
                         <Viewbox Width="16" Height="16">
-                            <Path Fill="#D1D5DB"
-                          Data="M 15 2 L 7 8 L 15 14 L 15 11 L 9.5 8 L 15 5 Z"/>
+                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                                  Data="M15,3 L9,8 L15,13 L13,15 L5,8 L13,1 Z"/>
                         </Viewbox>
                     </Button>
 
-                    <!-- Refresh -->
                     <Button x:Name="RefreshBtn"
-                    Width="28"
-                    Height="28"
-                    ToolTip="Actualiser"
-                    Click="RefreshBtn_Click"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Style="{StaticResource NavIconButtonStyle}"
-                    Cursor="Hand">
-                        <Viewbox Width="16" Height="16">
-                            <Path Fill="#D1D5DB"
-                          Data="M 12 4 A 5 5 0 1 0 14 8 H 12 A 3 3 0 1 1 10 5.2 V 3 L 14 5.5 L 10 8 V 6.2 A 4 4 0 1 0 12 4 Z"/>
+                            Style="{StaticResource ToolbarIconButtonStyle}"
+                            ToolTip="Actualiser"
+                            Click="RefreshBtn_Click">
+                        <Viewbox Width="17" Height="17">
+                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                                  Data="M12,4 A5,5 0 1 0 14,8 H12 A3,3 0 1 1 10,5.2 V3 L14,5.5 L10,8 V6.2 A4,4 0 1 0 12,4 Z"/>
                         </Viewbox>
                     </Button>
-
                 </StackPanel>
 
                 <Border x:Name="AddressBarBorder"
-        Grid.Column="1"
-        Height="36"
-        VerticalAlignment="Center"
-        Background="#FF484444"
-        CornerRadius="10"
-        SnapsToDevicePixels="True">
-
+                        Grid.Column="1"
+                        Height="38"
+                        VerticalAlignment="Center"
+                        Background="{StaticResource SurfaceRaisedBrush}"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        SnapsToDevicePixels="True">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <!-- 🔒 SSL -->
+                            <ColumnDefinition Width="35"/>
                             <ColumnDefinition Width="34"/>
-
-                            <!-- 🔑 Credentials -->
-                            <ColumnDefinition Width="34"/>
-
-                            <!-- 🌐 Address -->
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- 🔒 SSL ICON -->
                         <Image x:Name="SslIcon"
-           Grid.Column="0"
-           Width="18"
-           Height="18"
-           Margin="10,0,0,0"
-           HorizontalAlignment="Left"
-           VerticalAlignment="Center"/>
+                               Grid.Column="0"
+                               Width="17"
+                               Height="17"
+                               Margin="11,0,0,0"
+                               HorizontalAlignment="Left"
+                               VerticalAlignment="Center"/>
 
-                        <!-- 🔑 CREDENTIAL BUTTON -->
                         <Button x:Name="FillCredentialButton"
-            Grid.Column="1"
-            Content="🔑"
-            Width="28"
-            Height="28"
-            Margin="0,0,6,0"
-            VerticalAlignment="Center"
-            Click="FillCredential_Click"
-            IsEnabled="False"
-            Opacity="0.35"/>
+                                Grid.Column="1"
+                                Style="{StaticResource IconButtonStyle}"
+                                Content="🔑"
+                                Width="28"
+                                Height="28"
+                                Margin="0,0,4,0"
+                                VerticalAlignment="Center"
+                                Click="FillCredential_Click"
+                                ToolTip="Remplir les identifiants enregistrés"
+                                IsEnabled="False"
+                                Opacity="0.35"/>
 
-                        <!-- 🌐 ADDRESS BAR -->
                         <TextBox x:Name="AddressBar"
-             Grid.Column="2"
-             Background="Transparent"
-             Foreground="White"
-             BorderThickness="0"
-             Padding="0,5,12,5"
-             FontSize="14"
-             KeyDown="AddressBar_KeyDown"
-             TextChanged="AddressBar_TextChanged"
-             PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown"
-             GotKeyboardFocus="AddressBar_GotKeyboardFocus"
-             GotFocus="AddressBar_GotFocus"
-             LostFocus="AddressBar_LostFocus"/>
+                                 Grid.Column="2"
+                                 Background="Transparent"
+                                 Foreground="{StaticResource TextPrimaryBrush}"
+                                 BorderThickness="0"
+                                 Padding="1,5,12,5"
+                                 MinHeight="0"
+                                 FontSize="13.5"
+                                 KeyDown="AddressBar_KeyDown"
+                                 TextChanged="AddressBar_TextChanged"
+                                 PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown"
+                                 GotKeyboardFocus="AddressBar_GotKeyboardFocus"
+                                 GotFocus="AddressBar_GotFocus"
+                                 LostFocus="AddressBar_LostFocus"/>
                     </Grid>
-
                 </Border>
-                <!-- =========================
-             RIGHT : Fav + Legacy + FlashModeBtn
-             ========================= -->
+
                 <StackPanel Grid.Column="2"
-                    Orientation="Horizontal"
-                    VerticalAlignment="Center"
-                    HorizontalAlignment="Right"
-                    Margin="8,0,0,0">
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Right"
+                            Margin="9,0,0,0">
 
-                    <!-- ⭐ Favori -->
-                    <Button x:Name="FavoriteButton"
-                    Content="★"
-                    Width="28"
-                    Height="28"
-                    Margin="0,0,6,0"
-                    VerticalAlignment="Center"
-                    Click="ToggleFavorite_Click"
-                    Foreground="Gray"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Cursor="Hand"/>
-
-                    <!-- ⚡ Legacy manuel -->
-                    <Button x:Name="ManualLegacyButton"
-                    Content="⚡"
-                    Width="28"
-                    Height="28"
-                    VerticalAlignment="Center"
-                    Click="ManualLegacyButton_Click"
-                    Foreground="#9CA3AF"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    ToolTip="Forcer Flash Legacy (Basilisk) sur cette page"
-                    Cursor="Hand"/>
-
-                    <!-- Flash mode -->
-                    <Button x:Name="FlashModeBtn"
-                    Content="⚡ Auto"
-                    Visibility="Collapsed"
-                    Margin="6,0,0,0"
-                    Click="FlashModeBtn_Click"
-                    ToolTip="Forcer ou libérer le mode Flash pour ce site"/>
-                    <!-- 👤 PROFIL UTILISATEUR -->
-                    <Button x:Name="ProfileButton"
-        Width="28"
-        Height="28"
-        Margin="6,0,0,0"
-        Cursor="Hand"
-        Click="ProfileButton_Click"
-        ToolTip="Profil utilisateur"
-        BorderThickness="0"
-        Background="#2A2A2A">
-
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border x:Name="Bd"
-                    Background="{TemplateBinding Background}"
-                    CornerRadius="14"
-                    Width="28"
-                    Height="28">
-                                    <TextBlock x:Name="ProfileLetter"
-           Text="{TemplateBinding Content}"
-           Foreground="White"
-           FontWeight="SemiBold"
-           FontSize="14"
-           HorizontalAlignment="Center"
-           VerticalAlignment="Center"/>
-
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="#353535"/>
-                                    </Trigger>
-                                    <Trigger Property="IsPressed" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="#404040"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Button.Template>
+                    <Button x:Name="AdBlockButton"
+                            Style="{StaticResource ToolbarModuleButtonStyle}"
+                            Margin="0,0,5,0"
+                            ToolTip="Protection web"
+                            Click="AdBlockButton_Click">
+                        <Grid Width="24" Height="24">
+                            <Path x:Name="AdBlockShieldPath"
+                                  Width="19" Height="19"
+                                  Stretch="Uniform"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                                  Data="M12,2 L20,5 V11 C20,16.1 16.8,20.2 12,22 C7.2,20.2 4,16.1 4,11 V5 Z M12,5.1 L7,7 V11 C7,14.5 9,17.3 12,18.8 C15,17.3 17,14.5 17,11 V7 Z"/>
+                            <Border x:Name="AdBlockBadge"
+                                    MinWidth="15" Height="15"
+                                    Padding="3,0"
+                                    Background="{StaticResource AccentStrongBrush}"
+                                    BorderBrush="{StaticResource ToolbarBrush}"
+                                    BorderThickness="2"
+                                    CornerRadius="8"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Top"
+                                    Margin="0,-5,-6,0"
+                                    Visibility="Collapsed">
+                                <TextBlock x:Name="AdBlockBadgeText"
+                                           FontSize="9"
+                                           FontWeight="Bold"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
                     </Button>
 
+                    <Button x:Name="CloudTorrentButton"
+                            Style="{StaticResource ToolbarModuleButtonStyle}"
+                            Margin="0,0,5,0"
+                            ToolTip="CloudTorrent"
+                            Visibility="Collapsed"
+                            Click="CloudTorrentButton_Click">
+                        <Grid Width="24" Height="24">
+                            <Path Width="19" Height="19" Stretch="Uniform"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                                  Data="M4,3 L15,3 C17.8,3 20,5.2 20,8 C20,10.8 17.8,13 15,13 L13,13 L13,17 L16,14 L18,16 L12,22 L6,16 L8,14 L11,17 L11,13 L9,13 C6.2,13 4,10.8 4,8 Z M9,6 C7.9,6 7,6.9 7,8 C7,9.1 7.9,10 9,10 L15,10 C16.1,10 17,9.1 17,8 C17,6.9 16.1,6 15,6 Z"/>
+                            <Border x:Name="CloudTorrentBadge"
+                                    MinWidth="15" Height="15"
+                                    Padding="3,0"
+                                    Background="{StaticResource AccentStrongBrush}"
+                                    BorderBrush="{StaticResource ToolbarBrush}"
+                                    BorderThickness="2"
+                                    CornerRadius="8"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Top"
+                                    Margin="0,-5,-6,0"
+                                    Visibility="Collapsed">
+                                <TextBlock x:Name="CloudTorrentBadgeText"
+                                           FontSize="9"
+                                           FontWeight="Bold"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
+                    </Button>
+
+                    <Button x:Name="FavoriteButton"
+                            Style="{StaticResource ToolbarIconButtonStyle}"
+                            Content="★"
+                            Margin="0,0,4,0"
+                            Click="ToggleFavorite_Click"
+                            Foreground="{StaticResource TextTertiaryBrush}"
+                            ToolTip="Ajouter ou retirer des favoris"/>
+
+                    <Button x:Name="ManualLegacyButton"
+                            Style="{StaticResource ToolbarIconButtonStyle}"
+                            Content="⚡"
+                            Margin="0,0,4,0"
+                            Click="ManualLegacyButton_Click"
+                            Foreground="{StaticResource TextTertiaryBrush}"
+                            ToolTip="Forcer Flash Legacy avec Basilisk"/>
+
+                    <Button x:Name="FlashModeBtn"
+                            Content="⚡ Auto"
+                            Visibility="Collapsed"
+                            Margin="3,0,4,0"
+                            Click="FlashModeBtn_Click"
+                            ToolTip="Forcer ou libérer le mode Flash pour ce site"/>
+
+                    <Button x:Name="ProfileButton"
+                            Width="34"
+                            Height="34"
+                            MinHeight="0"
+                            Padding="0"
+                            Margin="2,0,0,0"
+                            Cursor="Hand"
+                            Click="ProfileButton_Click"
+                            ToolTip="Profil utilisateur"
+                            BorderBrush="{StaticResource BorderStrongBrush}"
+                            BorderThickness="1"
+                            Background="{StaticResource SurfaceRaisedBrush}"
+                            FontWeight="SemiBold"/>
                 </StackPanel>
-                
 
-                <!-- =========================
-             ✅ CommandSuggestionsPopup + CommandList (PAS TOUCHÉS)
-             ========================= -->
-                <Popup x:Name="CommandSuggestionsPopup"
-               PlacementTarget="{Binding ElementName=AddressBar}"
-               Placement="Bottom"
-               StaysOpen="True"
-               AllowsTransparency="True"
-               Focusable="False"
-               PopupAnimation="Fade">
-                    <Border Margin="0,6,0,0"
-                    Background="#1E1E1E"
-                    BorderBrush="#444"
-                    BorderThickness="1"
-                    CornerRadius="12">
-                        <ListBox x:Name="CommandList"
-                         Background="Transparent"
-                         BorderThickness="0"
-                         Foreground="White"
-                         FontSize="14"
-                         MaxHeight="260"
-                         SelectionChanged="CommandSuggestions_SelectionChanged"
-                         KeyDown="CommandSuggestions_KeyDown">
-
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Margin="8,6">
-                                        <TextBlock Text="{Binding Primary}"
-                                           FontWeight="SemiBold"/>
-
-                                        <TextBlock Text="{Binding Secondary}"
-                                           FontSize="12"
-                                           Foreground="#9CA3AF"
-                                           TextTrimming="CharacterEllipsis"/>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-
-                        </ListBox>
-
+                <Popup x:Name="AdBlockPopup"
+                       PlacementTarget="{Binding ElementName=AdBlockButton}"
+                       Placement="Bottom"
+                       HorizontalOffset="-320"
+                       VerticalOffset="7"
+                       StaysOpen="False"
+                       AllowsTransparency="True"
+                       PopupAnimation="Fade">
+                    <Border Margin="8" Background="Transparent">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.45" Color="#000000"/>
+                        </Border.Effect>
+                        <ContentControl x:Name="AdBlockPanelHost"/>
                     </Border>
                 </Popup>
 
-            </Grid>
-        </Grid>
+                <Popup x:Name="CloudTorrentPopup"
+                       PlacementTarget="{Binding ElementName=CloudTorrentButton}"
+                       Placement="Bottom"
+                       HorizontalOffset="-390"
+                       VerticalOffset="7"
+                       StaysOpen="False"
+                       AllowsTransparency="True"
+                       PopupAnimation="Fade">
+                    <Border Margin="8" Background="Transparent">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.45" Color="#000000"/>
+                        </Border.Effect>
+                        <ContentControl x:Name="CloudTorrentPanelHost"/>
+                    </Border>
+                </Popup>
 
+                <Popup x:Name="CommandSuggestionsPopup"
+                       PlacementTarget="{Binding ElementName=AddressBar}"
+                       Placement="Bottom"
+                       StaysOpen="True"
+                       AllowsTransparency="True"
+                       Focusable="False"
+                       PopupAnimation="Fade">
+                    <Border Margin="0,7,0,0"
+                            MinWidth="520"
+                            Background="{StaticResource PanelBrush}"
+                            BorderBrush="{StaticResource BorderStrongBrush}"
+                            BorderThickness="1"
+                            CornerRadius="12">
+                        <ListBox x:Name="CommandList"
+                                 Padding="5"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Foreground="{StaticResource TextPrimaryBrush}"
+                                 FontSize="13"
+                                 MaxHeight="300"
+                                 SelectionChanged="CommandSuggestions_SelectionChanged"
+                                 KeyDown="CommandSuggestions_KeyDown">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="9,6">
+                                        <TextBlock Text="{Binding Primary}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding Secondary}" Margin="0,2,0,0" FontSize="11"
+                                                   Foreground="{StaticResource TextTertiaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Border>
+                </Popup>
+            </Grid>
+        </Border>
 
         <!-- FAVORITES BAR -->
         <Border Grid.Row="2"
                 Grid.ColumnSpan="2"
-                Background="#1E1E1E"
-                BorderBrush="#2A2A2A"
+                Background="{StaticResource ToolbarBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="0,1,0,1">
             <StackPanel x:Name="FavoritesBar"
                         Orientation="Horizontal"
@@ -832,63 +868,77 @@
                     Visibility="Collapsed"/>
         </Grid>
 
-        <!-- SIDEBAR -->
+        <!-- BARRE LATÉRALE -->
         <Grid Grid.Row="3" Grid.Column="1" Panel.ZIndex="20">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="24"/>
+                <ColumnDefinition Width="22"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <Button x:Name="ToggleSidebarBtn"
                     Grid.Column="0"
+                    Width="22" Height="54"
+                    MinHeight="0" Padding="0"
+                    Margin="0,12,0,0"
                     Content="❮"
-                    Width="24"
-                    Height="48"
-                    Click="ToggleSidebar_Click"/>
+                    Foreground="{StaticResource TextTertiaryBrush}"
+                    Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1,1,0,1"
+                    Click="ToggleSidebar_Click"
+                    ToolTip="Afficher ou masquer la barre latérale"/>
 
             <Border x:Name="Sidebar"
                     Grid.Column="1"
                     Width="56"
-                    Background="#1E1E1E">
-                <StackPanel>
+                    Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1,0,0,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                    <!-- 👤 PROFIL (TOP SIDEBAR) -->
                     <Button x:Name="SidebarProfileButton"
-            Content="👤"
-            Width="36"
-            Height="36"
-            Margin="10,10,10,6"
-            FontSize="16"
-            FontWeight="SemiBold"
-            Cursor="Hand"
-            Click="SidebarProfileButton_Click"
-            ToolTip="Profil utilisateur"/>
+                            Grid.Row="0"
+                            Style="{StaticResource ToolbarIconButtonStyle}"
+                            Width="36" Height="36"
+                            Margin="10,12,10,8"
+                            FontWeight="SemiBold"
+                            Click="SidebarProfileButton_Click"
+                            ToolTip="Profil utilisateur"/>
 
-                    <!-- CONTENU EXISTANT -->
-                    <StackPanel Margin="0,12,0,0">
-                        <Button Content="⚙"
-                Margin="10"
-                Click="OpenSettings_Click"
-                Cursor="Hand"/>
+                    <StackPanel Grid.Row="1" Margin="0,4,0,0">
+                        <Button Style="{StaticResource ToolbarIconButtonStyle}"
+                                Width="36" Height="36" Margin="10,4"
+                                Click="OpenSettings_Click" ToolTip="Paramètres">
+                            <Viewbox Width="17" Height="17">
+                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                                      Data="M12,2 L13.2,4.4 L15.8,4.8 L17.7,3 L20,5.3 L18.2,7.2 L18.6,9.8 L21,11 L21,14 L18.6,15.2 L18.2,17.8 L20,19.7 L17.7,22 L15.8,20.2 L13.2,20.6 L12,23 L9,23 L7.8,20.6 L5.2,20.2 L3.3,22 L1,19.7 L2.8,17.8 L2.4,15.2 L0,14 L0,11 L2.4,9.8 L2.8,7.2 L1,5.3 L3.3,3 L5.2,4.8 L7.8,4.4 L9,2 Z M10.5,8 C8,8 6,10 6,12.5 C6,15 8,17 10.5,17 C13,17 15,15 15,12.5 C15,10 13,8 10.5,8 Z"/>
+                            </Viewbox>
+                        </Button>
 
-                        <Button Content="🌐" Margin="6"/>
-                        <Button Content="🔒" Margin="6"/>
-
-                        <Button Content="📜"
-                Margin="6"
-                ToolTip="Historique"
-                Click="OpenHistory_Click"/>
+                        <Button Style="{StaticResource ToolbarIconButtonStyle}"
+                                Width="36" Height="36" Margin="10,4"
+                                ToolTip="Historique" Click="OpenHistory_Click">
+                            <Viewbox Width="17" Height="17">
+                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                                      Data="M12,3 A9,9 0 1 1 4.8,6.6 L2,4 L2,11 L9,11 L6.5,8.5 A6,6 0 1 0 12,6 Z M11,7 L13,7 L13,12 L17,14 L16,16 L11,13 Z"/>
+                            </Viewbox>
+                        </Button>
                     </StackPanel>
 
-                </StackPanel>
-
+                    <Border Grid.Row="2" Margin="10,8,10,12" Height="1" Background="{StaticResource BorderBrush}"/>
+                </Grid>
             </Border>
         </Grid>
 
         <Border x:Name="InternalToast"
                 Width="320"
                 Padding="12"
-                Background="#1F2937"
+                Background="{StaticResource SurfaceRaisedBrush}"
                 CornerRadius="12"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Bottom"
@@ -902,7 +952,7 @@
                            Foreground="White"/>
 
                 <TextBlock x:Name="ToastMessage"
-                           Foreground="#D1D5DB"
+                           Foreground="{StaticResource TextSecondaryBrush}"
                            Margin="0,4,0,0"/>
 
                 <Button Content="Ouvrir le fichier"
@@ -925,7 +975,7 @@
 
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                    <Border Background="#1F2937"
+                    <Border Background="{StaticResource SurfaceRaisedBrush}"
                             CornerRadius="12"
                             Padding="12"
                             Margin="0,0,0,10"
@@ -943,7 +993,7 @@
                                        Foreground="White"/>
 
                             <TextBlock Text="{Binding Message}"
-                                       Foreground="#D1D5DB"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
                                        Margin="0,4,0,0"/>
 
                             <Button Content="Ouvrir le fichier"
