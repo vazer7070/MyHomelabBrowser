@@ -1,96 +1,189 @@
-﻿using MyHomelabBrowser.classes.Profiles.Credentials;
+using MyHomelabBrowser.classes.Profiles.Credentials;
+using System;
 using System.Collections.Generic;
-using System.Globalization;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
+using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace MyHomelabBrowser.controles
 {
     public partial class PasswordVaultWindow : Window
     {
-        readonly CredentialVaultService _vault;
-        List<CredentialEntry> _allItems = new();
+        private readonly CredentialVaultService _vault;
+        private readonly DispatcherTimer _statusTimer;
+        private List<CredentialEntry> _allItems = new();
 
         public PasswordVaultWindow(CredentialVaultService vault)
         {
             InitializeComponent();
-            _vault = vault;
+            _vault = vault ?? throw new ArgumentNullException(nameof(vault));
+
+            _statusTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(4)
+            };
+            _statusTimer.Tick += (_, _) =>
+            {
+                _statusTimer.Stop();
+                StatusBorder.Visibility = Visibility.Collapsed;
+            };
 
             Refresh();
+            SearchBox.Focus();
         }
 
-        void Refresh()
+        private void Refresh()
         {
-            _allItems = _vault.GetAll().ToList();
+            _allItems = _vault.GetAll()
+                .OrderBy(x => x.Host, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Username, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            CountText.Text = _allItems.Count switch
+            {
+                0 => "Aucun identifiant",
+                1 => "1 identifiant",
+                _ => $"{_allItems.Count} identifiants"
+            };
+
             ApplyFilter();
         }
+
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
         {
+            SearchPlaceholder.Visibility = string.IsNullOrEmpty(SearchBox.Text)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            ClearSearchButton.Visibility = string.IsNullOrEmpty(SearchBox.Text)
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+
             ApplyFilter();
         }
 
-        void ApplyFilter()
+        private void ClearSearch_Click(object sender, RoutedEventArgs e)
         {
-            var q = (SearchBox.Text ?? "").Trim().ToLowerInvariant();
+            SearchBox.Clear();
+            SearchBox.Focus();
+        }
 
-            if (string.IsNullOrEmpty(q))
+        private void ApplyFilter()
+        {
+            var query = (SearchBox.Text ?? string.Empty).Trim();
+
+            var filtered = string.IsNullOrWhiteSpace(query)
+                ? _allItems
+                : _allItems.Where(x =>
+                    (x.Host?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (x.Username?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false))
+                    .ToList();
+
+            CredentialList.ItemsSource = filtered;
+
+            var hasItems = filtered.Count > 0;
+            CredentialList.Visibility = hasItems ? Visibility.Visible : Visibility.Collapsed;
+            EmptyState.Visibility = hasItems ? Visibility.Collapsed : Visibility.Visible;
+
+            if (_allItems.Count == 0)
             {
-                List.ItemsSource = _allItems;
-                return;
+                EmptyTitle.Text = "Aucun identifiant enregistré";
+                EmptyDescription.Text = "Les identifiants enregistrés apparaîtront ici.";
             }
-
-            List.ItemsSource = _allItems.Where(x =>
-                (x.Host?.ToLowerInvariant().Contains(q) ?? false) ||
-                (x.Username?.ToLowerInvariant().Contains(q) ?? false)
-            ).ToList();
+            else
+            {
+                EmptyTitle.Text = "Aucun résultat";
+                EmptyDescription.Text = "Modifie ou efface les termes de recherche.";
+            }
         }
 
         private void Reveal_Click(object sender, RoutedEventArgs e)
         {
-            if ((sender as FrameworkElement)?.DataContext is not CredentialEntry c)
+            if ((sender as FrameworkElement)?.DataContext is not CredentialEntry credential)
                 return;
 
-            MessageBox.Show(
-                c.Password,
-                $"Mot de passe pour {c.Host}",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information
-            );
+            var dialog = new VaultSecretDialog(credential)
+            {
+                Owner = this
+            };
+
+            dialog.ShowDialog();
         }
 
-        private void Copy_Click(object sender, RoutedEventArgs e)
+        private async void Copy_Click(object sender, RoutedEventArgs e)
         {
-            if ((sender as FrameworkElement)?.DataContext is not CredentialEntry c)
+            if ((sender as FrameworkElement)?.DataContext is not CredentialEntry credential)
                 return;
 
-            Clipboard.SetText(c.Password);
+            try
+            {
+                Clipboard.SetText(credential.Password);
+                ShowStatus("Mot de passe copié — le presse-papiers sera effacé dans 30 secondes.");
+                await ClearClipboardLaterAsync(credential.Password);
+            }
+            catch
+            {
+                ShowStatus("Impossible d’accéder au presse-papiers.");
+            }
         }
 
         private void Delete_Click(object sender, RoutedEventArgs e)
         {
-            if ((sender as FrameworkElement)?.DataContext is not CredentialEntry c)
+            if ((sender as FrameworkElement)?.DataContext is not CredentialEntry credential)
                 return;
 
-            if (MessageBox.Show(
-                $"Supprimer l’identifiant pour {c.Host} ?",
-                "Confirmation",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            var confirm = new VaultDeleteConfirmDialog(credential.Host, credential.Username)
+            {
+                Owner = this
+            };
+
+            if (confirm.ShowDialog() != true)
                 return;
 
-            _vault.Delete(c.Host, c.Username);
+            _vault.Delete(credential.Host, credential.Username);
             Refresh();
-            ApplyFilter();
-
+            ShowStatus("Identifiant supprimé du coffre.");
         }
-        public class BoolToVisibilityConverter : IValueConverter
-        {
-            public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-                => (value is bool b && b) ? Visibility.Visible : Visibility.Collapsed;
 
-            public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-                => throw new NotSupportedException();
+        private void ShowStatus(string message)
+        {
+            StatusText.Text = message;
+            StatusBorder.Visibility = Visibility.Visible;
+            _statusTimer.Stop();
+            _statusTimer.Start();
+        }
+
+        private static async Task ClearClipboardLaterAsync(string copiedPassword)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(30));
+
+            try
+            {
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    if (Clipboard.ContainsText() &&
+                        string.Equals(Clipboard.GetText(), copiedPassword, StringComparison.Ordinal))
+                    {
+                        Clipboard.Clear();
+                    }
+                });
+            }
+            catch
+            {
+                // Le presse-papiers peut être verrouillé par une autre application.
+            }
+        }
+
+        private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ButtonState == MouseButtonState.Pressed)
+            {
+                try { DragMove(); }
+                catch { }
+            }
         }
 
         private void Close_Click(object sender, RoutedEventArgs e)

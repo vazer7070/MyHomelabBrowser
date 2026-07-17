@@ -317,6 +317,10 @@ namespace MyHomelabBrowser
             var removeFlashBtn = fe.FindName("RemoveFlashRuleBtn") as Button;
             if (removeFlashBtn != null) removeFlashBtn.Click += RemoveFlashRule_Click;
 
+            var clearFlashCompatibilityBtn = fe.FindName("ClearFlashCompatibilityBtn") as Button;
+            if (clearFlashCompatibilityBtn != null)
+                clearFlashCompatibilityBtn.Click += ClearFlashCompatibility_Click;
+
             if (FlashLegacyList != null)
                 RefreshFlashRules();
 
@@ -466,6 +470,25 @@ namespace MyHomelabBrowser
             RefreshFlashRules();
         }
 
+        void ClearFlashCompatibility_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBoxResult result = MessageBox.Show(
+                "Effacer les choix Ruffle/Legacy appris pour le profil actuel ?",
+                "Compatibilité Flash",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result != MessageBoxResult.Yes)
+                return;
+
+            FlashCompatibilityMemory.ClearForCurrentProfile();
+            MessageBox.Show(
+                "La compatibilité apprise a été réinitialisée.",
+                "Compatibilité Flash",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
         void PickBasiliskPath_Click(object sender, RoutedEventArgs e)
         {
             string exeDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -511,7 +534,7 @@ namespace MyHomelabBrowser
             if (!IsValidHost(host))
             {
                 MessageBox.Show(
-                    "Domaine invalide.\nExemple : ministryofwar.com",
+                    "Domaine invalide.\nExemple : jeu.exemple.com",
                     "Erreur",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning

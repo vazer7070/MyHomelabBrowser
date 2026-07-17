@@ -17,21 +17,40 @@
             <Border Style="{StaticResource SettingsCard}">
                 <StackPanel>
 
-                    <TextBlock Text="Flash / Legacy"
+                    <TextBlock Text="Compatibilité Flash"
                                Style="{StaticResource SettingsTitle}"/>
 
                     <CheckBox x:Name="EnableFlashSupportBox"
-                              Content="Activer le support Flash (Ruffle / Legacy)"
+                              Content="Activer le moteur Flash intégré"
                               IsChecked="{Binding EnableFlashSupport}"
                               Foreground="{StaticResource TextPrimaryBrush}"
                               Margin="0,6"/>
 
                     <CheckBox x:Name="PreferRuffleBox"
-                              Content="Tenter Ruffle avant Basilisk"
-                              IsChecked="{Binding PreferRuffle}"
-                              IsEnabled="{Binding EnableFlashSupport}"
+                              Content="Ruffle intégré est toujours essayé avant le moteur Legacy"
+                              IsChecked="True"
+                              IsEnabled="False"
                               Foreground="{StaticResource TextPrimaryBrush}"
                               Margin="0,4"/>
+
+                    <Border Background="{StaticResource SurfaceRaisedBrush}"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="9"
+                            Padding="12"
+                            Margin="0,10,0,8">
+                        <StackPanel>
+                            <TextBlock Text="Moteur Ruffle"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"/>
+                            <TextBlock x:Name="RuffleRuntimeStatusText"
+                                       Text="Vérification du moteur intégré…"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontSize="12"
+                                       Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Border>
 
                     <CheckBox x:Name="FlashDebugEnabledBox"
                               Content="Mode debug Flash (logs / overlay)"
@@ -46,7 +65,7 @@
                             Margin="0,10,0,0"
                             HorizontalAlignment="Left"/>
 
-                    <TextBlock Text="Navigateur Legacy (Basilisk)"
+                    <TextBlock Text="Moteur de secours Legacy (Basilisk)"
                                Style="{StaticResource SettingsLabel}"
                                Margin="0,16,0,6"/>
 
@@ -66,19 +85,21 @@
                                 Padding="16,6"/>
                     </StackPanel>
 
-                    <TextBlock Text="Utilisé uniquement si un site nécessite Flash réel (MMO anciens)."
+                    <TextBlock Text="En mode automatique, PommeBrowser tente Ruffle avec les paramètres du lecteur d’origine. Le moteur Legacy n’est utilisé automatiquement que si ce même contenu a échoué plusieurs fois avec Ruffle et a déjà fonctionné avec Basilisk."
                                Foreground="{StaticResource TextSecondaryBrush}"
                                FontSize="12"
+                               TextWrapping="Wrap"
                                Margin="0,6,0,0"/>
 
                     <Separator Margin="0,18,0,12"/>
 
-                    <TextBlock Text="Sites forcés en mode Legacy"
+                    <TextBlock Text="Exceptions forcées en mode Legacy"
                                Style="{StaticResource SettingsLabel}"/>
 
-                    <TextBlock Text="Ces sites seront toujours ouverts avec Basilisk, même si Ruffle est disponible."
+                    <TextBlock Text="Ces règles sont facultatives. Sans règle, la compatibilité est apprise par contenu SWF et non par nom de site."
                                Foreground="{StaticResource TextSecondaryBrush}"
                                FontSize="12"
+                               TextWrapping="Wrap"
                                Margin="0,0,0,8"/>
 
                     <ListBox x:Name="FlashLegacyList"
@@ -95,7 +116,13 @@
 
                         <Button x:Name="RemoveFlashRuleBtn"
                                 Content="Supprimer"
-                                Padding="14,6"/>
+                                Padding="14,6"
+                                Margin="0,0,10,0"/>
+
+                        <Button x:Name="ClearFlashCompatibilityBtn"
+                                Content="Réinitialiser l’apprentissage"
+                                Padding="14,6"
+                                ToolTip="Efface les préférences Ruffle/Legacy apprises pour ce profil"/>
                     </StackPanel>
 
                 </StackPanel>

@@ -1,151 +1,78 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
+﻿using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
 namespace MyHomelabBrowser.classes.Profiles.Credentials
 {
-    public class CredentialVaultService
+    public sealed class CredentialVaultService
     {
-        static readonly JsonSerializerOptions JsonOpts = new()
+        private const int Pbkdf2Iterations = 200_000;
+        private const int MaxVaultBytes = 16 * 1024 * 1024;
+
+        private static readonly JsonSerializerOptions JsonOpts = new()
         {
             WriteIndented = true,
             PropertyNameCaseInsensitive = true
         };
 
-        readonly Func<string> _getVaultPath;
-        readonly List<CredentialEntry> _cache = new();
+        private readonly Func<string> _getVaultPath;
+        private readonly List<CredentialEntry> _cache = new();
+        private readonly List<SiteCredentialPolicy> _policies = new();
 
-        byte[]? _key;     // clé AES du VAULT en mémoire
-        byte[]? _salt;    // salt du VAULT (persisté dans l'enveloppe)
-        public bool IsUnlocked => _key != null;
-        public bool VaultExists => File.Exists(_getVaultPath());
+        private byte[]? _key;
+        private byte[]? _salt;
 
-        // anti bruteforce simple (mémoire)
-        int _failedUnlocks;
-        DateTime _lockedUntilUtc;
-
-        static HashSet<string> _knownHosts = new();
-        static Func<string> _getVaultPathStatic = null!;
-
-        public bool IsSessionUnlocked { get; private set; }
+        public bool IsUnlocked => _key is { Length: > 0 };
+        public bool IsSessionUnlocked => IsUnlocked;
+        public bool VaultExists => File.Exists(_getVaultPath()) || File.Exists(GetBackupPath());
+        public DateTime? UnlockAvailableAtUtc => LoadSecurityState().LockedUntilUtc;
 
         public CredentialVaultService(Func<string> getVaultPath)
         {
-            _getVaultPath = getVaultPath;
-            _getVaultPathStatic = getVaultPath;
+            _getVaultPath = getVaultPath ?? throw new ArgumentNullException(nameof(getVaultPath));
         }
-
-        static readonly HashSet<string> TwoPartTlds = new(StringComparer.OrdinalIgnoreCase)
-        {
-            "co.uk", "org.uk", "gov.uk", "ac.uk",
-            "com.au", "net.au", "org.au",
-            "co.jp", "ne.jp", "or.jp",
-            "com.br", "com.ar",
-            "co.in", "com.tr"
-        };
 
         public void ReloadForCurrentProfile()
         {
-            _knownHosts.Clear();
-            LoadHostIndex();
-        }
-
-        static string NormalizeSiteKey(string host)
-        {
-            host = (host ?? "").Trim().ToLowerInvariant();
-            if (host.StartsWith("www.")) host = host[4..];
-
-            if (host == "localhost" || host.All(c => char.IsDigit(c) || c == '.'))
-                return host;
-
-            var parts = host.Split('.', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length < 2)
-                return host;
-
-            var last2 = parts[^2] + "." + parts[^1];
-
-            if (TwoPartTlds.Contains(last2) && parts.Length >= 3)
-                return parts[^3] + "." + last2;
-
-            return last2;
-        }
-
-        void LoadHostIndex()
-        {
-            _knownHosts.Clear();
-
-            var indexPath = Path.ChangeExtension(_getVaultPathStatic(), ".index.json");
-            if (!File.Exists(indexPath))
-                return;
-
-            try
-            {
-                var hosts = JsonSerializer.Deserialize<HashSet<string>>(File.ReadAllText(indexPath));
-                if (hosts != null)
-                {
-                    _knownHosts.Clear();
-                    foreach (var h in hosts)
-                        _knownHosts.Add(h);
-                }
-            }
-            catch { }
+            Lock();
+            DeleteLegacyPlaintextIndex();
         }
 
         public void Lock()
         {
+            if (_key != null)
+                CryptographicOperations.ZeroMemory(_key);
+            if (_salt != null)
+                CryptographicOperations.ZeroMemory(_salt);
+
             _key = null;
             _salt = null;
             _cache.Clear();
-            IsSessionUnlocked = false;
+            _policies.Clear();
         }
-
-        public bool HasCredentialForHost(string host)
-            => _knownHosts.Contains(NormalizeSiteKey(host));
-
-        public void RebuildHostIndexFromCache()
-        {
-            _knownHosts.Clear();
-
-            foreach (var c in _cache)
-                _knownHosts.Add(NormalizeSiteKey(c.Host));
-
-            var indexPath = Path.ChangeExtension(_getVaultPath(), ".index.json");
-            File.WriteAllText(indexPath, JsonSerializer.Serialize(_knownHosts, JsonOpts));
-        }
-
-        // =====================================================
-        // VAULT: INIT / UNLOCK / CHANGE PASSWORD (INDÉPENDANT)
-        // =====================================================
 
         public bool TryInitializeNewVault(string vaultPassword)
         {
+            if (string.IsNullOrWhiteSpace(vaultPassword))
+                return false;
+
             try
             {
-                var path = _getVaultPath();
-                if (File.Exists(path))
-                    return true;
+                if (VaultExists)
+                    return TryUnlock(vaultPassword);
 
+                var path = _getVaultPath();
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
                 _salt = RandomNumberGenerator.GetBytes(16);
-                _key = DeriveKey(vaultPassword, _salt, out _);
-
-                var emptyList = new List<CredentialEntry>();
-                var json = JsonSerializer.Serialize(emptyList, JsonOpts);
-
-                var env = VaultEnvelope.CreateFromPlaintext(json, _key, _salt);
-                File.WriteAllBytes(path, env.Serialize());
-
+                _key = DeriveKey(vaultPassword, _salt);
                 _cache.Clear();
-                IsSessionUnlocked = true;
+                _policies.Clear();
 
-                _failedUnlocks = 0;
-                _lockedUntilUtc = DateTime.MinValue;
-
+                Save();
+                ResetUnlockProtection();
+                DeleteLegacyPlaintextIndex();
                 return true;
             }
             catch
@@ -157,270 +84,802 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
 
         public bool TryUnlock(string vaultPassword)
         {
-            // anti bruteforce (mémoire)
-            var now = DateTime.UtcNow;
-            if (now < _lockedUntilUtc)
+            if (string.IsNullOrEmpty(vaultPassword) || IsUnlockBlocked())
                 return false;
 
-            try
+            var primaryPath = _getVaultPath();
+            var backupPath = GetBackupPath();
+
+            // Si le principal est structurellement valide mais que son tag GCM refuse
+            // le mot de passe, on ne tente jamais l'ancienne sauvegarde. Sinon, un ancien
+            // mot de passe pourrait redevenir valable après une rotation du secret.
+            if (File.Exists(primaryPath))
             {
-                var path = _getVaultPath();
-                if (!File.Exists(path))
+                var primaryLoaded = TryLoadVault(
+                    primaryPath,
+                    vaultPassword,
+                    out var primaryPayload,
+                    out var primaryEnvelope,
+                    out var primaryBytes,
+                    out var primaryKey,
+                    out var primaryNeedsMigration,
+                    out var authenticationFailed);
+
+                if (primaryLoaded)
                 {
-                    // pas de vault => pas d'unlock ici
+                    CompleteUnlock(
+     primaryPayload!,
+     primaryEnvelope!,
+     primaryBytes!,
+     primaryKey!,
+     fromBackup: false,
+     needsMigration: primaryNeedsMigration);
+                    return true;
+                }
+
+                if (authenticationFailed)
+                {
+                    RegisterUnlockFailure();
                     Lock();
                     return false;
                 }
+            }
 
-                var bytes = File.ReadAllBytes(path);
-                var env = VaultEnvelope.Deserialize(bytes);
+            // La sauvegarde n'est utilisée que si le principal manque ou est corrompu.
+            if (File.Exists(backupPath)
+                && TryLoadVault(
+                    backupPath,
+                    vaultPassword,
+                    out var backupPayload,
+                    out var backupEnvelope,
+                    out var backupBytes,
+                    out var backupKey,
+                    out var backupNeedsMigration,
+                    out _))
+            {
+                CompleteUnlock(
+     backupPayload!,
+     backupEnvelope!,
+     backupBytes!,
+     backupKey!,
+     fromBackup: true,
+     needsMigration: backupNeedsMigration);
+                return true;
+            }
 
-                _salt = env.Salt;
-                _key = DeriveKey(vaultPassword, env.Salt, out _);
+            RegisterUnlockFailure();
+            Lock();
+            return false;
+        }
 
-                var decryptedJson = DecryptToString(_key, env.Nonce, env.Ciphertext);
+        private bool TryLoadVault(
+            string path,
+            string password,
+            out VaultPayload? payload,
+            out VaultEnvelope? envelope,
+            out byte[]? bytes,
+            out byte[]? derivedKey,
+            out bool needsMigration,
+            out bool authenticationFailed)
+        {
+            payload = null;
+            envelope = null;
+            bytes = null;
+            derivedKey = null;
+            needsMigration = false;
+            authenticationFailed = false;
 
-                var list = JsonSerializer.Deserialize<List<CredentialEntry>>(decryptedJson, JsonOpts)
-                           ?? new List<CredentialEntry>();
+            try
+            {
+                bytes = ReadVaultFile(path);
+                envelope = VaultEnvelope.Deserialize(bytes);
+                derivedKey = DeriveKey(password, envelope.Salt);
 
-                _cache.Clear();
-                _cache.AddRange(list);
-                RebuildHostIndexFromCache();
+                string decryptedJson;
+                try
+                {
+                    decryptedJson = DecryptToString(
+                        derivedKey,
+                        envelope.Nonce,
+                        envelope.Ciphertext);
+                }
+                catch (CryptographicException)
+                {
+                    authenticationFailed = true;
+                    CryptographicOperations.ZeroMemory(derivedKey);
+                    derivedKey = null;
+                    return false;
+                }
 
-                IsSessionUnlocked = true;
-
-                // reset bruteforce
-                _failedUnlocks = 0;
-                _lockedUntilUtc = DateTime.MinValue;
-
+                needsMigration = decryptedJson.TrimStart().StartsWith("[", StringComparison.Ordinal);
+                payload = DeserializePayload(decryptedJson);
                 return true;
             }
             catch
             {
-                RegisterUnlockFail();
-                Lock();
+                if (derivedKey != null)
+                {
+                    CryptographicOperations.ZeroMemory(derivedKey);
+                    derivedKey = null;
+                }
                 return false;
             }
+        }
+
+        private void CompleteUnlock(
+            VaultPayload payload,
+            VaultEnvelope envelope,
+            byte[] sourceBytes,
+            byte[] derivedKey,
+            bool fromBackup,
+            bool needsMigration)
+        {
+            var normalized = NormalizePayload(payload);
+
+            Lock();
+            _key = derivedKey;
+            _salt = envelope.Salt.ToArray();
+            _cache.AddRange(payload.Credentials);
+            _policies.AddRange(payload.Policies);
+
+            ResetUnlockProtection();
+            DeleteLegacyPlaintextIndex();
+
+            if (fromBackup)
+                WriteAllBytesAtomic(_getVaultPath(), sourceBytes);
+
+            if (normalized || needsMigration)
+                Save();
         }
 
         public bool TryChangeVaultPassword(string currentVaultPassword, string newVaultPassword)
         {
+            if (string.IsNullOrWhiteSpace(newVaultPassword) || !TryUnlock(currentVaultPassword))
+                return false;
+
+            byte[]? newKey = null;
+            byte[]? newSalt = null;
+
             try
             {
-                if (!TryUnlock(currentVaultPassword))
-                    return false;
+                newSalt = RandomNumberGenerator.GetBytes(16);
+                newKey = DeriveKey(newVaultPassword, newSalt);
 
-                // nouveau salt + nouvelle clé (meilleure hygiène)
-                var newSalt = RandomNumberGenerator.GetBytes(16);
-                var newKey = DeriveKey(newVaultPassword, newSalt, out _);
+                if (_key != null)
+                    CryptographicOperations.ZeroMemory(_key);
+                if (_salt != null)
+                    CryptographicOperations.ZeroMemory(_salt);
 
-                _salt = newSalt;
                 _key = newKey;
+                _salt = newSalt;
+                newKey = null;
+                newSalt = null;
 
-                Save(); // réécrit l'enveloppe avec newSalt/newKey
-                RebuildHostIndexFromCache();
-
-                IsSessionUnlocked = true;
+                Save();
+                RefreshBackupFromPrimary();
+                ResetUnlockProtection();
                 return true;
             }
             catch
             {
+                if (newKey != null)
+                    CryptographicOperations.ZeroMemory(newKey);
+                if (newSalt != null)
+                    CryptographicOperations.ZeroMemory(newSalt);
                 return false;
             }
         }
 
-        void RegisterUnlockFail()
-        {
-            _failedUnlocks++;
-
-            // délai progressif à partir de 3 échecs, cap 60s
-            if (_failedUnlocks >= 3)
-            {
-                var pow = Math.Min(_failedUnlocks - 3, 6); // 2^0..2^6
-                var delaySeconds = Math.Min(60, 1 << pow);
-                _lockedUntilUtc = DateTime.UtcNow.AddSeconds(delaySeconds);
-            }
-        }
-
-        // =====================================================
-        // DATA
-        // =====================================================
-
         public IReadOnlyList<CredentialEntry> GetAll()
-            => _cache.OrderByDescending(x => x.UpdatedAt).ToList();
-
-        public CredentialEntry? FindForHost(string host)
         {
-            var key = NormalizeSiteKey(host);
-            return _cache.FirstOrDefault(x => NormalizeSiteKey(x.Host) == key);
+            EnsureUnlocked();
+            return _cache.OrderByDescending(x => x.UpdatedAt).ToList();
         }
 
-        public void Upsert(string host, string username, string password, string? formAction, bool alwaysSave = false, bool neverSave = false)
+        public CredentialEntry? FindForOrigin(Uri? uri, string? username = null)
         {
-            if (_key == null)
-                throw new InvalidOperationException("Vault verrouillé.");
+            if (!IsUnlocked || !CredentialOrigin.TryCreateTrusted(uri, out var origin))
+                return null;
 
-            host = NormalizeSiteKey(host);
+            return FindForOrigin(origin, username);
+        }
 
+        public CredentialEntry? FindForOrigin(string origin, string? username = null)
+        {
+            if (!IsUnlocked)
+                return null;
+
+            var normalizedOrigin = CredentialOrigin.NormalizeStoredValue(origin);
+            if (normalizedOrigin.Length == 0)
+                return null;
+
+            return _cache
+                .Where(x => string.Equals(x.Host, normalizedOrigin, StringComparison.OrdinalIgnoreCase))
+                .Where(x => string.IsNullOrWhiteSpace(username)
+                            || string.Equals(x.Username, username, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(x => x.UpdatedAt)
+                .FirstOrDefault();
+        }
+
+        // Compatibilité interne temporaire : l'appelant doit fournir une origine complète.
+        public CredentialEntry? FindForHost(string origin) => FindForOrigin(origin);
+
+        public bool HasCredentialForOrigin(Uri? uri)
+        {
+            return IsUnlocked && FindForOrigin(uri) != null;
+        }
+
+        public bool HasCredentialForHost(string origin)
+        {
+            return IsUnlocked && FindForOrigin(origin) != null;
+        }
+
+        public CredentialSavePolicy GetPolicy(string origin)
+        {
+            EnsureUnlocked();
+            var normalizedOrigin = CredentialOrigin.NormalizeStoredValue(origin);
+            if (normalizedOrigin.Length == 0)
+                return CredentialSavePolicy.Ask;
+
+            return _policies
+                .FirstOrDefault(x => string.Equals(x.Origin, normalizedOrigin, StringComparison.OrdinalIgnoreCase))
+                ?.SavePolicy ?? CredentialSavePolicy.Ask;
+        }
+
+        public void SetPolicy(string origin, CredentialSavePolicy savePolicy)
+        {
+            EnsureUnlocked();
+            var normalizedOrigin = CredentialOrigin.NormalizeStoredValue(origin);
+            if (normalizedOrigin.Length == 0)
+                throw new ArgumentException("Origine invalide.", nameof(origin));
+
+            var existing = _policies.FirstOrDefault(x =>
+                string.Equals(x.Origin, normalizedOrigin, StringComparison.OrdinalIgnoreCase));
+
+            if (savePolicy == CredentialSavePolicy.Ask)
+            {
+                if (existing != null)
+                    _policies.Remove(existing);
+            }
+            else if (existing == null)
+            {
+                _policies.Add(new SiteCredentialPolicy
+                {
+                    Origin = normalizedOrigin,
+                    SavePolicy = savePolicy,
+                    UpdatedAtUtc = DateTime.UtcNow
+                });
+            }
+            else
+            {
+                existing.SavePolicy = savePolicy;
+                existing.UpdatedAtUtc = DateTime.UtcNow;
+            }
+
+            Save();
+        }
+
+        public void Upsert(
+            string origin,
+            string username,
+            string password,
+            string? formAction,
+            bool alwaysSave = false,
+            bool neverSave = false)
+        {
+            EnsureUnlocked();
+
+            var normalizedOrigin = CredentialOrigin.NormalizeStoredValue(origin);
+            if (normalizedOrigin.Length == 0)
+                throw new ArgumentException("Origine invalide.", nameof(origin));
+            if (string.IsNullOrEmpty(password))
+                throw new ArgumentException("Mot de passe vide.", nameof(password));
+
+            // Compatibilité avec les anciens appelants, sans jamais créer une fausse entrée secrète.
+            if (neverSave)
+            {
+                SetPolicy(normalizedOrigin, CredentialSavePolicy.NeverSave);
+                return;
+            }
+
+            var normalizedUser = username?.Trim() ?? string.Empty;
             var existing = _cache.FirstOrDefault(x =>
-                NormalizeHost(x.Host) == host &&
-                string.Equals(x.Username, username, StringComparison.OrdinalIgnoreCase));
+                string.Equals(x.Host, normalizedOrigin, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(x.Username, normalizedUser, StringComparison.OrdinalIgnoreCase));
 
             if (existing == null)
             {
-                existing = new CredentialEntry
+                _cache.Add(new CredentialEntry
                 {
-                    Host = host,
-                    Username = username,
+                    Host = normalizedOrigin,
+                    Username = normalizedUser,
                     Password = password,
-                    FormAction = formAction,
-                    UpdatedAt = DateTime.UtcNow,
-                    AlwaysSave = alwaysSave,
-                    NeverSave = neverSave
-                };
-                _cache.Add(existing);
+                    FormAction = NormalizeFormAction(formAction, normalizedOrigin),
+                    UpdatedAt = DateTime.UtcNow
+                });
             }
             else
             {
                 existing.Password = password;
-                existing.FormAction = formAction;
+                existing.FormAction = NormalizeFormAction(formAction, normalizedOrigin);
                 existing.UpdatedAt = DateTime.UtcNow;
-                existing.AlwaysSave = alwaysSave;
-                existing.NeverSave = neverSave;
             }
 
+            if (alwaysSave)
+                SetPolicyInternal(normalizedOrigin, CredentialSavePolicy.AlwaysSave);
+
             Save();
-            UpdateHostIndex(host);
         }
 
-        void UpdateHostIndex(string host)
+        public void Delete(string origin, string username)
         {
-            host = NormalizeSiteKey(host);
-            _knownHosts.Add(host);
-
-            var indexPath = Path.ChangeExtension(_getVaultPath(), ".index.json");
-            File.WriteAllText(indexPath, JsonSerializer.Serialize(_knownHosts, JsonOpts));
-        }
-
-        public void Delete(string host, string username)
-        {
-            if (_key == null)
-                throw new InvalidOperationException("Vault verrouillé.");
-
-            host = NormalizeHost(host);
+            EnsureUnlocked();
+            var normalizedOrigin = CredentialOrigin.NormalizeStoredValue(origin);
+            if (normalizedOrigin.Length == 0)
+                return;
 
             _cache.RemoveAll(x =>
-                NormalizeHost(x.Host) == host &&
-                string.Equals(x.Username, username, StringComparison.OrdinalIgnoreCase));
+                string.Equals(x.Host, normalizedOrigin, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(x.Username, username, StringComparison.OrdinalIgnoreCase));
 
             Save();
         }
 
-        void Save()
+        private void Save()
         {
-            if (_key == null || _salt == null || _salt.Length == 0)
-                throw new InvalidOperationException("Vault verrouillé ou salt manquant.");
+            EnsureUnlocked();
+            if (_salt is not { Length: > 0 })
+                throw new InvalidOperationException("Sel du coffre manquant.");
 
-            var json = JsonSerializer.Serialize(_cache, JsonOpts);
+            var payload = new VaultPayload
+            {
+                Credentials = _cache.ToList(),
+                Policies = _policies.ToList()
+            };
 
-            var env = VaultEnvelope.CreateFromPlaintext(json, _key, _salt);
+            var json = JsonSerializer.Serialize(payload, JsonOpts);
+            var envelope = VaultEnvelope.CreateFromPlaintext(json, _key!, _salt);
+            WriteAllBytesAtomic(_getVaultPath(), envelope.Serialize());
+        }
 
-            var path = _getVaultPath();
+        private static VaultPayload DeserializePayload(string json)
+        {
+            if (json.TrimStart().StartsWith("[", StringComparison.Ordinal))
+            {
+                var legacyItems = JsonSerializer.Deserialize<List<LegacyCredentialEntry>>(json, JsonOpts)
+                                  ?? new List<LegacyCredentialEntry>();
+                var payload = new VaultPayload();
+
+                foreach (var item in legacyItems)
+                {
+                    var origin = CredentialOrigin.NormalizeStoredValue(item.Host);
+                    if (origin.Length == 0)
+                        continue;
+
+                    if (item.NeverSave)
+                    {
+                        payload.Policies.Add(new SiteCredentialPolicy
+                        {
+                            Origin = origin,
+                            SavePolicy = CredentialSavePolicy.NeverSave,
+                            UpdatedAtUtc = item.UpdatedAt
+                        });
+                        continue;
+                    }
+
+                    if (!string.IsNullOrEmpty(item.Password))
+                    {
+                        payload.Credentials.Add(new CredentialEntry
+                        {
+                            Host = origin,
+                            Username = item.Username ?? string.Empty,
+                            Password = item.Password,
+                            FormAction = item.FormAction,
+                            UpdatedAt = item.UpdatedAt
+                        });
+                    }
+
+                    if (item.AlwaysSave)
+                    {
+                        payload.Policies.Add(new SiteCredentialPolicy
+                        {
+                            Origin = origin,
+                            SavePolicy = CredentialSavePolicy.AlwaysSave,
+                            UpdatedAtUtc = item.UpdatedAt
+                        });
+                    }
+                }
+
+                return payload;
+            }
+
+            return JsonSerializer.Deserialize<VaultPayload>(json, JsonOpts) ?? new VaultPayload();
+        }
+
+        private static bool NormalizePayload(VaultPayload payload)
+        {
+            var changed = false;
+
+            for (var i = payload.Credentials.Count - 1; i >= 0; i--)
+            {
+                var item = payload.Credentials[i];
+                var origin = CredentialOrigin.NormalizeStoredValue(item.Host);
+                if (origin.Length == 0 || string.IsNullOrEmpty(item.Password))
+                {
+                    payload.Credentials.RemoveAt(i);
+                    changed = true;
+                    continue;
+                }
+
+                if (!string.Equals(item.Host, origin, StringComparison.Ordinal))
+                {
+                    item.Host = origin;
+                    changed = true;
+                }
+
+                if (item.Username == null)
+                {
+                    item.Username = string.Empty;
+                    changed = true;
+                }
+            }
+
+            for (var i = payload.Policies.Count - 1; i >= 0; i--)
+            {
+                var policy = payload.Policies[i];
+                var origin = CredentialOrigin.NormalizeStoredValue(policy.Origin);
+                if (origin.Length == 0 || policy.SavePolicy == CredentialSavePolicy.Ask)
+                {
+                    payload.Policies.RemoveAt(i);
+                    changed = true;
+                    continue;
+                }
+
+                if (!string.Equals(policy.Origin, origin, StringComparison.Ordinal))
+                {
+                    policy.Origin = origin;
+                    changed = true;
+                }
+            }
+
+            var credentialCount = payload.Credentials.Count;
+            payload.Credentials = payload.Credentials
+                .GroupBy(x => (x.Host.ToLowerInvariant(), x.Username.ToLowerInvariant()))
+                .Select(g => g.OrderByDescending(x => x.UpdatedAt).First())
+                .ToList();
+            changed |= credentialCount != payload.Credentials.Count;
+
+            var policyCount = payload.Policies.Count;
+            payload.Policies = payload.Policies
+                .GroupBy(x => x.Origin, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.OrderByDescending(x => x.UpdatedAtUtc).First())
+                .ToList();
+            changed |= policyCount != payload.Policies.Count;
+
+            return changed;
+        }
+
+        private void SetPolicyInternal(string normalizedOrigin, CredentialSavePolicy savePolicy)
+        {
+            var existing = _policies.FirstOrDefault(x =>
+                string.Equals(x.Origin, normalizedOrigin, StringComparison.OrdinalIgnoreCase));
+
+            if (existing == null)
+            {
+                _policies.Add(new SiteCredentialPolicy
+                {
+                    Origin = normalizedOrigin,
+                    SavePolicy = savePolicy,
+                    UpdatedAtUtc = DateTime.UtcNow
+                });
+            }
+            else
+            {
+                existing.SavePolicy = savePolicy;
+                existing.UpdatedAtUtc = DateTime.UtcNow;
+            }
+        }
+
+        private bool IsUnlockBlocked()
+        {
+            var state = LoadSecurityState();
+            return state.LockedUntilUtc.HasValue && state.LockedUntilUtc.Value > DateTime.UtcNow;
+        }
+
+        private void RegisterUnlockFailure()
+        {
+            var state = LoadSecurityState();
+            state.FailedAttempts++;
+
+            if (state.FailedAttempts >= 3)
+            {
+                var exponent = Math.Min(state.FailedAttempts - 3, 9);
+                var delaySeconds = Math.Min(300, 1 << exponent);
+                state.LockedUntilUtc = DateTime.UtcNow.AddSeconds(delaySeconds);
+            }
+
+            SaveSecurityState(state);
+        }
+
+        private void ResetUnlockProtection()
+        {
+            var statePath = GetSecurityStatePath();
+            try
+            {
+                if (File.Exists(statePath))
+                    File.Delete(statePath);
+            }
+            catch
+            {
+                SaveSecurityState(new VaultSecurityState());
+            }
+        }
+
+        private VaultSecurityState LoadSecurityState()
+        {
+            try
+            {
+                var path = GetSecurityStatePath();
+                if (!File.Exists(path))
+                    return new VaultSecurityState();
+
+                return JsonSerializer.Deserialize<VaultSecurityState>(File.ReadAllText(path), JsonOpts)
+                       ?? new VaultSecurityState();
+            }
+            catch
+            {
+                return new VaultSecurityState();
+            }
+        }
+
+        private void SaveSecurityState(VaultSecurityState state)
+        {
+            var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(state, JsonOpts));
+            WriteAllBytesAtomic(GetSecurityStatePath(), bytes, keepBackup: false);
+        }
+
+        private string GetSecurityStatePath()
+        {
+            var directory = Path.GetDirectoryName(_getVaultPath())!;
+            return Path.Combine(directory, "vault-security.json");
+        }
+
+        private string GetBackupPath() => _getVaultPath() + ".bak";
+
+        private void RefreshBackupFromPrimary()
+        {
+            var primaryPath = _getVaultPath();
+            if (!File.Exists(primaryPath))
+                return;
+
+            WriteAllBytesAtomic(GetBackupPath(), ReadVaultFile(primaryPath), keepBackup: false);
+        }
+
+        private static byte[] ReadVaultFile(string path)
+        {
+            var info = new FileInfo(path);
+            if (info.Length <= 0 || info.Length > MaxVaultBytes)
+                throw new InvalidDataException("Taille de coffre invalide.");
+
+            return File.ReadAllBytes(path);
+        }
+
+        private static void WriteAllBytesAtomic(string path, byte[] bytes, bool keepBackup = true)
+        {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllBytes(path, env.Serialize());
+            var tempPath = path + ".tmp-" + Guid.NewGuid().ToString("N");
+            var backupPath = keepBackup ? path + ".bak" : null;
+
+            try
+            {
+                using (var stream = new FileStream(
+                           tempPath,
+                           FileMode.CreateNew,
+                           FileAccess.Write,
+                           FileShare.None,
+                           64 * 1024,
+                           FileOptions.WriteThrough))
+                {
+                    stream.Write(bytes, 0, bytes.Length);
+                    stream.Flush(flushToDisk: true);
+                }
+
+                if (File.Exists(path))
+                {
+                    if (keepBackup)
+                    {
+                        File.Replace(tempPath, path, backupPath, ignoreMetadataErrors: true);
+                    }
+                    else
+                    {
+                        File.Move(tempPath, path, overwrite: true);
+                    }
+                }
+                else
+                {
+                    File.Move(tempPath, path);
+                }
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(tempPath))
+                        File.Delete(tempPath);
+                }
+                catch { }
+            }
         }
 
-        static string NormalizeHost(string host)
+        private void DeleteLegacyPlaintextIndex()
         {
-            host = (host ?? "").Trim().ToLowerInvariant();
-            if (host.StartsWith("www.")) host = host[4..];
-            return host;
+            var vaultPath = _getVaultPath();
+            var candidates = new[]
+            {
+                Path.ChangeExtension(vaultPath, ".index.json"),
+                vaultPath + ".index.json"
+            };
+
+            foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    if (File.Exists(candidate))
+                        File.Delete(candidate);
+                }
+                catch { }
+            }
         }
 
-        static byte[] DeriveKey(string password, byte[] salt, out byte[] usedSalt)
+        private static string? NormalizeFormAction(string? formAction, string origin)
         {
-            usedSalt = salt;
+            if (string.IsNullOrWhiteSpace(formAction))
+                return null;
 
-            using var pbkdf2 = new Rfc2898DeriveBytes(
+            if (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri))
+                return null;
+
+            if (!Uri.TryCreate(originUri, formAction, out var actionUri))
+                return null;
+
+            return actionUri.GetLeftPart(UriPartial.Path);
+        }
+
+        private static byte[] DeriveKey(string password, byte[] salt)
+        {
+            return Rfc2898DeriveBytes.Pbkdf2(
                 password,
-                usedSalt,
-                200_000,
-                HashAlgorithmName.SHA256);
-
-            return pbkdf2.GetBytes(32);
+                salt,
+                Pbkdf2Iterations,
+                HashAlgorithmName.SHA256,
+                32);
         }
 
-        static string DecryptToString(byte[] key, byte[] nonce, byte[] ciphertext)
+        private static string DecryptToString(byte[] key, byte[] nonce, byte[] ciphertext)
         {
-            var tag = ciphertext[..16];
-            var data = ciphertext[16..];
+            if (ciphertext.Length < 17)
+                throw new InvalidDataException("Contenu chiffré invalide.");
 
+            var tag = ciphertext.AsSpan(0, 16);
+            var data = ciphertext.AsSpan(16);
             var plain = new byte[data.Length];
-            using var aes = new AesGcm(key);
-            aes.Decrypt(nonce, data, tag, plain);
 
-            return Encoding.UTF8.GetString(plain);
+            try
+            {
+                using var aes = new AesGcm(key, 16);
+                aes.Decrypt(nonce, data, tag, plain);
+                return Encoding.UTF8.GetString(plain);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(plain);
+            }
         }
 
-        static byte[] EncryptFromString(byte[] key, byte[] plaintextUtf8, out byte[] nonce)
+        private static byte[] EncryptFromString(byte[] key, byte[] plaintextUtf8, out byte[] nonce)
         {
             nonce = RandomNumberGenerator.GetBytes(12);
-
             var tag = new byte[16];
             var cipher = new byte[plaintextUtf8.Length];
 
-            using var aes = new AesGcm(key);
+            using var aes = new AesGcm(key, 16);
             aes.Encrypt(nonce, plaintextUtf8, cipher, tag);
 
-            return tag.Concat(cipher).ToArray();
+            var result = new byte[tag.Length + cipher.Length];
+            Buffer.BlockCopy(tag, 0, result, 0, tag.Length);
+            Buffer.BlockCopy(cipher, 0, result, tag.Length, cipher.Length);
+            CryptographicOperations.ZeroMemory(tag);
+            return result;
         }
 
-        sealed class VaultEnvelope
+        private void EnsureUnlocked()
         {
-            public byte[] Salt { get; set; } = Array.Empty<byte>();
-            public byte[] Nonce { get; set; } = Array.Empty<byte>();
-            public byte[] Ciphertext { get; set; } = Array.Empty<byte>();
+            if (!IsUnlocked)
+                throw new InvalidOperationException("Coffre verrouillé.");
+        }
+
+        private sealed class LegacyCredentialEntry
+        {
+            public string Host { get; set; } = string.Empty;
+            public string? Username { get; set; }
+            public string Password { get; set; } = string.Empty;
+            public string? FormAction { get; set; }
+            public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+            public bool AlwaysSave { get; set; }
+            public bool NeverSave { get; set; }
+        }
+
+        private sealed class VaultEnvelope
+        {
+            public byte[] Salt { get; init; } = Array.Empty<byte>();
+            public byte[] Nonce { get; init; } = Array.Empty<byte>();
+            public byte[] Ciphertext { get; init; } = Array.Empty<byte>();
 
             public byte[] Serialize()
             {
-                using var ms = new MemoryStream();
-                using var bw = new BinaryWriter(ms);
+                using var stream = new MemoryStream();
+                using var writer = new BinaryWriter(stream);
 
-                bw.Write(Salt.Length); bw.Write(Salt);
-                bw.Write(Nonce.Length); bw.Write(Nonce);
-                bw.Write(Ciphertext.Length); bw.Write(Ciphertext);
-
-                return ms.ToArray();
+                writer.Write(Salt.Length);
+                writer.Write(Salt);
+                writer.Write(Nonce.Length);
+                writer.Write(Nonce);
+                writer.Write(Ciphertext.Length);
+                writer.Write(Ciphertext);
+                writer.Flush();
+                return stream.ToArray();
             }
 
             public static VaultEnvelope Deserialize(byte[] bytes)
             {
-                using var ms = new MemoryStream(bytes);
-                using var br = new BinaryReader(ms);
+                using var stream = new MemoryStream(bytes, writable: false);
+                using var reader = new BinaryReader(stream);
 
-                var saltLen = br.ReadInt32();
-                var salt = br.ReadBytes(saltLen);
+                var salt = ReadBounded(reader, min: 16, max: 64);
+                var nonce = ReadBounded(reader, min: 12, max: 32);
+                var ciphertext = ReadBounded(reader, min: 17, max: MaxVaultBytes);
 
-                var nonceLen = br.ReadInt32();
-                var nonce = br.ReadBytes(nonceLen);
-
-                var ctLen = br.ReadInt32();
-                var ct = br.ReadBytes(ctLen);
-
-                return new VaultEnvelope { Salt = salt, Nonce = nonce, Ciphertext = ct };
-            }
-
-            public static VaultEnvelope CreateFromPlaintext(string json, byte[] key, byte[] salt)
-            {
-                var plain = Encoding.UTF8.GetBytes(json);
-                var ct = EncryptFromString(key, plain, out var nonce);
+                if (stream.Position != stream.Length)
+                    throw new InvalidDataException("Données supplémentaires inattendues.");
 
                 return new VaultEnvelope
                 {
                     Salt = salt,
                     Nonce = nonce,
-                    Ciphertext = ct
+                    Ciphertext = ciphertext
                 };
+            }
+
+            public static VaultEnvelope CreateFromPlaintext(string json, byte[] key, byte[] salt)
+            {
+                var plain = Encoding.UTF8.GetBytes(json);
+                try
+                {
+                    var ciphertext = EncryptFromString(key, plain, out var nonce);
+                    return new VaultEnvelope
+                    {
+                        Salt = salt.ToArray(),
+                        Nonce = nonce,
+                        Ciphertext = ciphertext
+                    };
+                }
+                finally
+                {
+                    CryptographicOperations.ZeroMemory(plain);
+                }
+            }
+
+            private static byte[] ReadBounded(BinaryReader reader, int min, int max)
+            {
+                var length = reader.ReadInt32();
+                if (length < min || length > max)
+                    throw new InvalidDataException("Longueur invalide dans le coffre.");
+
+                var bytes = reader.ReadBytes(length);
+                if (bytes.Length != length)
+                    throw new EndOfStreamException();
+
+                return bytes;
             }
         }
     }

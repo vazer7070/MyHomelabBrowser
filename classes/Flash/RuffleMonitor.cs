@@ -1,91 +1,183 @@
-﻿using System;
-using System.Drawing;
+using System;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using WpfWebView2 = Microsoft.Web.WebView2.Wpf.WebView2;
 
 namespace MyHomelabBrowser.classes.Flash
 {
-    public sealed class RuffleMonitor
+    public sealed class RuffleMonitor : IDisposable
     {
         private readonly WpfWebView2 _webView;
         private readonly DispatcherTimer _timer;
+        private readonly SemaphoreSlim _tickLock = new(1, 1);
+        private readonly TimeSpan _startTimeout = TimeSpan.FromSeconds(30);
+        private readonly TimeSpan _stabilityWindow = TimeSpan.FromSeconds(45);
+        private DateTime _startedAtUtc;
+        private DateTime? _readyAtUtc;
+        private CancellationTokenSource? _cts;
+        private bool _failureRaised;
+        private bool _readyRaised;
+        private bool _disposed;
+        private int _missingAfterReadyTicks;
 
-        private readonly TimeSpan _startTimeout = TimeSpan.FromSeconds(10);
-        private readonly TimeSpan _freezeTimeout = TimeSpan.FromSeconds(6);
+        public event Action<RuffleFailureInfo>? FailureDetected;
+        public event Action<RuffleStatus>? ReadyDetected;
 
-        private DateTime _startedAt;
-
-        public event Action<string>? FailureDetected;
+        public RuffleStatus LastStatus { get; private set; } = new();
 
         public RuffleMonitor(WpfWebView2 webView)
         {
-            _webView = webView;
+            _webView = webView ?? throw new ArgumentNullException(nameof(webView));
             _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-            _timer.Tick += async (_, _) => await TickAsync();
+            _timer.Tick += OnTimerTick;
         }
 
         public void Start()
         {
-            _startedAt = DateTime.UtcNow;
+            ThrowIfDisposed();
+            Stop();
+            _failureRaised = false;
+            _readyRaised = false;
+            _missingAfterReadyTicks = 0;
+            _readyAtUtc = null;
+            LastStatus = new RuffleStatus();
+            _startedAtUtc = DateTime.UtcNow;
+            _cts = new CancellationTokenSource();
+            _timer.Interval = TimeSpan.FromSeconds(1);
             _timer.Start();
         }
 
-        public void Stop() => _timer.Stop();
+        public void Stop()
+        {
+            _timer.Stop();
+            _cts?.Cancel();
+            _cts?.Dispose();
+            _cts = null;
+        }
 
-        private async Task TickAsync()
+        private async void OnTimerTick(object? sender, EventArgs e)
+        {
+            CancellationToken token = _cts?.Token ?? CancellationToken.None;
+            if (token.IsCancellationRequested || _disposed)
+                return;
+
+            if (!await _tickLock.WaitAsync(0, token).ConfigureAwait(true))
+                return;
+
+            try
+            {
+                await TickAsync(token).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                FlashDebugConsole.Log("RuffleMonitor exception: " + ex.Message);
+            }
+            finally
+            {
+                _tickLock.Release();
+            }
+        }
+
+        private async Task TickAsync(CancellationToken token)
         {
             if (_webView.CoreWebView2 == null)
                 return;
 
-            var st = await RuffleInjector.GetStatusAsync(_webView);
+            token.ThrowIfCancellationRequested();
+            LastStatus = await RuffleInjector.GetStatusAsync(_webView).ConfigureAwait(true);
+            token.ThrowIfCancellationRequested();
 
-            if (!st.Exists)
+            string? fatal = LastStatus.Errors.FirstOrDefault(IsFatalRuffleError);
+            if (!string.IsNullOrWhiteSpace(fatal))
             {
-                if (DateTime.UtcNow - _startedAt > _startTimeout)
-                {
-                    FailureDetected?.Invoke("Ruffle status absent (timeout)");
-                    FlashDebugConsole.Log("RuffleMonitor failure: " + "timeout");
+                RaiseFailure("Erreur Ruffle : " + fatal, LastStatus);
+                return;
+            }
 
+            if (LastStatus.HasUsablePlayer)
+            {
+                _missingAfterReadyTicks = 0;
+
+                if (!_readyRaised)
+                {
+                    _readyRaised = true;
+                    _readyAtUtc = DateTime.UtcNow;
+                    ReadyDetected?.Invoke(LastStatus);
+                    _timer.Interval = TimeSpan.FromSeconds(3);
+                }
+
+                if (_readyAtUtc.HasValue && DateTime.UtcNow - _readyAtUtc.Value >= _stabilityWindow)
                     Stop();
+
+                return;
+            }
+
+            if (_readyRaised)
+            {
+                _missingAfterReadyTicks++;
+                if (_missingAfterReadyTicks >= 3)
+                {
+                    RaiseFailure(
+                        "Le lecteur Ruffle avait démarré, puis le contenu Flash a disparu ou s'est arrêté.",
+                        LastStatus);
                 }
                 return;
             }
 
-            if (!st.Started && DateTime.UtcNow - _startedAt > _startTimeout)
+            if (DateTime.UtcNow - _startedAtUtc > _startTimeout)
             {
-                FailureDetected?.Invoke("Ruffle n'a pas démarré (timeout)");
-                FlashDebugConsole.Log("RuffleMonitor failure: " + "timeout");
+                string reason = LastStatus.ScriptLoaded
+                    ? LastStatus.PlayerCount > 0
+                        ? "Ruffle a créé un lecteur, mais le fichier SWF n'a pas atteint l'état de lecture."
+                        : "Ruffle est chargé, mais aucun lecteur Flash n'a été créé."
+                    : "Le moteur Ruffle n'a pas pu être chargé dans le délai prévu.";
 
-                Stop();
+                RaiseFailure(reason, LastStatus);
+            }
+        }
+
+        private static bool IsFatalRuffleError(string error)
+        {
+            if (string.IsNullOrWhiteSpace(error))
+                return false;
+
+            return error.Contains("load-failed", StringComparison.OrdinalIgnoreCase) ||
+                   error.Contains("load-timeout", StringComparison.OrdinalIgnoreCase) ||
+                   error.Contains("player-load", StringComparison.OrdinalIgnoreCase) ||
+                   error.Contains("panic", StringComparison.OrdinalIgnoreCase) ||
+                   error.Contains("unreachable", StringComparison.OrdinalIgnoreCase) ||
+                   error.Contains("RuntimeError", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void RaiseFailure(string reason, RuffleStatus status)
+        {
+            if (_failureRaised)
                 return;
-            }
 
-            if (st.LastFrameAt > 0)
-            {
-                var lastFrame = DateTimeOffset.FromUnixTimeMilliseconds(st.LastFrameAt).UtcDateTime;
-                if (DateTime.UtcNow - lastFrame > _freezeTimeout)
-                {
-                    FailureDetected?.Invoke("Ruffle freeze détecté");
-                    FlashDebugConsole.Log("RuffleMonitor failure: " + "freeze");
-                    Stop();
-                    return;
-                }
-            }
+            _failureRaised = true;
+            FlashDebugConsole.Log("RuffleMonitor failure: " + reason);
+            FailureDetected?.Invoke(new RuffleFailureInfo(reason, status));
+            Stop();
+        }
 
-            // erreurs significatives
-            foreach (var e in st.Errors)
-            {
-                if (e.Contains("ruffle-script-not-loaded", StringComparison.OrdinalIgnoreCase) ||
-                    e.Contains("panic", StringComparison.OrdinalIgnoreCase) ||
-                    e.Contains("load-failed", StringComparison.OrdinalIgnoreCase))
-                {
-                    FailureDetected?.Invoke("Erreur Ruffle: " + e);
-                    FlashDebugConsole.Log("RuffleMonitor failure: " + e);
-                    Stop();
-                    return;
-                }
-            }
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            Stop();
+            _timer.Tick -= OnTimerTick;
+            _tickLock.Dispose();
+            GC.SuppressFinalize(this);
+        }
+
+        private void ThrowIfDisposed()
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
         }
     }
 }

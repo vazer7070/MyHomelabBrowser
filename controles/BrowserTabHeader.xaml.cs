@@ -1,60 +1,176 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using System;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
 namespace MyHomelabBrowser.controles
 {
-    /// <summary>
-    /// Logique d'interaction pour BrowserTabHeader.xaml
-    /// </summary>
     public partial class BrowserTabHeader : UserControl
     {
         public event Action<int>? ReorderRequested;
-        double _lastReorderX;
         public event Action CloseRequested;
         public event Action? PinRequested;
+        public event Action? DetachRequested;
+
+        private double _lastReorderX;
+        private bool _pinned;
+        private Point _dragStart;
+        private bool _dragging;
 
         public BrowserTabHeader()
         {
             InitializeComponent();
+
             CloseBtn.Click += (_, _) => CloseRequested?.Invoke();
             PinBtn.Click += (_, _) => PinRequested?.Invoke();
-        }
-
-        public void SetPrivate(bool isPrivate)
-        {
-            SetTitle("🕶️ " + Title.Text);
+            PinnedUnpinBtn.Click += (_, _) => PinRequested?.Invoke();
         }
 
         public string TabTitle => Title.Text ?? string.Empty;
 
-        public void SetTitle(string title) => Title.Text = title ?? string.Empty;
-        public void SetIcon(ImageSource icon) => Icon.Source = icon;
-        bool _pinned;
-        Point _dragStart;
-        bool _dragging;
+        public void SetPrivate(bool isPrivate)
+        {
+            string current = Title.Text ?? string.Empty;
+            const string prefix = "🕶️ ";
 
-        public event Action? DetachRequested;
+            if (isPrivate && !current.StartsWith(prefix, StringComparison.Ordinal))
+                SetTitle(prefix + current);
+            else if (!isPrivate && current.StartsWith(prefix, StringComparison.Ordinal))
+                SetTitle(current[prefix.Length..]);
+        }
+
+        public void SetTitle(string title)
+        {
+            Title.Text = title ?? string.Empty;
+
+            if (_pinned)
+                Root.ToolTip = string.IsNullOrWhiteSpace(Title.Text)
+                    ? "Onglet épinglé"
+                    : $"{Title.Text}\nOnglet épinglé";
+        }
+
+        public void SetIcon(ImageSource icon)
+        {
+            Icon.Source = icon;
+            PinnedIcon.Source = icon;
+        }
+
         public void ResetVisualState() => ResetGhost();
+
+        public void SetPinned(bool pinned)
+        {
+            _pinned = pinned;
+
+            NormalLayout.Visibility = pinned
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+
+            PinnedLayout.Visibility = pinned
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            Root.Padding = pinned
+                ? new Thickness(4, 0, 0, 0)
+                : new Thickness(8, 0, 0, 0);
+
+            Root.ToolTip = pinned
+                ? (string.IsNullOrWhiteSpace(TabTitle)
+                    ? "Onglet épinglé"
+                    : $"{TabTitle}\nOnglet épinglé")
+                : null;
+
+            PinBtn.ToolTip = pinned
+                ? "Désépingler l’onglet"
+                : "Épingler l’onglet";
+
+            if (!pinned)
+                HidePinnedAction(immediate: true);
+        }
+
+        public void ShowSuspended(bool suspended)
+        {
+            Root.Opacity = suspended ? 0.6 : 1.0;
+        }
+
+        public void AnimateReorder(double fromX)
+        {
+            ReorderOffset.BeginAnimation(TranslateTransform.XProperty, null);
+            ReorderOffset.X = fromX;
+
+            var animation = new DoubleAnimation
+            {
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(160),
+                EasingFunction = new CubicEase
+                {
+                    EasingMode = EasingMode.EaseOut
+                }
+            };
+
+            ReorderOffset.BeginAnimation(TranslateTransform.XProperty, animation);
+        }
+
+        private void Header_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (!_pinned)
+                return;
+
+            PinnedUnpinBtn.IsHitTestVisible = true;
+
+            PinnedUnpinBtn.BeginAnimation(
+                OpacityProperty,
+                new DoubleAnimation(1, TimeSpan.FromMilliseconds(90)));
+
+            PinnedFaviconHost.BeginAnimation(
+                OpacityProperty,
+                new DoubleAnimation(0.18, TimeSpan.FromMilliseconds(90)));
+
+            PinnedMarker.BeginAnimation(
+                OpacityProperty,
+                new DoubleAnimation(0, TimeSpan.FromMilliseconds(70)));
+        }
+
+        private void Header_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (_pinned)
+                HidePinnedAction(immediate: false);
+        }
+
+        private void HidePinnedAction(bool immediate)
+        {
+            var duration = immediate
+                ? TimeSpan.Zero
+                : TimeSpan.FromMilliseconds(100);
+
+            PinnedUnpinBtn.IsHitTestVisible = false;
+
+            PinnedUnpinBtn.BeginAnimation(
+                OpacityProperty,
+                new DoubleAnimation(0, duration));
+
+            PinnedFaviconHost.BeginAnimation(
+                OpacityProperty,
+                new DoubleAnimation(1, duration));
+
+            PinnedMarker.BeginAnimation(
+                OpacityProperty,
+                new DoubleAnimation(1, duration));
+        }
 
         private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            // Ne démarre pas un glisser-déposer lorsque l’utilisateur clique
+            // sur une action du header.
+            if (FindButtonAncestor(e.OriginalSource as DependencyObject) != null)
+                return;
+
             ResetGhost();
             _dragStart = e.GetPosition(null);
             _dragging = true;
             CaptureMouse();
         }
-
 
         private void Header_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
@@ -68,7 +184,21 @@ namespace MyHomelabBrowser.controles
             _dragging = false;
             base.OnLostMouseCapture(e);
         }
-        void ResetGhost()
+
+        private static Button? FindButtonAncestor(DependencyObject? current)
+        {
+            while (current != null)
+            {
+                if (current is Button button)
+                    return button;
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return null;
+        }
+
+        private void ResetGhost()
         {
             GhostOffset.BeginAnimation(TranslateTransform.YProperty, null);
             GhostOffset.Y = 0;
@@ -79,99 +209,38 @@ namespace MyHomelabBrowser.controles
             if (!_dragging || e.LeftButton != MouseButtonState.Pressed)
                 return;
 
-            var pos = e.GetPosition(null);
-            double deltaY = _dragStart.Y - pos.Y;
-            double deltaX = pos.X - _dragStart.X;
+            Point position = e.GetPosition(null);
+            double deltaY = _dragStart.Y - position.Y;
+            double deltaX = position.X - _dragStart.X;
 
-            // --------------------
-            // DETACH VERTICAL
-            // --------------------
             if (deltaY > 40)
             {
                 _dragging = false;
                 ReleaseMouseCapture();
 
-                var anim = new DoubleAnimation
+                var animation = new DoubleAnimation
                 {
                     To = -20,
                     Duration = TimeSpan.FromMilliseconds(120),
-                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                    EasingFunction = new CubicEase
+                    {
+                        EasingMode = EasingMode.EaseOut
+                    }
                 };
 
-                GhostOffset.BeginAnimation(TranslateTransform.YProperty, anim);
+                GhostOffset.BeginAnimation(TranslateTransform.YProperty, animation);
                 DetachRequested?.Invoke();
                 return;
             }
 
-            // --------------------
-            // REORDER HORIZONTAL
-            // --------------------
-            if (Math.Abs(deltaX) > 60)
-            {
-                // anti-spam
-                if (Math.Abs(pos.X - _lastReorderX) < 40)
-                    return;
+            if (Math.Abs(deltaX) <= 60)
+                return;
 
-                _lastReorderX = pos.X;
+            if (Math.Abs(position.X - _lastReorderX) < 40)
+                return;
 
-                ReorderRequested?.Invoke(deltaX > 0 ? +1 : -1);
-            }
-
-
+            _lastReorderX = position.X;
+            ReorderRequested?.Invoke(deltaX > 0 ? 1 : -1);
         }
-        public void ShowSuspended(bool suspended)
-        {
-            Root.Opacity = suspended ? 0.6 : 1.0;
-        }
-
-        public void AnimateReorder(double fromX)
-        {
-            ReorderOffset.BeginAnimation(TranslateTransform.XProperty, null);
-            ReorderOffset.X = fromX;
-
-            var anim = new DoubleAnimation
-            {
-                To = 0,
-                Duration = TimeSpan.FromMilliseconds(160),
-                EasingFunction = new CubicEase
-                {
-                    EasingMode = EasingMode.EaseOut
-                }
-            };
-
-            ReorderOffset.BeginAnimation(TranslateTransform.XProperty, anim);
-        }
-
-
-        public void SetPinned(bool pinned)
-        {
-            PinIcon.Foreground = pinned
-                ? Brushes.White
-                : new SolidColorBrush(Color.FromRgb(120, 120, 120));
-
-            PinBtn.ToolTip = pinned
-                ? "Désépingler l’onglet"
-                : "Épingler l’onglet";
-
-            // titre
-            Title.Visibility = pinned
-                ? Visibility.Collapsed
-                : Visibility.Visible;
-
-            // close
-            CloseBtn.Visibility = pinned
-                ? Visibility.Collapsed
-                : Visibility.Visible;
-
-            // 🔑 padding adapté
-            Root.Padding = pinned
-                ? new Thickness(6, 0, 0, 0)
-                : new Thickness(8, 0, 0, 0);
-        }
-
-
-
-
     }
-
 }

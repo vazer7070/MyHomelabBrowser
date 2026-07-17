@@ -38,7 +38,7 @@
                     BorderThickness="1">
                 <TextBox x:Name="UsernameBox"
                          Height="42"
-                         Padding="14,10"
+                         Padding="14,0"
                          Background="Transparent"
                          Foreground="White"
                          BorderThickness="0"/>
@@ -56,7 +56,7 @@
                     BorderThickness="1">
                 <PasswordBox x:Name="PasswordBox"
                              Height="42"
-                             Padding="14,10"
+                             Padding="14,0"
                              Background="Transparent"
                              Foreground="White"
                              BorderThickness="0"/>
@@ -74,7 +74,7 @@
                     BorderThickness="1">
                 <PasswordBox x:Name="ConfirmBox"
                              Height="42"
-                             Padding="14,10"
+                             Padding="14,0"
                              Background="Transparent"
                              Foreground="White"
                              BorderThickness="0"/>

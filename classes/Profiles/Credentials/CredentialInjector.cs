@@ -1,6 +1,4 @@
-﻿using Microsoft.Web.WebView2.Core;
-using Microsoft.Web.WebView2.Wpf;
-using System;
+﻿using Microsoft.Web.WebView2.Wpf;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -8,7 +6,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
 {
     public static class CredentialInjector
     {
-        static readonly JsonSerializerOptions _jsonOpts = new()
+        private static readonly JsonSerializerOptions JsonOptions = new()
         {
             PropertyNameCaseInsensitive = true
         };
@@ -16,287 +14,294 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
         public static async Task Attach(
             WebView2 web,
             Func<bool> isPrivateTab,
-            Func<string?> getCurrentProfileUsername,
             Func<bool> isVaultUnlocked,
-            Func<string, CredentialEntry?> getCredForHost,
-            Action<string, string, string, string?> onCredentialCaptured)
+            Func<Uri, CredentialEntry?> getCredentialForOrigin,
+            Func<CredentialCandidate, Task> onCredentialCaptured)
         {
-            if (web.CoreWebView2 == null)
+            ArgumentNullException.ThrowIfNull(web);
+            ArgumentNullException.ThrowIfNull(isPrivateTab);
+            ArgumentNullException.ThrowIfNull(isVaultUnlocked);
+            ArgumentNullException.ThrowIfNull(getCredentialForOrigin);
+            ArgumentNullException.ThrowIfNull(onCredentialCaptured);
+
+            if (web.CoreWebView2 == null || isPrivateTab())
                 return;
 
-            // ❌ jamais en privé
-            if (isPrivateTab())
-                return;
-
-            // ===============================
-            // 1) JS -> C# (handler stable)
-            // ===============================
-            web.CoreWebView2.WebMessageReceived += (_, e) =>
-            {
-                try
-                {
-                    var json = e.WebMessageAsJson;
-                    if (string.IsNullOrWhiteSpace(json))
-                        return;
-
-                    var msg = JsonSerializer.Deserialize<WebMsg>(json, _jsonOpts);
-                    if (msg == null)
-                        return;
-
-                    if (msg.Type != "cred_submit")
-                        return;
-
-                    if (string.IsNullOrWhiteSpace(msg.Host))
-                        return;
-
-                    if (string.IsNullOrWhiteSpace(msg.Password))
-                        return;
-
-                    // 🔐 protection ultime côté C#
-                   // if (!isVaultUnlocked())
-                      //  return;
-
-                    onCredentialCaptured(
-                        msg.Host!,
-                        msg.Username ?? "",
-                        msg.Password!,
-                        msg.FormAction
-                    );
-                }
-                catch
-                {
-                    // silencieux volontairement
-                }
-            };
-
-            // ===============================
-            // 2) Injection JS (FIABLE)
-            // ===============================
-            try
-            {
-                var script = GetScript();
-
-                // pour les futures navigations
-                await web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script);
-
-                // pour la page déjà chargée
-                await web.ExecuteScriptAsync(script);
-            }
-            catch
-            {
-                // silencieux
-            }
-
-            // ===============================
-            // 3) Auto-fill après navigation
-            // ===============================
-            web.NavigationCompleted += async (_, __) =>
+            web.CoreWebView2.WebMessageReceived += async (_, eventArgs) =>
             {
                 try
                 {
                     if (isPrivateTab())
                         return;
 
-                    if (!isVaultUnlocked())
+                    if (!Uri.TryCreate(eventArgs.Source, UriKind.Absolute, out var messageSource)
+                        || !CredentialOrigin.TryCreateTrusted(messageSource, out var sourceOrigin))
+                    {
                         return;
+                    }
 
-                    var uri = web.Source;
-                    if (uri == null || string.IsNullOrWhiteSpace(uri.Host))
+                    var currentPage = web.Source;
+                    if (!CredentialOrigin.TryCreateTrusted(currentPage, out var currentOrigin)
+                        || !string.Equals(sourceOrigin, currentOrigin, StringComparison.OrdinalIgnoreCase))
+                    {
                         return;
+                    }
 
-                    var cred = getCredForHost(uri.Host);
-                    if (cred == null)
+                    var message = JsonSerializer.Deserialize<WebMessage>(
+                        eventArgs.WebMessageAsJson,
+                        JsonOptions);
+
+                    if (message?.Type != "cred_submit"
+                        || string.IsNullOrEmpty(message.Password))
+                    {
                         return;
+                    }
 
-                    var u = JsonSerializer.Serialize(cred.Username);
-                    var p = JsonSerializer.Serialize(cred.Password);
+                    // L'origine déclarée par JavaScript n'est jamais la source de vérité.
+                    // Elle sert uniquement à détecter une incohérence supplémentaire.
+                    if (!string.IsNullOrWhiteSpace(message.Origin)
+                        && (!CredentialOrigin.TryCreateTrusted(message.Origin, out var declaredOrigin)
+                            || !string.Equals(declaredOrigin, sourceOrigin, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return;
+                    }
 
-                    var js = $@"
-(() => {{
-  let username = {u};
-  let password = {p};
-
-  function setValue(el, val) {{
-    if (!el || !val) return;
-    el.focus();
-    el.value = val;
-    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-  }}
-
-  const pwd = document.querySelector('input[type=""password""]');
-  if (!pwd) return;
-
-  const user =
-    document.querySelector('input[autocomplete=""username""]') ||
-    document.querySelector('input[type=""email""]') ||
-    document.querySelector(
-      'input[name*=""user"" i], input[id*=""user"" i], ' +
-      'input[name*=""email"" i], input[id*=""email"" i]'
-    ) ||
-    document.querySelector(
-      'input[type=""text""]:not([name*=""search"" i]):not([id*=""search"" i])'
-    );
-
-  if (user && user.value.trim().length === 0)
-    setValue(user, username);
-
-  if (pwd.value.trim().length === 0)
-    setValue(pwd, password);
-
-  setTimeout(() => {{ password = ''; }}, 0);
-}})();";
-
-                    await web.ExecuteScriptAsync(js);
+                    await onCredentialCaptured(new CredentialCandidate
+                    {
+                        Origin = sourceOrigin,
+                        Username = message.Username?.Trim() ?? string.Empty,
+                        Password = message.Password,
+                        FormAction = message.FormAction
+                    });
                 }
                 catch
                 {
-                    // silencieux
+                    // Une page web ne doit jamais pouvoir faire tomber le navigateur.
+                }
+            };
+
+            var script = GetCaptureScript();
+            await web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script);
+
+            try
+            {
+                await web.ExecuteScriptAsync(script);
+            }
+            catch
+            {
+                // Certaines pages internes ou en cours de destruction refusent l'injection.
+            }
+
+            web.NavigationCompleted += async (_, _) =>
+            {
+                try
+                {
+                    if (isPrivateTab() || !isVaultUnlocked())
+                        return;
+
+                    var currentUri = web.Source;
+                    if (!CredentialOrigin.TryCreateTrusted(currentUri, out _))
+                        return;
+
+                    var credential = getCredentialForOrigin(currentUri);
+                    if (credential == null)
+                        return;
+
+                    var usernameJson = JsonSerializer.Serialize(credential.Username);
+                    var passwordJson = JsonSerializer.Serialize(credential.Password);
+
+                    var fillScript = $$"""
+                    (() => {
+                      let username = {{usernameJson}};
+                      let password = {{passwordJson}};
+
+                      function isUsable(element) {
+                        if (!element || element.disabled || element.readOnly) return false;
+                        const style = window.getComputedStyle(element);
+                        return style.display !== 'none' && style.visibility !== 'hidden';
+                      }
+
+                      function setValue(element, value) {
+                        if (!isUsable(element) || !value) return;
+                        element.focus();
+                        const descriptor = Object.getOwnPropertyDescriptor(
+                          HTMLInputElement.prototype,
+                          'value'
+                        );
+                        descriptor?.set?.call(element, value);
+                        element.dispatchEvent(new Event('input', { bubbles: true }));
+                        element.dispatchEvent(new Event('change', { bubbles: true }));
+                      }
+
+                      const passwordFields = Array.from(
+                        document.querySelectorAll('input[type="password"]')
+                      ).filter(isUsable);
+
+                      if (passwordFields.length === 0) return;
+                      if (passwordFields.some(x =>
+                            (x.autocomplete || '').toLowerCase() === 'new-password')) return;
+
+                      const passwordField =
+                        passwordFields.find(x =>
+                          (x.autocomplete || '').toLowerCase() === 'current-password') ||
+                        (passwordFields.length === 1 ? passwordFields[0] : null);
+
+                      if (!passwordField) return;
+
+                      const form = passwordField.form || document;
+                      const userField =
+                        form.querySelector('input[autocomplete="username"]') ||
+                        form.querySelector('input[type="email"]') ||
+                        form.querySelector('input[name*="user" i], input[id*="user" i]') ||
+                        form.querySelector('input[name*="email" i], input[id*="email" i]') ||
+                        form.querySelector('input[type="text"]:not([name*="search" i]):not([id*="search" i])');
+
+                      if (userField && !userField.value.trim())
+                        setValue(userField, username);
+
+                      if (!passwordField.value)
+                        setValue(passwordField, password);
+
+                      username = '';
+                      password = '';
+                    })();
+                    """;
+
+                    await web.ExecuteScriptAsync(fillScript);
+                }
+                catch
+                {
+                    // Le remplissage est opportuniste et ne bloque jamais la navigation.
                 }
             };
         }
 
-        // ===============================
-        // JS injecté (robuste + anti double)
-        // ===============================
-        static string GetScript()
+        private static string GetCaptureScript()
         {
-            return @"
-(() => {
-  if (window.__mhbCredHooked) return;
-  window.__mhbCredHooked = true;
+            return """
+            (() => {
+              if (window.__pommeCredentialCaptureV2) return;
+              window.__pommeCredentialCaptureV2 = true;
 
-  let lastCaptureKey = null;
-  let webviewReady = false;
+              const recentSubmissions = new Map();
 
-  // ---------------------------------
-  // WebView2 readiness (CRITIQUE)
-  // ---------------------------------
-  function waitForWebView() {
-    if (window.chrome && window.chrome.webview) {
-      webviewReady = true;
-      return;
-    }
-    setTimeout(waitForWebView, 50);
-  }
-  waitForWebView();
+              function isUsable(element) {
+                if (!element || element.disabled || element.readOnly) return false;
+                const style = window.getComputedStyle(element);
+                return style.display !== 'none' && style.visibility !== 'hidden';
+              }
 
-  function is2FAForm(form) {
-    if (!form) return false;
-    return form.classList.contains('two-factor-auth')
-        || form.classList.contains('ig-2fa-form');
-  }
+              function findUsernameField(root) {
+                return root.querySelector('input[autocomplete="username"]') ||
+                       root.querySelector('input[type="email"]') ||
+                       root.querySelector('input[name*="user" i], input[id*="user" i]') ||
+                       root.querySelector('input[name*="email" i], input[id*="email" i]') ||
+                       root.querySelector('input[type="text"]:not([name*="search" i]):not([id*="search" i])');
+              }
 
-  function findUserField(root) {
-    return (
-      root.querySelector('input[autocomplete=""username""]') ||
-      root.querySelector('input[type=""email""]') ||
-      root.querySelector('input[name*=""user"" i], input[id*=""user"" i]') ||
-      root.querySelector('input[name*=""email"" i], input[id*=""email"" i]') ||
-      root.querySelector('input[type=""text""]')
-    );
-  }
+              function containsOneTimeCode(root) {
+                return !!root.querySelector(
+                  'input[autocomplete="one-time-code"], ' +
+                  'input[name*="otp" i], input[id*="otp" i], ' +
+                  'input[name*="2fa" i], input[id*="2fa" i]'
+                );
+              }
 
-  function post(msg) {
-    if (!webviewReady) return;
-    try {
-      window.chrome.webview.postMessage(msg);
-    } catch {}
-  }
+              function createFormIdentity(form, username) {
+                const action = form instanceof HTMLFormElement ? (form.action || '') : '';
+                const id = form instanceof Element ? (form.id || form.getAttribute('name') || '') : '';
+                return location.origin + '|' + action + '|' + id + '|' + username;
+              }
 
-  function tryCapture(context) {
-    try {
-      if (!context || is2FAForm(context)) return;
+              function capture(formOrDocument) {
+                try {
+                  const root = formOrDocument || document;
+                  if (containsOneTimeCode(root)) return;
 
-      const pwd = context.querySelector('input[type=""password""]');
-      if (!pwd) return;
+                  const passwordFields = Array.from(
+                    root.querySelectorAll('input[type="password"]')
+                  ).filter(isUsable);
 
-      const password = pwd.value;
-      if (!password) return;
+                  if (passwordFields.length === 0) return;
+                  if (passwordFields.some(field =>
+                        (field.autocomplete || '').toLowerCase() === 'new-password')) return;
 
-      const userField = findUserField(context);
-      const username = userField ? (userField.value || '').trim() : '';
-      if (!username) return;
+                  const passwordField =
+                    passwordFields.find(field =>
+                      (field.autocomplete || '').toLowerCase() === 'current-password') ||
+                    (passwordFields.length === 1 ? passwordFields[0] : null);
 
-      const host = location.host || '';
-      if (!host) return;
+                  // Plusieurs champs sans indication fiable correspondent généralement
+                  // à une inscription ou un changement de mot de passe.
+                  if (!passwordField) return;
 
-      const key = host + '|' + username + '|' + password;
-      if (key === lastCaptureKey) return;
-      lastCaptureKey = key;
+                  let password = passwordField.value || '';
+                  if (!password) return;
 
-      const action =
-        (context instanceof HTMLFormElement && context.getAttribute('action')) || null;
+                  const usernameField = findUsernameField(root);
+                  const username = (usernameField?.value || '').trim();
+                  if (!username) {
+                    password = '';
+                    return;
+                  }
 
-      post({
-        type: 'cred_submit',
-        host,
-        username,
-        password,
-        formAction: action
-      });
-    } catch {}
-  }
+                  const identity = createFormIdentity(
+                    root instanceof HTMLFormElement ? root : (passwordField.form || document),
+                    username
+                  );
+                  const now = Date.now();
+                  const previous = recentSubmissions.get(identity) || 0;
+                  if (now - previous < 4000) {
+                    password = '';
+                    return;
+                  }
 
-  // ===============================
-  // 1) submit classique
-  // ===============================
-  document.addEventListener('submit', e => {
-    const form = e.target;
-    if (form instanceof HTMLFormElement)
-      tryCapture(form);
-  }, true);
+                  recentSubmissions.set(identity, now);
+                  setTimeout(() => recentSubmissions.delete(identity), 5000);
 
-  // ===============================
-  // 2) click bouton (SPA / JS)
-  // ===============================
-  document.addEventListener('click', e => {
-    const btn = e.target.closest('button, input[type=""submit""]');
-    if (!btn) return;
+                  const form = root instanceof HTMLFormElement
+                    ? root
+                    : passwordField.form;
 
-    const form = btn.closest('form') || document;
-    setTimeout(() => tryCapture(form), 0);
-  }, true);
+                  window.chrome?.webview?.postMessage({
+                    type: 'cred_submit',
+                    origin: location.origin,
+                    username,
+                    password,
+                    formAction: form?.action || null
+                  });
 
-  // ===============================
-  // 3) blur password (fallback)
-  // ===============================
-  document.addEventListener('blur', e => {
-    if (e.target?.type === 'password') {
-      const form = e.target.closest('form') || document;
-      setTimeout(() => tryCapture(form), 0);
-    }
-  }, true);
+                  password = '';
+                } catch { }
+              }
 
-  // ===============================
-  // 4) CAPTURE PROACTIVE (INTENTION)
-  // ===============================
-  function tryLiveCapture() {
-    tryCapture(document);
-  }
+              document.addEventListener('submit', event => {
+                if (event.target instanceof HTMLFormElement)
+                  capture(event.target);
+              }, true);
 
-  document.addEventListener('input', e => {
-    if (
-      e.target?.type === 'password' ||
-      e.target?.type === 'email' ||
-      e.target?.getAttribute?.('autocomplete') === 'username'
-    ) {
-      setTimeout(tryLiveCapture, 0);
-    }
-  }, true);
+              // Les applications monopage n'émettent pas toujours submit.
+              document.addEventListener('click', event => {
+                const button = event.target?.closest?.(
+                  'button[type="submit"], input[type="submit"], button:not([type])'
+                );
+                if (!button) return;
 
-})();";
+                const form = button.closest('form');
+                if (form)
+                  queueMicrotask(() => capture(form));
+              }, true);
+            })();
+            """;
         }
 
-
-
-        sealed class WebMsg
+        private sealed class WebMessage
         {
             [JsonPropertyName("type")]
             public string? Type { get; set; }
 
-            [JsonPropertyName("host")]
-            public string? Host { get; set; }
+            [JsonPropertyName("origin")]
+            public string? Origin { get; set; }
 
             [JsonPropertyName("username")]
             public string? Username { get; set; }
