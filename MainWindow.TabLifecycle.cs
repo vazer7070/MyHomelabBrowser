@@ -243,7 +243,7 @@ namespace MyHomelabBrowser
                 if (state.IsPinned || state.IsSuspended || state.IsCustomView || state.IsLegacyExternal)
                     continue;
 
-                if (Equals(tab, Tabs.SelectedItem))
+                if (Equals(tab, Tabs.SelectedItem) || Equals(tab, _splitPartner))
                     continue;
 
                 // Onglet jamais affiché (session restaurée) : rien à libérer.

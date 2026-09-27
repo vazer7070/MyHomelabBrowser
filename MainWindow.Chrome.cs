@@ -101,6 +101,23 @@ namespace MyHomelabBrowser
             if (FindMenuItem(menu, "VersionMenuItem") is MenuItem version)
                 version.Header = $"PommeBrowser {AppVersion.Current}";
 
+            if (FindMenuItem(menu, "WorkspacesMenuItem") is MenuItem workspaces)
+                PopulateWorkspacesMenu(workspaces);
+
+            if (FindMenuItem(menu, "SplitViewMenuItem") is MenuItem split)
+            {
+                split.Header = IsSplitViewActive ? "Quitter la vue côte à côte" : "Vue côte à côte";
+                split.IsEnabled = IsSplitViewActive || IsSplitEligible(Tabs.SelectedItem as TabItem);
+            }
+
+            bool hasWebPage = GetActiveCore() != null;
+            if (FindMenuItem(menu, "FindMenuItem") is MenuItem find)
+                find.IsEnabled = hasWebPage;
+            if (FindMenuItem(menu, "PrintMenuItem") is MenuItem print)
+                print.IsEnabled = hasWebPage;
+            if (FindMenuItem(menu, "ZoomMenuItem") is MenuItem zoom)
+                zoom.IsEnabled = hasWebPage;
+
             OpenMenu(menu, MainMenuButton);
         }
 

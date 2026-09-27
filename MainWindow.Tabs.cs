@@ -232,6 +232,8 @@ namespace MyHomelabBrowser
             };
 
             header.ReorderRequested += dir => ReorderTab(tab, dir);
+
+            AttachTabContextMenu(tab, header, content);
         }
 
         /// <summary>
@@ -392,6 +394,9 @@ namespace MyHomelabBrowser
 
                 if (!isPrivate)
                     UpdateHistoryTitle(content, web.Source?.AbsoluteUri, title);
+
+                if (_splitPartner != null)
+                    UpdateSplitHeaders();
             };
 
             core.FaviconChanged += async (_, _) => await RefreshTabFaviconAsync(content, header);

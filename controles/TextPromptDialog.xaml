@@ -1,0 +1,14 @@
+<controles:DialogWindow x:Class="MyHomelabBrowser.controles.TextPromptDialog"
+                        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                        xmlns:controles="clr-namespace:MyHomelabBrowser.controles"
+                        Width="420">
+    <StackPanel>
+        <TextBlock x:Name="PromptText" Style="{StaticResource DialogHintStyle}" Margin="0,0,0,8"/>
+        <TextBox x:Name="InputBox" TextChanged="InputBox_TextChanged"/>
+        <StackPanel Style="{StaticResource DialogButtonBarStyle}">
+            <Button Content="Annuler" Command="ApplicationCommands.Close" Margin="0,0,8,0"/>
+            <Button x:Name="OkButton" Style="{StaticResource PrimaryButtonStyle}" IsDefault="True" Click="Ok_Click"/>
+        </StackPanel>
+    </StackPanel>
+</controles:DialogWindow>

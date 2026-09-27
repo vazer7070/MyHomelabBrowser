@@ -18,6 +18,7 @@ namespace MyHomelabBrowser
 
             if (Tabs.SelectedItem is not TabItem tab)
             {
+                ReleaseSplitHosts();
                 WebHost.Content = null;
                 ApplyPrivateTheme(false);
                 UpdateFavoriteButton();
@@ -29,7 +30,7 @@ namespace MyHomelabBrowser
                 ApplyPrivateTheme(webTab.IsPrivate);
                 webTab.LastActivated = DateTime.Now;
 
-                WebHost.Content = webTab.HostGrid;
+                ShowInWebHost(tab, webTab);
 
                 // Cache les autres fenêtres Basilisk (sans jamais les re-parenter).
                 HideLegacyWindowsExcept(webTab);
@@ -88,6 +89,7 @@ namespace MyHomelabBrowser
                 ApplyPrivateTheme(false);
 
                 // Une vue ne peut avoir qu'un parent visuel.
+                ReleaseSplitHosts();
                 DetachFromParent(viewTab.View);
                 WebHost.Content = viewTab.View;
 
@@ -95,6 +97,7 @@ namespace MyHomelabBrowser
                 return;
             }
 
+            ReleaseSplitHosts();
             WebHost.Content = null;
             ApplyPrivateTheme(false);
             UpdateFavoriteButton();
@@ -221,6 +224,10 @@ namespace MyHomelabBrowser
 
             _addressBarEditing = false;
             HideCommandSuggestions();
+
+            UpdateSplitForSelectionChange(
+                e.RemovedItems.Count > 0 ? e.RemovedItems[0] as TabItem : null,
+                Tabs.SelectedItem as TabItem);
 
             if (Tabs.SelectedItem is TabItem tab)
             {

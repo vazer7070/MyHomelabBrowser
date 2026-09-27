@@ -130,6 +130,17 @@
                 <MenuItem Header="Zoom arrière" InputGestureText="Ctrl+-" Click="MainMenu_ZoomOut_Click"/>
                 <MenuItem x:Name="ZoomResetMenuItem" Header="Taille réelle (100 %)" InputGestureText="Ctrl+0" Click="MainMenu_ZoomReset_Click"/>
             </MenuItem>
+            <MenuItem x:Name="SplitViewMenuItem" Header="Vue côte à côte" Click="MainMenu_SplitView_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE8A9;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem x:Name="WorkspacesMenuItem" Header="Espaces de travail">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE8B7;"/>
+                </MenuItem.Icon>
+                <MenuItem Header="Enregistrer les onglets ouverts…"/>
+            </MenuItem>
             <MenuItem x:Name="PrintMenuItem" Header="Imprimer…" InputGestureText="Ctrl+P" Click="MainMenu_Print_Click">
                 <MenuItem.Icon>
                     <TextBlock Text="&#xE749;"/>
