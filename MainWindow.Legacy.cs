@@ -1,4 +1,4 @@
-using MyHomelabBrowser.classes.Flash;
+﻿using MyHomelabBrowser.classes.Flash;
 using MyHomelabBrowser.controles;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -132,6 +132,7 @@ namespace MyHomelabBrowser
             if (content.IsLegacyLaunching)
                 return false;
 
+            content.PendingLegacyUri = null;
             content.IsLegacyLaunching = true;
             content.IsLegacyExternal = true;
             content.LegacyLastError = null;
@@ -144,22 +145,13 @@ namespace MyHomelabBrowser
                 SyncWebHostWithSelection();
             });
 
-            await Task.Delay(50);
-
             if (!_legacyLauncher.CanLaunch())
-            {
-                content.IsLegacyLaunching = false;
-                content.IsLegacyExternal = true;
-                content.LegacyLastError = Tr("Basilisk n’est pas configuré ou chemin invalide.");
-
-                await Dispatcher.InvokeAsync(SyncWebHostWithSelection);
-                return false;
-            }
+                return await FailLegacyLaunchAsync(content, Tr("Basilisk n’est pas configuré ou chemin invalide."));
 
             try
             {
                 // Un nouvel essai ne doit pas laisser tourner l'instance précédente :
-                // elle resterait orpheline et verrouillerait le profil Basilisk.
+                // elle resterait orpheline et garderait son profil verrouillé.
                 await StopLegacyProcessAsync(content);
                 content.LegacyHwnd = IntPtr.Zero;
                 content.LegacyTopHwnd = IntPtr.Zero;
@@ -168,25 +160,17 @@ namespace MyHomelabBrowser
 
                 content.LegacyProfileLease = LegacyProfileManager.CreateLease(uri.Host, content.IsPrivate);
 
-                var p = _legacyLauncher.Launch(
+                LegacyProcess? process = await Task.Run(() => _legacyLauncher.Launch(
                     uri.AbsoluteUri,
-                    content.LegacyProfileLease.ProfilePath);
-                content.LegacyProc = p;
+                    content.LegacyProfileLease.ProfilePath,
+                    content.IsPrivate));
+                content.LegacyProc = process;
 
-                if (p == null)
-                {
-                    content.LegacyProfileLease?.Dispose();
-                    content.LegacyProfileLease = null;
-                    content.IsLegacyLaunching = false;
-                    content.IsLegacyExternal = true;
-                    content.LegacyLastError = Tr("Process Basilisk non lancé (Launch() a retourné null).");
+                if (process == null)
+                    return await FailLegacyLaunchAsync(content, Tr("Basilisk n’est pas configuré ou chemin invalide."));
 
-                    await Dispatcher.InvokeAsync(SyncWebHostWithSelection);
-                    return false;
-                }
-
-                // Attendre la fenêtre principale de Basilisk.
-                var (top, realPid) = await WaitForAnyTopWindowFromProcessFamilyAsync(p, timeoutMs: 15000, cancelled: () => content.IsClosed);
+                // Attendre la fenêtre principale de Basilisk (quel que soit le processus du job qui la porte).
+                var (top, realPid) = await WaitForBasiliskWindowAsync(process, timeoutMs: 20000, cancelled: () => content.IsClosed);
 
                 // Onglet fermé pendant le lancement : on n'embarque rien.
                 if (content.IsClosed)
@@ -198,36 +182,26 @@ namespace MyHomelabBrowser
 
                 if (top == IntPtr.Zero)
                 {
-                    try { p.Kill(entireProcessTree: true); } catch { }
-                    content.LegacyProfileLease?.Dispose();
-                    content.LegacyProfileLease = null;
-                    content.IsLegacyLaunching = false;
-                    content.IsLegacyExternal = true;
-                    content.LegacyLastError = Tr("Fenêtre Basilisk introuvable (timeout).");
-
-                    await Dispatcher.InvokeAsync(SyncWebHostWithSelection);
-                    return false;
+                    string? dialog = process.FindDialogMessage();
+                    string reason = dialog != null
+                        ? Tr("Basilisk a affiché un message : {0}", dialog)
+                        : process.IsRunning
+                            ? Tr("Fenêtre Basilisk introuvable (timeout).")
+                            : Tr("Basilisk s’est fermé au démarrage. Vérifiez le chemin de Basilisk et qu’il peut s’ouvrir seul.");
+                    await StopLegacyProcessAsync(content);
+                    return await FailLegacyLaunchAsync(content, reason);
                 }
 
-                // ✅ handles (ok hors UI)
                 content.LegacyPid = realPid;
                 content.LegacyTopHwnd = top;
+                process.MainWindow = top;
 
-                // ✅ enfant embed (focus/clavier)
+                // Enfant intégré (focus/clavier), ou la fenêtre entière à défaut.
                 var embed = FindBestEmbedChild(top);
                 var target = embed != IntPtr.Zero ? embed : top;
 
                 content.LegacyHwnd = target;
                 content.LegacyEmbedHwnd = target;
-
-                // ✅ dock host : création OBLIGATOIRE sur UI thread STA
-                if (content.LegacyHost == null)
-                {
-                    await Dispatcher.InvokeAsync(() =>
-                    {
-                        content.LegacyHost = new MyHomelabBrowser.controles.ExternalWindowDock();
-                    });
-                }
 
                 // Tout ce qui touche WPF passe par le Dispatcher.
                 await Dispatcher.InvokeAsync(() =>
@@ -247,93 +221,63 @@ namespace MyHomelabBrowser
 
                     content.LegacyHost?.ShowDock();
                     content.LegacyHost?.UpdateDockPosition();
+
+                    // Onglet déjà quitté pendant le lancement : Basilisk passe en arrière-plan.
+                    content.LegacyProc?.SetBackground(!IsSelectedContent(content));
                 }, DispatcherPriority.Loaded);
 
                 return true;
             }
             catch (Exception ex)
             {
-                try { content.LegacyProc?.Kill(entireProcessTree: true); } catch { }
-                content.LegacyProc = null;
-                content.LegacyProfileLease?.Dispose();
-                content.LegacyProfileLease = null;
-                content.IsLegacyLaunching = false;
-                content.IsLegacyExternal = true;
-                content.LegacyLastError = Tr("Erreur au lancement de Basilisk :\n") + ex;
-
-                await Dispatcher.InvokeAsync(SyncWebHostWithSelection);
-                return false;
+                await StopLegacyProcessAsync(content);
+                FlashDbg("[Legacy] " + ex);
+                return await FailLegacyLaunchAsync(content, Tr("Erreur au lancement de Basilisk :\n") + ex.Message);
             }
         }
 
-        /// <summary>
-        /// PID du processus lancé et de tous ses descendants (Basilisk relance souvent
-        /// un processus enfant qui porte la vraie fenêtre). Un seul instantané système.
-        /// </summary>
-        private static HashSet<int> GetProcessFamilyPids(int rootPid)
+        async Task<bool> FailLegacyLaunchAsync(WebTabContent content, string message)
         {
-            var family = new HashSet<int> { rootPid };
-            var childrenByParent = new Dictionary<int, List<int>>();
+            content.LegacyProfileLease?.Dispose();
+            content.LegacyProfileLease = null;
+            content.IsLegacyLaunching = false;
+            content.IsLegacyExternal = true;
+            content.LegacyLastError = message;
 
-            IntPtr snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-            if (snapshot == IntPtr.Zero || snapshot == (IntPtr)(-1))
-                return family;
+            await Dispatcher.InvokeAsync(SyncWebHostWithSelection);
+            return false;
+        }
 
-            try
+        bool IsSelectedContent(WebTabContent content)
+            => Tabs.SelectedItem is TabItem { Tag: WebTabContent selected } && ReferenceEquals(selected, content);
+
+        /// <summary>
+        /// Onglet Legacy restauré sans avoir été affiché : Basilisk n'est lancé qu'à la
+        /// première ouverture de l'onglet (démarrage plus rapide, pas de rafale de processus).
+        /// </summary>
+        void LaunchPendingLegacyIfNeeded(TabItem tab, WebTabContent content)
+        {
+            if (content.PendingLegacyUri is not { } uri ||
+                content.IsLegacyLaunching ||
+                content.LegacyProc != null ||
+                tab.Header is not BrowserTabHeader header)
             {
-                var pe = new PROCESSENTRY32 { dwSize = (uint)Marshal.SizeOf(typeof(PROCESSENTRY32)) };
-                if (!Process32First(snapshot, ref pe))
-                    return family;
-
-                do
-                {
-                    int parent = (int)pe.th32ParentProcessID;
-                    if (!childrenByParent.TryGetValue(parent, out var list))
-                    {
-                        list = new List<int>();
-                        childrenByParent[parent] = list;
-                    }
-                    list.Add((int)pe.th32ProcessID);
-                    pe.dwSize = (uint)Marshal.SizeOf(typeof(PROCESSENTRY32));
-                }
-                while (Process32Next(snapshot, ref pe));
-            }
-            finally
-            {
-                CloseHandle(snapshot);
+                return;
             }
 
-            var queue = new Queue<int>();
-            queue.Enqueue(rootPid);
-            while (queue.Count > 0)
-            {
-                int parent = queue.Dequeue();
-                if (!childrenByParent.TryGetValue(parent, out var children))
-                    continue;
-
-                foreach (int child in children)
-                {
-                    if (family.Add(child))
-                        queue.Enqueue(child);
-                }
-            }
-
-            return family;
+            _ = LaunchLegacyIntoInternalTabAsync(content, uri, header);
         }
 
         /// <summary>
-        /// Attend la première fenêtre visible de la famille de processus Basilisk.
-        /// L'énumération Win32 tourne hors du thread UI pour ne pas figer l'interface.
+        /// Attend la fenêtre principale de Basilisk. L'énumération Win32 tourne hors du
+        /// thread UI ; si aucune fenêtre de navigateur n'apparaît, toute fenêtre visible
+        /// du job est acceptée après quelques secondes (dérivés de Basilisk).
         /// </summary>
-        private static async Task<(IntPtr top, int realPid)> WaitForAnyTopWindowFromProcessFamilyAsync(
-            Process rootProc,
-            int timeoutMs = 15000,
+        private static async Task<(IntPtr top, int realPid)> WaitForBasiliskWindowAsync(
+            LegacyProcess process,
+            int timeoutMs,
             Func<bool>? cancelled = null)
         {
-            int rootPid;
-            try { rootPid = rootProc.Id; }
-            catch { return (IntPtr.Zero, 0); }
-
             var sw = Stopwatch.StartNew();
 
             while (sw.ElapsedMilliseconds < timeoutMs)
@@ -341,76 +285,23 @@ namespace MyHomelabBrowser
                 if (cancelled?.Invoke() == true)
                     break;
 
-                var found = await Task.Run(() =>
-                {
-                    foreach (var pid in GetProcessFamilyPids(rootPid))
-                    {
-                        var hwnd = FindAnyTopLevelWindowForPid(pid);
-                        if (hwnd != IntPtr.Zero)
-                            return (hwnd, pid);
-                    }
-
-                    return (IntPtr.Zero, 0);
-                });
-
-                if (found.Item1 != IntPtr.Zero)
+                bool anyWindow = sw.ElapsedMilliseconds > 6000;
+                var found = await Task.Run(() => process.FindMainWindow(anyWindow));
+                if (found.Window != IntPtr.Zero)
                     return found;
+
+                // Boîte d'erreur de Basilisk ou de son lanceur portable : inutile d'attendre.
+                if (sw.ElapsedMilliseconds > 1500 && await Task.Run(process.FindDialogMessage) != null)
+                    break;
+
+                // Tous les processus du job sont terminés : inutile d'attendre davantage.
+                if (!process.IsRunning)
+                    break;
 
                 await Task.Delay(120);
             }
 
             return (IntPtr.Zero, 0);
-        }
-
-        private const uint TH32CS_SNAPPROCESS = 0x00000002;
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-        private struct PROCESSENTRY32
-        {
-            public uint dwSize;
-            public uint cntUsage;
-            public uint th32ProcessID;
-            public IntPtr th32DefaultHeapID;
-            public uint th32ModuleID;
-            public uint cntThreads;
-            public uint th32ParentProcessID;
-            public int pcPriClassBase;
-            public uint dwFlags;
-
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
-            public string szExeFile;
-        }
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr CreateToolhelp32Snapshot(uint dwFlags, uint th32ProcessID);
-
-        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        private static extern bool Process32First(IntPtr hSnapshot, ref PROCESSENTRY32 lppe);
-
-        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        private static extern bool Process32Next(IntPtr hSnapshot, ref PROCESSENTRY32 lppe);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool CloseHandle(IntPtr hObject);
-
-        private static IntPtr FindAnyTopLevelWindowForPid(int pid)
-        {
-            IntPtr found = IntPtr.Zero;
-
-            EnumWindows((hWnd, lParam) =>
-            {
-                GetWindowThreadProcessId(hWnd, out int winPid);
-                if (winPid != pid)
-                    return true;
-
-                if (!IsWindowVisible(hWnd))
-                    return true;
-
-                found = hWnd;
-                return false;
-            }, IntPtr.Zero);
-
-            return found;
         }
 
         [DllImport("user32.dll", SetLastError = true)]

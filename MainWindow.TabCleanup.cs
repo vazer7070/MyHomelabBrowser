@@ -140,7 +140,14 @@ namespace MyHomelabBrowser
         }
 
         /// <summary>
-        /// Ferme uniquement le Basilisk de cet onglet, sans bloquer l'interface.
+        /// Délai laissé à Basilisk pour se fermer proprement (cookies, sauvegardes)
+        /// avant l'arrêt forcé de tous ses processus.
+        /// </summary>
+        static readonly TimeSpan LegacyCloseGrace = TimeSpan.FromSeconds(1.5);
+
+        /// <summary>
+        /// Ferme uniquement le Basilisk de cet onglet, sans bloquer l'interface :
+        /// fenêtre rendue à Basilisk, demande de fermeture, puis arrêt du job.
         /// </summary>
         private static async Task StopLegacyProcessAsync(WebTabContent content)
         {
@@ -149,30 +156,23 @@ namespace MyHomelabBrowser
 
             try
             {
-                if (process is { HasExited: false })
-                {
-                    process.CloseMainWindow();
+                // Une fenêtre encore incrustée dans l'onglet ne doit pas lier Basilisk à l'interface.
+                try { content.LegacyHost?.DetachExternalWindow(); } catch { }
 
-                    using var timeout = new System.Threading.CancellationTokenSource(TimeSpan.FromMilliseconds(800));
-                    try
-                    {
-                        await process.WaitForExitAsync(timeout.Token);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        process.Kill(entireProcessTree: true);
-                    }
-                }
+                if (process != null)
+                    await process.CloseAsync(LegacyCloseGrace);
             }
             catch
             {
-                try { process?.Kill(entireProcessTree: true); } catch { }
+                process?.Dispose();
             }
             finally
             {
-                try { process?.Dispose(); } catch { }
                 content.LegacyProfileLease?.Dispose();
                 content.LegacyProfileLease = null;
+                content.LegacyHwnd = IntPtr.Zero;
+                content.LegacyTopHwnd = IntPtr.Zero;
+                content.LegacyEmbedHwnd = IntPtr.Zero;
             }
         }
     }

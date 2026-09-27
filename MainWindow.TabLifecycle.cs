@@ -1,4 +1,5 @@
 using Microsoft.Web.WebView2.Core;
+using MyHomelabBrowser.classes.Flash;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.controles;
 using System.ComponentModel;
@@ -494,6 +495,7 @@ namespace MyHomelabBrowser
                 SaveSessionOnExit();
             FlushPersistentState();
 
+            var legacyTabs = new List<WebTabContent>();
             foreach (TabItem tab in Tabs.Items.OfType<TabItem>())
             {
                 if (tab.Tag is not WebTabContent content)
@@ -501,13 +503,21 @@ namespace MyHomelabBrowser
 
                 try { content.FlashNavigationCts?.Cancel(); } catch { }
                 try { content.RuffleMonitor?.Dispose(); } catch { }
-                try
-                {
-                    if (content.LegacyProc is { HasExited: false })
-                        content.LegacyProc.Kill(entireProcessTree: true);
-                }
-                catch { }
+
+                // Fenêtres Basilisk rendues avant la fermeture : aucune n'est détruite avec la nôtre.
+                try { content.LegacyHost?.DetachExternalWindow(); } catch { }
+                legacyTabs.Add(content);
+            }
+
+            // Tous les Basilisk (onglets, fenêtres détachées) : fermeture propre en parallèle,
+            // puis arrêt forcé. Si le navigateur plante, Windows s'en charge via le job.
+            LegacyProcess.CloseAll(LegacyCloseGrace);
+
+            foreach (WebTabContent content in legacyTabs)
+            {
+                content.LegacyProc = null;
                 try { content.LegacyProfileLease?.Dispose(); } catch { }
+                content.LegacyProfileLease = null;
             }
 
             try { _oauthPopup?.Close(); } catch { }

@@ -297,6 +297,9 @@ namespace MyHomelabBrowser
             var pickBasiliskBtn = fe.FindName("PickBasiliskPathBtn") as Button;
             if (pickBasiliskBtn != null) pickBasiliskBtn.Click += PickBasiliskPath_Click;
 
+            _basiliskStatusText = fe.FindName("BasiliskStatusText") as TextBlock;
+            UpdateBasiliskStatus();
+
             var addFlashBtn = fe.FindName("AddFlashRuleBtn") as Button;
             if (addFlashBtn != null) addFlashBtn.Click += AddFlashRule_Click;
 
@@ -485,21 +488,61 @@ namespace MyHomelabBrowser
 
             var dlg = new OpenFileDialog
             {
-                Title = Tr("Choisir Basilisk-Portable.exe"),
-                Filter = Tr("Basilisk (Basilisk-Portable.exe)|Basilisk-Portable.exe|Tous les fichiers|*.*"),
+                Title = Tr("Choisir Basilisk"),
+                Filter = Tr("Basilisk (Basilisk-Portable.exe, basilisk.exe)|Basilisk-Portable.exe;basilisk.exe|Programmes (*.exe)|*.exe"),
                 InitialDirectory = initialDir
             };
 
             if (dlg.ShowDialog() != true)
                 return;
 
-            if (!File.Exists(dlg.FileName))
+            if (!BasiliskExecutable.IsLaunchable(dlg.FileName))
                 return;
 
             _working.BasiliskPath = dlg.FileName;
 
             DataContext = null;
             DataContext = _working;
+            UpdateBasiliskStatus();
+        }
+
+        TextBlock? _basiliskStatusText;
+
+        /// <summary>Programme détecté au chemin choisi, pour repérer une erreur de fichier.</summary>
+        void UpdateBasiliskStatus()
+        {
+            if (_basiliskStatusText == null)
+                return;
+
+            string? path = _working.BasiliskPath;
+            bool warning = false;
+            string text;
+
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                text = Tr("Aucun Basilisk configuré : les contenus Flash passent uniquement par Ruffle.");
+            }
+            else if (!BasiliskExecutable.IsLaunchable(path))
+            {
+                text = Tr("Programme introuvable à cet emplacement.");
+                warning = true;
+            }
+            else
+            {
+                var (product, version) = BasiliskExecutable.Describe(path);
+                text = product == null
+                    ? Tr("Programme trouvé (version inconnue).")
+                    : Tr("{0} {1} détecté.", product, version ?? string.Empty).Replace("  ", " ");
+
+                if (product != null && !BasiliskExecutable.LooksLikeUxpBrowser(product))
+                {
+                    text += " " + Tr("Ce programme ne semble pas être Basilisk : le mode Legacy risque de ne pas fonctionner.");
+                    warning = true;
+                }
+            }
+
+            _basiliskStatusText.Text = text;
+            _basiliskStatusText.SetResourceReference(TextBlock.ForegroundProperty, warning ? "WarningBrush" : "TextSecondaryBrush");
         }
 
         void AddFlashRule_Click(object sender, RoutedEventArgs e)

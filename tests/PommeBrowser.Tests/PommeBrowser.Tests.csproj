@@ -44,7 +44,13 @@
     <Compile Include="..\..\classes\Homelab\ServiceMonitor.cs" Link="App\Homelab\ServiceMonitor.cs" />
     <Compile Include="..\..\classes\Workspaces\WorkspaceStore.cs" Link="App\Workspaces\WorkspaceStore.cs" />
     <Compile Include="..\..\classes\AppearanceSettings.cs" Link="App\AppearanceSettings.cs" />
+    <Compile Include="..\..\classes\Profiles\AppDataContext.cs" Link="App\Profiles\AppDataContext.cs" />
     <Compile Include="..\..\classes\Profiles\PasswordHasher.cs" Link="App\Profiles\PasswordHasher.cs" />
+    <Compile Include="..\..\classes\Flash\WindowsCommandLine.cs" Link="App\Flash\WindowsCommandLine.cs" />
+    <Compile Include="..\..\classes\Flash\LegacyProfilePreferences.cs" Link="App\Flash\LegacyProfilePreferences.cs" />
+    <Compile Include="..\..\classes\Flash\LegacyProfileManager.cs" Link="App\Flash\LegacyProfileManager.cs" />
+    <Compile Include="..\..\classes\Flash\LegacyProfileLease.cs" Link="App\Flash\LegacyProfileLease.cs" />
+    <Compile Include="..\..\classes\Flash\LegacyProcess.cs" Link="App\Flash\LegacyProcess.cs" />
     <Compile Include="..\..\classes\Profiles\ProfileNameRules.cs" Link="App\Profiles\ProfileNameRules.cs" />
     <Compile Include="..\..\classes\Profiles\WebViewProfileData.cs" Link="App\Profiles\WebViewProfileData.cs" />
     <Compile Include="..\..\classes\AdBlock\Models\AdBlockDomain.cs" Link="App\AdBlock\AdBlockDomain.cs" />

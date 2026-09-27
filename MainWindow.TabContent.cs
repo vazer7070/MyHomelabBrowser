@@ -35,7 +35,9 @@ namespace MyHomelabBrowser
             public bool IsCustomView { get; set; }
             public Func<UserControl>? CreateView { get; set; }
 
-            public Process? LegacyProc { get; set; }
+            public LegacyProcess? LegacyProc { get; set; }
+            /// <summary>Onglet Legacy restauré : Basilisk sera lancé à sa première ouverture.</summary>
+            public Uri? PendingLegacyUri { get; set; }
             public LegacyProfileLease? LegacyProfileLease { get; set; }
             public IntPtr LegacyTopHwnd { get; set; } = IntPtr.Zero;
             public bool ForceLegacyOnce { get; set; } = false;
