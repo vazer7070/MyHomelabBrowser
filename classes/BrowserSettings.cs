@@ -20,6 +20,13 @@ namespace MyHomelabBrowser.classes
         public string SecureDnsCustomTemplate { get; set; } = string.Empty;
 
         // --------------------
+        // Sécurité de la navigation
+        // --------------------
+        // Les adresses http:// sont d'abord essayées en https:// (sauf réseau local).
+        public bool HttpsUpgrade { get; set; } = true;
+        public TrackingProtection TrackingPrevention { get; set; } = TrackingProtection.Balanced;
+
+        // --------------------
         // Commandes
         // --------------------
         public bool EnableCommands { get; set; } = true;
@@ -86,6 +93,9 @@ namespace MyHomelabBrowser.classes
                 DnsProvider = DnsProvider,
                 SecureDnsCustomTemplate = SecureDnsCustomTemplate,
 
+                HttpsUpgrade = HttpsUpgrade,
+                TrackingPrevention = TrackingPrevention,
+
                 EnableSuspension = EnableSuspension,
                 SuspendDelayMinutes = SuspendDelayMinutes,
 
@@ -118,6 +128,15 @@ namespace MyHomelabBrowser.classes
             };
 
         }
+        /// <summary>Niveaux de la protection contre le pistage de WebView2.</summary>
+        public enum TrackingProtection
+        {
+            Off,
+            Basic,
+            Balanced,
+            Strict
+        }
+
         public enum SecureDnsMode
         {
             System,

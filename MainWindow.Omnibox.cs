@@ -17,6 +17,7 @@ namespace MyHomelabBrowser
         void ApplySettings(BrowserSettings s)
         {
             _suspendTimer.IsEnabled = s.EnableSuspension;
+            ApplyTrackingPreventionToOpenTabs();
             _SuspendDelay = TimeSpan.FromMinutes(Math.Max(1, s.SuspendDelayMinutes));
 
             DownloadManager.Instance.DownloadFolder = string.IsNullOrWhiteSpace(s.DownloadFolder)
@@ -72,7 +73,7 @@ namespace MyHomelabBrowser
             {
                 url = webTab.IsLegacyExternal && !string.IsNullOrWhiteSpace(webTab.LegacyUrl)
                     ? webTab.LegacyUrl
-                    : webTab.PendingUrl ?? webTab.Web?.Source?.ToString() ?? string.Empty;
+                    : webTab.PendingUrl ?? webTab.HttpsInterstitialUrl ?? webTab.Web?.Source?.ToString() ?? string.Empty;
 
                 if (url.Equals("about:blank", StringComparison.OrdinalIgnoreCase))
                     url = string.Empty;

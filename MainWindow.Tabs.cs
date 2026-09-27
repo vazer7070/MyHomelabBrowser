@@ -376,6 +376,7 @@ namespace MyHomelabBrowser
 
             InitializeFlashRuntimeForCore(content);
             AttachSiteZoom(web, content);
+            AttachNavigationSecurity(content, core, isPrivate);
 
             core.NavigationStarting += (_, e) =>
             {

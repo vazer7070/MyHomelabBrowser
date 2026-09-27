@@ -117,6 +117,7 @@ namespace MyHomelabBrowser
                 _settings.ReloadForCurrentProfile();
                 FlashDomainRules.ReloadForCurrentProfile();
                 FlashCompatibilityMemory.ReloadForCurrentProfile();
+                MyHomelabBrowser.classes.Security.SiteSecurityStore.Current.Reload();
                 RemovedFeatureCleanup.CleanCurrentRoot();
 
                 _favoritesLoaded = false;
