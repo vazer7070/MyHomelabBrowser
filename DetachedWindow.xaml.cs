@@ -1,4 +1,4 @@
-﻿using Microsoft.Web.WebView2.Wpf;
+using Microsoft.Web.WebView2.Wpf;
 using System;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -82,18 +82,19 @@ namespace MyHomelabBrowser
 
                 _main.Dispatcher.BeginInvoke(() =>
                 {
-                    // ✅ redock du state complet (Basilisk inclus)
+                    // Redock du state complet : le moteur reste vivant.
                     if (RequestRedock != null)
                         RequestRedock(_state);
                     else
-                        _main.RedockWebView(_web); // fallback (au cas où)
+                        _main.RedockWebView(_web);
                 });
+                return;
             }
-            else
-            {
-                Host.Content = null;
-                _ = _main.ShutdownDetachedWebTabAsync(_state);
-            }
+
+            // Une fenêtre détachée fermée sans redock doit détruire son WebView2,
+            // son moniteur Ruffle et son éventuel processus Basilisk.
+            Host.Content = null;
+            _ = _main.ShutdownDetachedTabAsync(_state);
         }
 
 

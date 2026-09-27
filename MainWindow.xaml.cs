@@ -112,15 +112,16 @@ namespace MyHomelabBrowser
 
         private readonly classes.Profiles.Credentials.CredentialVaultService _vault;
 
+        private readonly SemaphoreSlim _credentialPromptGate = new(1, 1);
+        private readonly Dictionary<string, DateTime> _recentCredentialPrompts =
+            new(StringComparer.OrdinalIgnoreCase);
+        private SaveCredentialDialog? _activeCredentialPrompt;
+
 
         public IEnumerable<UserProfile> AllProfiles
     => _profileService.GetAllProfiles();
 
 
-        private readonly SemaphoreSlim _credentialPromptGate = new(1, 1);
-        private readonly Dictionary<string, DateTime> _recentCredentialPrompts =
-            new(StringComparer.OrdinalIgnoreCase);
-        private SaveCredentialDialog? _activeCredentialPrompt;
 
 
         readonly ObservableCollection<ToastItem> _toasts = new();
@@ -778,8 +779,6 @@ namespace MyHomelabBrowser
             if (IsCredentialPromptCoolingDown(promptKey))
                 return;
 
-            // Important : WebView2 peut lever plusieurs événements pendant qu'une fenêtre
-            // modeless est ouverte. On refuse toute ouverture concurrente.
             if (!await _credentialPromptGate.WaitAsync(0))
                 return;
 
@@ -807,7 +806,6 @@ namespace MyHomelabBrowser
                 _credentialPromptGate.Release();
             }
         }
-
 
         private async Task HandleCredentialCandidateOnUiAsync(CredentialCandidate candidate)
         {
@@ -862,7 +860,6 @@ namespace MyHomelabBrowser
                     _activeCredentialPrompt = null;
             }
 
-            // Le profil peut avoir changé pendant que la fenêtre modeless était ouverte.
             if (!string.Equals(
                     _profileService.Current?.Username,
                     profileAtCapture,
@@ -902,7 +899,6 @@ namespace MyHomelabBrowser
 
         private static string BuildCredentialPromptKey(CredentialCandidate candidate)
         {
-            // Le mot de passe n'est volontairement jamais utilisé dans la clé.
             return string.Join(
                 "|",
                 candidate.Origin.Trim().ToLowerInvariant(),
@@ -946,9 +942,10 @@ namespace MyHomelabBrowser
             }
             catch
             {
-                // Une fermeture de profil ne doit jamais casser l'interface.
+                // Un changement de profil ne doit jamais casser l'interface.
             }
         }
+
 
         private bool EnsureVaultAvailableAndUnlocked()
         {
@@ -2593,7 +2590,6 @@ namespace MyHomelabBrowser
                     return;
 
                 var source = content.Web?.Source;
-
                 if (source == null)
                     return;
 
@@ -2622,10 +2618,11 @@ namespace MyHomelabBrowser
             }
             catch
             {
-                // L’état du bouton ne doit jamais casser l’interface.
+                // L'état du bouton ne doit jamais casser l'interface.
             }
         }
-        void CreateEmptyStartTab()
+
+       void CreateEmptyStartTab()
 {
     var view = new EmptyStartPage();
 

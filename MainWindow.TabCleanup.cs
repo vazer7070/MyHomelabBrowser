@@ -45,13 +45,43 @@ namespace MyHomelabBrowser
 
             try
             {
-                content.RuffleMonitor?.Stop();
+                content.FlashNavigationCts?.Cancel();
+                content.FlashNavigationCts?.Dispose();
+                content.FlashNavigationCts = null;
+            }
+            catch { }
+
+            try
+            {
+                content.RuffleMonitor?.Dispose();
                 content.RuffleMonitor = null;
             }
             catch { }
 
             try { content.FlashOverlay?.Hide(); } catch { }
             try { content.LegacyHost?.DetachExternalWindow(); } catch { }
+
+            // Fermer uniquement le Basilisk appartenant à cet onglet.
+            try
+            {
+                if (content.LegacyProc is { HasExited: false })
+                {
+                    content.LegacyProc.CloseMainWindow();
+                    if (!content.LegacyProc.WaitForExit(500))
+                        content.LegacyProc.Kill(entireProcessTree: true);
+                }
+            }
+            catch
+            {
+                try { content.LegacyProc?.Kill(entireProcessTree: true); } catch { }
+            }
+            finally
+            {
+                try { content.LegacyProc?.Dispose(); } catch { }
+                content.LegacyProc = null;
+                content.LegacyProfileLease?.Dispose();
+                content.LegacyProfileLease = null;
+            }
 
             var core = web.CoreWebView2;
             if (core != null)
@@ -124,8 +154,5 @@ namespace MyHomelabBrowser
 
             try { web.Dispose(); } catch { }
         }
-
-        internal Task ShutdownDetachedWebTabAsync(WebTabContent content)
-            => ShutdownWebTabAsync(content);
     }
 }

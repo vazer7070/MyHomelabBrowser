@@ -114,66 +114,6 @@ public class ProfileService
             profile.Salt
         );
     }
-    public void SetVaultPassword(string vaultPassword)
-    {
-        if (Current == null)
-            throw new Exception("Aucun profil connecté.");
-
-        var (hash, salt) = PasswordHasher.Hash(vaultPassword);
-
-        Current.VaultPasswordHash = hash;
-        Current.VaultSalt = salt;
-
-        SaveProfiles();
-    }
-    public bool VerifyVaultPassword(string vaultPassword)
-    {
-        if (Current == null)
-            return false;
-
-        if (Current.VaultLockUntilUtc.HasValue &&
-            Current.VaultLockUntilUtc > DateTime.UtcNow)
-            return false;
-
-        if (Current.VaultPasswordHash == null ||
-            Current.VaultSalt == null)
-            return false;
-
-        if (!PasswordHasher.Verify(
-                vaultPassword,
-                Current.VaultPasswordHash,
-                Current.VaultSalt))
-        {
-            RegisterVaultFailure(Current);
-            return false;
-        }
-
-        ResetVaultProtection(Current);
-        return true;
-    }
-
-    void RegisterVaultFailure(UserProfile profile)
-    {
-        profile.FailedVaultAttempts++;
-
-        if (profile.FailedVaultAttempts >= MaxAttempts)
-        {
-            var backoff = TimeSpan.FromSeconds(
-                BaseLockDuration.TotalSeconds * Math.Pow(2, profile.FailedVaultAttempts - MaxAttempts)
-            );
-
-            profile.VaultLockUntilUtc = DateTime.UtcNow.Add(backoff);
-        }
-
-        SaveProfiles();
-    }
-
-    void ResetVaultProtection(UserProfile profile)
-    {
-        profile.FailedVaultAttempts = 0;
-        profile.VaultLockUntilUtc = null;
-    }
-
     public bool Login(string username, string password)
     {
         username = (username ?? "").Trim();
@@ -233,52 +173,6 @@ public class ProfileService
 
         return true;
     }
-
-    public bool TryUnlockVault(string vaultPassword)
-    {
-        if (Current == null)
-            return false;
-
-        if (Current.VaultLockUntilUtc.HasValue &&
-            Current.VaultLockUntilUtc > DateTime.UtcNow)
-            return false;
-
-        if (Current.VaultPasswordHash == null ||
-            Current.VaultSalt == null)
-            return false;
-
-        if (!PasswordHasher.Verify(
-                vaultPassword,
-                Current.VaultPasswordHash,
-                Current.VaultSalt))
-        {
-            Current.FailedVaultAttempts++;
-
-            const int MaxAttempts = 5;
-            const int BaseDelaySeconds = 10;
-
-            if (Current.FailedVaultAttempts >= MaxAttempts)
-            {
-                var exponent = Current.FailedVaultAttempts - MaxAttempts;
-                var delay = TimeSpan.FromSeconds(
-                    BaseDelaySeconds * Math.Pow(2, exponent)
-                );
-
-                Current.VaultLockUntilUtc = DateTime.UtcNow.Add(delay);
-            }
-
-            SaveProfiles();
-            return false;
-        }
-
-        // Succès
-        Current.FailedVaultAttempts = 0;
-        Current.VaultLockUntilUtc = null;
-        SaveProfiles();
-
-        return true;
-    }
-
 
     public void LoginSilent(UserProfile profile)
     {

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -50,9 +50,9 @@ namespace MyHomelabBrowser.classes
         // ====================
         // 🔥 FLASH / LEGACY
         // ====================
-        public bool EnableFlashSupport { get; set; } = false;
+        public bool EnableFlashSupport { get; set; } = true;
 
-        // Si true → tenter Ruffle avant Basilisk
+        // Ruffle intégré est le moteur principal. Basilisk reste un secours manuel.
         public bool PreferRuffle { get; set; } = true;
 
         // Chemin vers basilisk.exe
