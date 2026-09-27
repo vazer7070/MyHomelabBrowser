@@ -12,6 +12,7 @@ namespace MyHomelabBrowser.controles
         public DialogWindow()
         {
             SetResourceReference(StyleProperty, "DialogWindowStyle");
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
             CommandBindings.Add(new CommandBinding(ApplicationCommands.Close, (_, _) => Close()));
 
