@@ -134,14 +134,12 @@ $"""
         private static string GetModuleIcon(string module) => module switch
         {
             "adblock" => "🛡️",
-            "cloudtorrent" => "☁️",
             _ => "🌐"
         };
 
         private static int GetModuleColor(string module) => module switch
         {
             "adblock" => 0x3973C6,
-            "cloudtorrent" => 0x2F80ED,
             _ => 0xB03030
         };
 

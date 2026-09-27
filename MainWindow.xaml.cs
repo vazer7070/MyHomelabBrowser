@@ -2,9 +2,6 @@
 using Microsoft.Web.WebView2.Wpf;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Flash;
-using MyHomelabBrowser.classes.CloudTorrent.Services;
-using MyHomelabBrowser.classes.CloudTorrent.Integration;
-using MyHomelabBrowser.controles.CloudTorrent;
 using MyHomelabBrowser.classes.Profiles;
 using MyHomelabBrowser.classes.Profiles.Credentials;
 using MyHomelabBrowser.classes.Session;
@@ -42,9 +39,6 @@ namespace MyHomelabBrowser
         // Settings
         // ---------------------------
         readonly SettingsService _settings;
-        readonly CloudTorrentModuleService _cloudTorrent;
-        readonly CloudTorrentBrowserController _cloudTorrentBrowser;
-        readonly CloudTorrentPanel _cloudTorrentPanel;
         private string? _remoteChangelogJson;
 
         // ---------------------------
@@ -194,32 +188,7 @@ namespace MyHomelabBrowser
             _vault = new MyHomelabBrowser.classes.Profiles.Credentials.CredentialVaultService(() => System.IO.Path.Combine(AppDataContext.Root, "vault.json.enc"));
 
             _settings = new SettingsService();
-            _cloudTorrent = CloudTorrentModuleHost.Current;
-            _cloudTorrentBrowser = new CloudTorrentBrowserController(_cloudTorrent);
-            _cloudTorrentPanel = new CloudTorrentPanel(_cloudTorrent, _cloudTorrentBrowser);
-            CloudTorrentPanelHost.Content = _cloudTorrentPanel;
             InitializeAdBlockModule();
-
-            _cloudTorrentBrowser.ActiveSessionChanged += _ => Dispatcher.BeginInvoke(new Action(UpdateCloudTorrentToolbar));
-            _cloudTorrentBrowser.ActiveSessionUpdated += _ => Dispatcher.BeginInvoke(new Action(UpdateCloudTorrentToolbar));
-            _cloudTorrentBrowser.ModuleStateChanged += () => Dispatcher.BeginInvoke(new Action(UpdateCloudTorrentToolbar));
-            _cloudTorrentBrowser.OpenPanelRequested += _ => Dispatcher.BeginInvoke(() =>
-            {
-                UpdateCloudTorrentToolbar();
-                CloudTorrentPopup.IsOpen = true;
-            });
-            _cloudTorrentBrowser.NotificationRequested += (title, message) =>
-                Dispatcher.BeginInvoke(() => ShowToast(title, message, null));
-            _cloudTorrentPanel.OpenSettingsRequested += () =>
-            {
-                CloudTorrentPopup.IsOpen = false;
-                OpenCloudTorrentSettings();
-            };
-            _cloudTorrentPanel.OpenUrlRequested += url =>
-            {
-                CloudTorrentPopup.IsOpen = false;
-                _ = CreateTabInternal(url);
-            };
 
             _legacyLauncher = new LegacyLauncher(_settings);
             _settings.SettingsChanged += ApplySettings;
@@ -228,9 +197,10 @@ namespace MyHomelabBrowser
             _startPage = new EmptyStartPage();
 
             // Vue de paramètres unique intégrée à la fenêtre principale.
-            var settingsView = new SettingsView(_settings, _cloudTorrent);
+            var settingsView = new SettingsView(_settings);
 
             RuntimeLogBuffer.Init();
+            RemovedFeatureCleanup.CleanCurrentRoot();
 
             _profileService.ProfileChanged += changedProfile =>
             {
@@ -239,7 +209,7 @@ namespace MyHomelabBrowser
                 _settings.ReloadForCurrentProfile();
                 FlashDomainRules.ReloadForCurrentProfile();
                 FlashCompatibilityMemory.ReloadForCurrentProfile();
-                _ = _cloudTorrent.ReloadForCurrentProfileAsync();
+                RemovedFeatureCleanup.CleanCurrentRoot();
 
                 _historyLoaded = false;
                 _favoritesLoaded = false;
@@ -270,8 +240,6 @@ namespace MyHomelabBrowser
                 await RestoreSessionIfAnyAsync();
 
                 _vault.ReloadForCurrentProfile();
-                await _cloudTorrent.InitializeAsync();
-                UpdateCloudTorrentToolbar();
 
                 _ = Task.Run(async () =>
                 {
@@ -1629,13 +1597,7 @@ namespace MyHomelabBrowser
 
                 };
 
-                // Session CloudTorrent attachée pour que l’état privé soit connu du bouton.
-                // Aucune analyse ni donnée n’est envoyée depuis un onglet privé.
-                await _cloudTorrentBrowser.AttachAsync(web, isPrivate: true);
                 await AttachAdBlockToWebViewAsync(web, isPrivate: true);
-                if (Tabs.SelectedItem == tab)
-                    _cloudTorrentBrowser.SetActiveWebView(web);
-                UpdateCloudTorrentToolbar();
 
                 // ✅ Go !
                 if (!string.IsNullOrWhiteSpace(url))
@@ -2190,73 +2152,7 @@ namespace MyHomelabBrowser
             Tabs.SelectedItem = tab;
             SyncWebHostWithSelection();
         }
-        private async void CloudTorrentButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (!_cloudTorrent.Snapshot.IsActive)
-            {
-                OpenCloudTorrentSettings();
-                return;
-            }
-
-            CloudTorrentPopup.IsOpen = !CloudTorrentPopup.IsOpen;
-            if (!CloudTorrentPopup.IsOpen)
-                return;
-
-            UpdateCloudTorrentToolbar();
-            CloudTorrentTabSession? session = _cloudTorrentBrowser.ActiveSession;
-            if (session != null && !session.IsPrivate &&
-                session.Analysis.Items.Count == 0 && !session.IsBusy)
-            {
-                try { await session.AnalyzeNowAsync(userInitiated: false); }
-                catch { }
-            }
-        }
-
-        private void UpdateCloudTorrentToolbar()
-        {
-            if (!Dispatcher.CheckAccess())
-            {
-                Dispatcher.BeginInvoke(new Action(UpdateCloudTorrentToolbar));
-                return;
-            }
-
-            var snapshot = _cloudTorrent.Snapshot;
-            CloudTorrentButton.Visibility = snapshot.IsActive ? Visibility.Visible : Visibility.Collapsed;
-            CloudTorrentButton.IsEnabled = snapshot.IsActive;
-
-            if (!snapshot.IsActive)
-            {
-                CloudTorrentPopup.IsOpen = false;
-                CloudTorrentBadge.Visibility = Visibility.Collapsed;
-                return;
-            }
-
-            CloudTorrentTabSession? session = _cloudTorrentBrowser.ActiveSession;
-            int detected = session?.Analysis.DetectedCount ?? 0;
-            int activeDownloads = snapshot.Account?.Counts.TotalActive ?? 0;
-            int badgeValue = detected > 0 ? detected : activeDownloads;
-
-            CloudTorrentBadge.Visibility = badgeValue > 0 ? Visibility.Visible : Visibility.Collapsed;
-            CloudTorrentBadgeText.Text = Math.Min(99, badgeValue).ToString();
-            CloudTorrentBadge.Background = detected > 0
-                ? (Brush)FindResource("AccentStrongBrush")
-                : (Brush)FindResource("SuccessBrush");
-
-            CloudTorrentButton.Opacity = session?.IsPrivate == true ? 0.58 : 1.0;
-            string tabState = session == null
-                ? "Aucun onglet web sélectionné"
-                : session.IsPrivate
-                    ? "Désactivé dans cet onglet privé"
-                    : detected > 0
-                        ? $"{detected} élément{(detected > 1 ? "s" : string.Empty)} détecté{(detected > 1 ? "s" : string.Empty)}"
-                        : session.StatusMessage;
-
-            CloudTorrentButton.ToolTip = $"CloudTorrent — {snapshot.Username}\n{tabState}\n{activeDownloads} téléchargement{(activeDownloads > 1 ? "s" : string.Empty)} actif{(activeDownloads > 1 ? "s" : string.Empty)}";
-        }
-
         void OpenSettings() => OpenSettingsSection(null);
-
-        void OpenCloudTorrentSettings() => OpenSettingsSection("CloudTorrent");
 
         void OpenSettingsSection(string? sectionName)
         {
@@ -2275,7 +2171,7 @@ namespace MyHomelabBrowser
             }
 
             // ✅ Sinon créer Settings
-            var view = new SettingsView(_settings, _cloudTorrent);
+            var view = new SettingsView(_settings);
             if (!string.IsNullOrWhiteSpace(sectionName))
                 view.SelectSection(sectionName);
 
@@ -2922,14 +2818,7 @@ namespace MyHomelabBrowser
                 }
             };
 
-            // ===============================
-            // ☁️ CLOUDTORRENT
-            // ===============================
-            await _cloudTorrentBrowser.AttachAsync(web, isPrivate: false);
             await AttachAdBlockToWebViewAsync(web, isPrivate: false);
-            if (Tabs.SelectedItem == tab)
-                _cloudTorrentBrowser.SetActiveWebView(web);
-            UpdateCloudTorrentToolbar();
 
             // ===============================
             // ✅ NAVIGATION INITIALE
@@ -3396,18 +3285,6 @@ namespace MyHomelabBrowser
                 if (_legacyDockHwnd != IntPtr.Zero)
                     ShowWindow(_legacyDockHwnd, SW_HIDE);
             }
-            if (Tabs.SelectedItem is TabItem activeTab &&
-                activeTab.Tag is WebTabContent activeWebTab &&
-                activeWebTab.Web != null)
-            {
-                _cloudTorrentBrowser.SetActiveWebView(activeWebTab.Web);
-            }
-            else
-            {
-                _cloudTorrentBrowser.SetActiveWebView(null);
-            }
-
-            UpdateCloudTorrentToolbar();
             UpdateManualLegacyButton();
             UpdateNavButtonsFast();
 
@@ -5535,8 +5412,6 @@ namespace MyHomelabBrowser
         }
         protected override void OnClosing(CancelEventArgs e)
         {
-            try { _cloudTorrentBrowser.Dispose(); } catch { }
-
             foreach (TabItem tab in Tabs.Items.OfType<TabItem>())
             {
                 if (tab.Tag is not WebTabContent content)

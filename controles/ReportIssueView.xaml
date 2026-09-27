@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="MyHomelabBrowser.controles.ReportIssueView"
+<UserControl x:Class="MyHomelabBrowser.controles.ReportIssueView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="{StaticResource FluentBg}">
@@ -238,7 +238,6 @@
                           SelectionChanged="ModuleBox_SelectionChanged">
                     <ComboBoxItem Content="PommeBrowser — navigation et interface" Tag="Browser"/>
                     <ComboBoxItem Content="Bloqueur de publicités" Tag="AdBlock"/>
-                    <ComboBoxItem Content="CloudTorrent" Tag="CloudTorrent"/>
                 </ComboBox>
                 <TextBlock x:Name="ModuleHint"
                            Style="{StaticResource FormHint}"

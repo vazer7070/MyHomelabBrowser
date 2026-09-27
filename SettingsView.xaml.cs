@@ -1,7 +1,6 @@
 ﻿using Microsoft.Win32;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Flash;
-using MyHomelabBrowser.classes.CloudTorrent.Services;
 using MyHomelabBrowser.classes.AdBlock.Services;
 using MyHomelabBrowser.controles;
 using MyHomelabBrowser.controles.settings;
@@ -17,7 +16,6 @@ namespace MyHomelabBrowser
     public partial class SettingsView : UserControl
     {
         readonly SettingsService _service;
-        readonly CloudTorrentModuleService _cloudTorrent;
         BrowserSettings _original;
         BrowserSettings _working;
         private int _requestedSectionIndex;
@@ -102,20 +100,10 @@ namespace MyHomelabBrowser
                 InstallUpdateBtn.IsEnabled = available;
         }
 
-        /// <summary>
-        /// Constructeur compatible avec les appels existants du navigateur.
-        /// Toutes les vues de paramètres partagent la même instance CloudTorrent.
-        /// </summary>
         public SettingsView(SettingsService service)
-            : this(service, CloudTorrentModuleHost.Current)
-        {
-        }
-
-        public SettingsView(SettingsService service, CloudTorrentModuleService cloudTorrent)
         {
             InitializeComponent();
             _service = service;
-            _cloudTorrent = cloudTorrent;
 
             _original = _service.Settings.Clone();
             _working = _service.Settings.Clone();
@@ -164,8 +152,7 @@ namespace MyHomelabBrowser
                 "Historique" => 2,
                 "Mises à jour" => 3,
                 "Bloqueur de publicités" or "AdBlock" => 4,
-                "CloudTorrent" => 5,
-                "Avancé" or "⚠ Avancé" => 6,
+                "Avancé" or "⚠ Avancé" => 5,
                 _ => 0
             };
 
@@ -174,11 +161,12 @@ namespace MyHomelabBrowser
 
         private void SelectSection(int section)
         {
-            _requestedSectionIndex = Math.Clamp(section, 0, 6);
+            _requestedSectionIndex = Math.Clamp(section, 0, 5);
             if (!IsLoaded)
                 return;
 
-            int navIndex = _requestedSectionIndex == 6 ? 7 : _requestedSectionIndex;
+            // Le séparateur occupe une ligne de la liste avant la section Avancé.
+            int navIndex = _requestedSectionIndex == 5 ? 6 : _requestedSectionIndex;
             if (NavList.SelectedIndex != navIndex)
                 NavList.SelectedIndex = navIndex;
             else
@@ -206,11 +194,10 @@ namespace MyHomelabBrowser
             int section = query switch
             {
                 var value when ContainsAny(value, "pub", "publicité", "adblock", "easylist", "traqueur", "tracker", "protection") => 4,
-                var value when ContainsAny(value, "cloud", "torrent", "api", "clé", "analyse", "1fichier", "vidéo") => 5,
                 var value when ContainsAny(value, "télécharg", "dossier", "fichier") => 1,
                 var value when ContainsAny(value, "historique", "navigation", "données") => 2,
                 var value when ContainsAny(value, "mise à jour", "version", "update", "changelog") => 3,
-                var value when ContainsAny(value, "flash", "basilisk", "avancé", "debug", "legacy") => 6,
+                var value when ContainsAny(value, "flash", "basilisk", "avancé", "debug", "legacy") => 5,
                 _ => 0
             };
 
@@ -235,8 +222,7 @@ namespace MyHomelabBrowser
                 "Historique" => 2,
                 "Mises à jour" => 3,
                 "Bloqueur de publicités" => 4,
-                "CloudTorrent" => 5,
-                "⚠ Avancé" => 6,
+                "⚠ Avancé" => 5,
                 _ => 0
             };
 
@@ -253,8 +239,7 @@ namespace MyHomelabBrowser
                 2 => new SettingsHistoryView(),
                 3 => new SettingsUpdatesView(),
                 4 => new SettingsAdBlockView(AdBlockModuleHost.Current),
-                5 => new SettingsCloudTorrentView(_cloudTorrent),
-                6 => new SettingsAdvancedView(),
+                5 => new SettingsAdvancedView(),
                 _ => null
             };
 
@@ -351,8 +336,6 @@ namespace MyHomelabBrowser
             {
                 if (selectedSection.Equals("Bloqueur de publicités", StringComparison.OrdinalIgnoreCase))
                     module = ReportModule.AdBlock;
-                else if (selectedSection.Equals("CloudTorrent", StringComparison.OrdinalIgnoreCase))
-                    module = ReportModule.CloudTorrent;
             }
 
             var options = new ReportIssueOptions

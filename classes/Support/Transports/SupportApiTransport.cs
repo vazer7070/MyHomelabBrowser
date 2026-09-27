@@ -1,5 +1,4 @@
-using MyHomelabBrowser.classes.CloudTorrent.Services;
-using MyHomelabBrowser.classes.Support.Models;
+﻿using MyHomelabBrowser.classes.Support.Models;
 using System;
 using System.IO;
 using System.IO.Compression;
@@ -23,11 +22,8 @@ namespace MyHomelabBrowser.classes.Support.Transports
 
         private readonly HttpClient _httpClient;
         private readonly bool _ownsHttpClient;
-        private readonly CloudTorrentConfigurationService _cloudTorrentConfiguration;
 
-        public SupportApiTransport(
-            HttpClient? httpClient = null,
-            CloudTorrentConfigurationService? cloudTorrentConfiguration = null)
+        public SupportApiTransport(HttpClient? httpClient = null)
         {
             if (httpClient != null)
             {
@@ -46,9 +42,6 @@ namespace MyHomelabBrowser.classes.Support.Transports
                 _httpClient = new HttpClient(handler, disposeHandler: true);
                 _ownsHttpClient = true;
             }
-
-            _cloudTorrentConfiguration = cloudTorrentConfiguration
-                ?? new CloudTorrentConfigurationService();
 
             _httpClient.DefaultRequestHeaders.UserAgent.Clear();
             _httpClient.DefaultRequestHeaders.UserAgent.Add(
@@ -76,8 +69,6 @@ namespace MyHomelabBrowser.classes.Support.Transports
             };
             request.Headers.TryAddWithoutValidation("X-PommeBrowser-Version", report.ClientVersion);
             request.Headers.TryAddWithoutValidation("X-PommeBrowser-Report-Id", report.ClientReportId);
-
-            TryAttachMatchingCloudTorrentCredential(request, reportUri);
 
             using var form = new MultipartFormDataContent();
             string reportJson = JsonSerializer.Serialize(report, JsonOptions);
@@ -150,47 +141,6 @@ namespace MyHomelabBrowser.classes.Support.Transports
                 };
             }
         }
-
-        private void TryAttachMatchingCloudTorrentCredential(
-            HttpRequestMessage request,
-            Uri supportUri)
-        {
-            try
-            {
-                string serverUrl = _cloudTorrentConfiguration.Current.ServerUrl;
-                string? apiKey = _cloudTorrentConfiguration.ReadApiKey();
-
-                if (string.IsNullOrWhiteSpace(serverUrl) || string.IsNullOrWhiteSpace(apiKey))
-                    return;
-
-                if (!Uri.TryCreate(serverUrl, UriKind.Absolute, out Uri? cloudTorrentUri))
-                    return;
-
-                // Ne jamais envoyer une clé CloudTorrent à un autre serveur.
-                if (!HasSameOrigin(cloudTorrentUri, supportUri))
-                    return;
-
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
-            }
-            catch
-            {
-                // L'authentification est optionnelle au niveau du transport.
-                // Le backend décidera s'il accepte ou non les rapports anonymes.
-            }
-        }
-
-        private static bool HasSameOrigin(Uri first, Uri second)
-        {
-            int firstPort = first.IsDefaultPort ? DefaultPort(first.Scheme) : first.Port;
-            int secondPort = second.IsDefaultPort ? DefaultPort(second.Scheme) : second.Port;
-
-            return string.Equals(first.Scheme, second.Scheme, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(first.Host, second.Host, StringComparison.OrdinalIgnoreCase)
-                && firstPort == secondPort;
-        }
-
-        private static int DefaultPort(string scheme)
-            => string.Equals(scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ? 443 : 80;
 
         private static bool IsEndpointUnavailable(HttpStatusCode statusCode)
         {

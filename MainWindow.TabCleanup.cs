@@ -1,4 +1,4 @@
-using Microsoft.Web.WebView2.Wpf;
+﻿using Microsoft.Web.WebView2.Wpf;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -34,8 +34,6 @@ namespace MyHomelabBrowser
             catch { }
 
             // Détacher les modules avant la destruction du CoreWebView2.
-            try { _cloudTorrentBrowser?.Detach(web); } catch { }
-
             try
             {
                 if (_adBlockUiInitialized && _adBlockBrowser != null)

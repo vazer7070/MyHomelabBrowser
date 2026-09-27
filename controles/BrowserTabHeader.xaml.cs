@@ -72,8 +72,8 @@ namespace MyHomelabBrowser.controles
                 : Visibility.Collapsed;
 
             Root.Padding = pinned
-                ? new Thickness(4, 0)
-                : new Thickness(8, 0);
+                ? new Thickness(4, 0, 4, 0)
+                : new Thickness(8, 0, 8, 0);
 
             Root.ToolTip = pinned
                 ? (string.IsNullOrWhiteSpace(TabTitle)

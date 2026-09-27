@@ -3,8 +3,7 @@
 public enum ReportModule
 {
     Browser,
-    AdBlock,
-    CloudTorrent
+    AdBlock
 }
 
 public class ReportIssueOptions
