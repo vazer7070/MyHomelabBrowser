@@ -14,9 +14,24 @@
 
 		<ApplicationIcon>PommeBrowser_desktop.ico</ApplicationIcon>
 
-		<!-- Le projet de tests vit dans le même dépôt : ses fichiers ne font pas partie de l'application. -->
-		<DefaultItemExcludes>$(DefaultItemExcludes);tests\**</DefaultItemExcludes>
+		<!-- Tests et serveur de support vivent dans le même dépôt : ils ne font pas partie de l'application. -->
+		<DefaultItemExcludes>$(DefaultItemExcludes);tests\**;support-server\**</DefaultItemExcludes>
 	</PropertyGroup>
+
+	<PropertyGroup>
+		<!--
+			Adresse publique du serveur de support (voir support-server/README.md).
+			Vide : les rapports sont enregistrés sur l'ordinateur de l'utilisateur.
+			Priorité : -p:SupportApiUrl=…, puis la variable d'environnement
+			POMMEBROWSER_SUPPORT_API_URL, puis l'adresse écrite sur la seconde ligne.
+		-->
+		<SupportApiUrl Condition="'$(SupportApiUrl)' == ''">$(POMMEBROWSER_SUPPORT_API_URL)</SupportApiUrl>
+		<SupportApiUrl Condition="'$(SupportApiUrl)' == ''"></SupportApiUrl>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<AssemblyMetadata Include="SupportApiUrl" Value="$(SupportApiUrl)" />
+	</ItemGroup>
 
 	<ItemGroup>
 		<None Remove="Assets\logo.png" />

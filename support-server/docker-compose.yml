@@ -1,0 +1,19 @@
+# Serveur de support PommeBrowser.
+#   cp .env.example .env   (puis renseigner au moins DISCORD_WEBHOOK_URL)
+#   docker compose up -d --build
+services:
+  pommebrowser-support:
+    build: .
+    image: pommebrowser-support:latest
+    container_name: pommebrowser-support
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # Port local vers lequel le reverse proxy renvoie. Si le proxy est un conteneur
+      # du même réseau Docker, cette ligne peut être retirée (cible : pommebrowser-support:8080).
+      - "8080:8080"
+    volumes:
+      - support-data:/data
+
+volumes:
+  support-data:
