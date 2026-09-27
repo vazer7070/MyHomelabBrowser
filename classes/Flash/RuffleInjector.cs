@@ -18,9 +18,16 @@ namespace MyHomelabBrowser.classes.Flash
             if (webView.CoreWebView2 == null)
                 return RuffleInjectionResult.Failed("core-unavailable", false, Tr("WebView2 n'est pas initialisé."));
 
+            // Ruffle vient uniquement des fichiers de l'application : pas de repli vers un CDN.
             bool localAssets = RuffleAssetService.Configure(webView.CoreWebView2);
-            string scriptUrl = RuffleAssetService.GetPreferredScriptUrl();
-            string publicPath = RuffleAssetService.GetPreferredPublicPath();
+            if (!localAssets)
+            {
+                return RuffleInjectionResult.Failed("ruffle-missing", false,
+                    Tr("Les fichiers de Ruffle sont absents de cette installation de PommeBrowser."));
+            }
+
+            string scriptUrl = RuffleAssetService.LocalScriptUrl;
+            string publicPath = RuffleAssetService.LocalBaseUrl;
 
             string bootstrap = BuildBootstrapScript(scriptUrl, publicPath, detection);
             string rawResult;
@@ -237,7 +244,7 @@ namespace MyHomelabBrowser.classes.Flash
         allowScriptAccess: ALLOW_SCRIPT_ACCESS,
         allowFullscreen: ALLOW_FULLSCREEN,
         allowNetworking: 'all',
-        openUrlMode: 'allow',
+        openUrlMode: 'confirm',
         compatibilityRules: true,
         favorFlash: false,
         credentialAllowList: CREDENTIAL_ORIGINS
@@ -387,7 +394,7 @@ namespace MyHomelabBrowser.classes.Flash
                 allowScriptAccess: {{allowScriptVariable}},
                 allowFullscreen: {{allowFullscreenVariable}},
                 allowNetworking: 'all',
-                openUrlMode: 'allow',
+                openUrlMode: 'confirm',
                 compatibilityRules: true,
                 favorFlash: false,
                 credentialAllowList: {{credentialsVariable}}

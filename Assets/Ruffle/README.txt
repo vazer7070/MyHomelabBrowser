@@ -1,5 +1,8 @@
-Les fichiers Ruffle auto-hébergés sont placés ici par install-ruffle-assets.ps1.
-Version prévue : 0.3.0.
+Les fichiers de Ruffle sont placés ici automatiquement à la compilation.
 
-Le navigateur fonctionne avec un CDN épinglé si ces fichiers sont absents,
-mais le mode recommandé est de lancer le script d'installation avant de publier.
+Version : 0.3.0 (propriétés RuffleVersion et RuffleSha256 de MyHomelabBrowser.csproj).
+L'archive officielle est téléchargée depuis GitHub, son empreinte SHA-256 est
+vérifiée, puis elle est extraite dans ce dossier. Le navigateur n'utilise jamais
+de CDN : sans ces fichiers, Ruffle est simplement indisponible.
+
+install-ruffle-assets.ps1 fait la même chose à la main (avec la même vérification).

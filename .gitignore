@@ -361,3 +361,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Ruffle : téléchargé et vérifié (SHA-256) à la compilation, voir MyHomelabBrowser.csproj
+Assets/Ruffle/*
+!Assets/Ruffle/README.txt

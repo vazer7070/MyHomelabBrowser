@@ -64,9 +64,12 @@ namespace MyHomelabBrowser.classes.Flash
             if (token.IsCancellationRequested || _disposed)
                 return;
 
-            if (!await _tickLock.WaitAsync(0, token).ConfigureAwait(true))
+            // Une vérification est déjà en cours : on saute ce tour.
+            if (!_tickLock.Wait(0))
                 return;
 
+            // Méthode async void : aucune exception ne doit en sortir (onglet fermé,
+            // WebView2 détruit pendant l'appel…), sinon c'est tout le navigateur qui s'arrête.
             try
             {
                 await TickAsync(token).ConfigureAwait(true);
@@ -172,7 +175,7 @@ namespace MyHomelabBrowser.classes.Flash
             _disposed = true;
             Stop();
             _timer.Tick -= OnTimerTick;
-            _tickLock.Dispose();
+            // _tickLock n'est pas libéré : une vérification en cours doit pouvoir le relâcher.
             GC.SuppressFinalize(this);
         }
 

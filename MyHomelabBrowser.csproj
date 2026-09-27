@@ -67,6 +67,71 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<Content Include="Assets\Ruffle\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+		<Content Include="Assets\Ruffle\**\*" Exclude="Assets\Ruffle\README.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
 	</ItemGroup>
+
+	<!--
+		Ruffle embarqué : téléchargé à la compilation depuis les versions officielles
+		(GitHub) puis vérifié par SHA-256 avant d'être extrait dans Assets\Ruffle.
+		Pour changer de version, modifier RuffleVersion et RuffleSha256 (ainsi que
+		PinnedVersion dans RuffleAssetService.cs et install-ruffle-assets.ps1).
+	-->
+	<PropertyGroup>
+		<RuffleVersion>0.3.0</RuffleVersion>
+		<RuffleSha256>9cdc5baac95dea452d2ef4a3859f3a4c8576dd3377bb40849e41fb6359170d7d</RuffleSha256>
+		<RuffleArchive>ruffle-$(RuffleVersion)-web-selfhosted.zip</RuffleArchive>
+		<RuffleUrl>https://github.com/ruffle-rs/ruffle/releases/download/v$(RuffleVersion)/$(RuffleArchive)</RuffleUrl>
+		<RuffleAssetDir>$(MSBuildProjectDirectory)\Assets\Ruffle</RuffleAssetDir>
+		<!-- Hors Release, une compilation sans Internet reste possible (Ruffle sera alors indisponible). -->
+		<RuffleDownloadOptional Condition="'$(RuffleDownloadOptional)' == '' And '$(Configuration)' != 'Release'">true</RuffleDownloadOptional>
+		<RuffleDownloadOptional Condition="'$(RuffleDownloadOptional)' == ''">false</RuffleDownloadOptional>
+	</PropertyGroup>
+
+	<Target Name="EnsureRuffleAssets" BeforeTargets="AssignTargetPaths" Condition="'$(DesignTimeBuild)' != 'true'">
+		<ReadLinesFromFile File="$(RuffleAssetDir)\VERSION.txt" Condition="Exists('$(RuffleAssetDir)\VERSION.txt')">
+			<Output TaskParameter="Lines" PropertyName="_RuffleInstalledVersion" />
+		</ReadLinesFromFile>
+
+		<PropertyGroup>
+			<_RuffleUpToDate Condition="Exists('$(RuffleAssetDir)\ruffle.js') And '$(_RuffleInstalledVersion)' == '$(RuffleVersion)'">true</_RuffleUpToDate>
+			<_RuffleDownloadDir>$(MSBuildProjectDirectory)\$(BaseIntermediateOutputPath)ruffle\</_RuffleDownloadDir>
+			<_RuffleArchivePath>$(_RuffleDownloadDir)$(RuffleArchive)</_RuffleArchivePath>
+		</PropertyGroup>
+
+		<Message Importance="high" Text="Téléchargement de Ruffle $(RuffleVersion)…" Condition="'$(_RuffleUpToDate)' != 'true'" />
+		<Delete Files="$(_RuffleArchivePath)" Condition="'$(_RuffleUpToDate)' != 'true'" />
+		<DownloadFile Condition="'$(_RuffleUpToDate)' != 'true'"
+					  SourceUrl="$(RuffleUrl)"
+					  DestinationFolder="$(_RuffleDownloadDir)"
+					  DestinationFileName="$(RuffleArchive)"
+					  Retries="3"
+					  ContinueOnError="$(RuffleDownloadOptional)" />
+
+		<!-- Une archive modifiée arrête la compilation : elle n'est jamais extraite. -->
+		<VerifyFileHash Condition="'$(_RuffleUpToDate)' != 'true' And Exists('$(_RuffleArchivePath)')"
+						File="$(_RuffleArchivePath)"
+						Hash="$(RuffleSha256)"
+						Algorithm="SHA256" />
+
+		<ItemGroup Condition="'$(_RuffleUpToDate)' != 'true' And Exists('$(_RuffleArchivePath)')">
+			<_OldRuffleFiles Include="$(RuffleAssetDir)\**\*" Exclude="$(RuffleAssetDir)\README.txt" />
+		</ItemGroup>
+		<Delete Files="@(_OldRuffleFiles)" />
+		<Unzip Condition="'$(_RuffleUpToDate)' != 'true' And Exists('$(_RuffleArchivePath)')"
+			   SourceFiles="$(_RuffleArchivePath)"
+			   DestinationFolder="$(RuffleAssetDir)"
+			   OverwriteReadOnlyFiles="true" />
+		<WriteLinesToFile Condition="'$(_RuffleUpToDate)' != 'true' And Exists('$(_RuffleArchivePath)')"
+						  File="$(RuffleAssetDir)\VERSION.txt"
+						  Lines="$(RuffleVersion)"
+						  Overwrite="true" />
+
+		<Warning Condition="!Exists('$(RuffleAssetDir)\ruffle.js')"
+				 Text="Ruffle $(RuffleVersion) n'a pas pu être téléchargé : les contenus Flash ne pourront pas être lus avec Ruffle dans cette compilation." />
+
+		<!-- Fichiers extraits pendant cette compilation : copiés comme les autres. -->
+		<ItemGroup>
+			<Content Include="Assets\Ruffle\**\*" Exclude="@(Content);Assets\Ruffle\README.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+		</ItemGroup>
+	</Target>
 </Project>
