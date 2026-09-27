@@ -665,6 +665,32 @@ function Invoke-Obfuscation {
     Write-Host "Table privée : $mappingPath" -ForegroundColor Yellow
 }
 
+# Signature de code (facultative). Sans signature, Windows SmartScreen avertit à chaque
+# nouvelle version. Rien de secret dans le dépôt : tout passe par des variables d'environnement.
+#   POMMEBROWSER_AZURE_SIGN_METADATA : chemin du fichier metadata.json d'Azure Trusted Signing
+#   POMMEBROWSER_SIGN_PARAMS         : arguments signtool, par exemple
+#       /fd sha256 /tr http://timestamp.digicert.com /td sha256 /sha1 <empreinte du certificat>
+function Get-SigningArguments {
+    $azureMetadata = $env:POMMEBROWSER_AZURE_SIGN_METADATA
+    if (-not [string]::IsNullOrWhiteSpace($azureMetadata)) {
+        if (-not (Test-Path -LiteralPath $azureMetadata)) {
+            throw "POMMEBROWSER_AZURE_SIGN_METADATA pointe vers un fichier introuvable : $azureMetadata"
+        }
+
+        Write-Host "Signature          : Azure Trusted Signing" -ForegroundColor DarkGray
+        return @("--azureTrustedSignFile", $azureMetadata)
+    }
+
+    $signParams = $env:POMMEBROWSER_SIGN_PARAMS
+    if (-not [string]::IsNullOrWhiteSpace($signParams)) {
+        Write-Host "Signature          : signtool" -ForegroundColor DarkGray
+        return @("--signParams", $signParams)
+    }
+
+    Write-Host "Signature          : aucune (SmartScreen avertira les utilisateurs)" -ForegroundColor Yellow
+    return @()
+}
+
 try {
     Clear-Host
     Write-Host "=== PommeBrowser - Build + Obfuscation + Velopack + GitHub ===`n" -ForegroundColor Cyan
@@ -858,6 +884,12 @@ try {
 
     if (Test-Path -LiteralPath $iconPath) {
         $packArguments += @('--icon', $iconPath)
+    }
+
+    # @() : une fonction qui ne renvoie rien donnerait sinon un argument $null.
+    $signingArguments = @(Get-SigningArguments)
+    if ($signingArguments.Count -gt 0) {
+        $packArguments += $signingArguments
     }
 
     [void](Invoke-NativeProcess -FilePath $vpk -Arguments $packArguments -FailureMessage 'vpk pack a échoué')

@@ -134,7 +134,8 @@ namespace MyHomelabBrowser.classes
             new() { Key = "suspend", Description = "Suspendre l’onglet", Enabled = true },
             new() { Key = "resume", Description = "Réactiver l’onglet", Enabled = true },
             new() { Key = "suspend inactive", Description = "Suspendre les onglets inactifs", Enabled = true },
-            new() { Key = "history", Description = "Ouvrir l’historique", Enabled = true }
+            new() { Key = "history", Description = "Ouvrir l’historique", Enabled = true },
+            new() { Key = "diagnostic", Description = "Ouvrir la page de diagnostic", Enabled = true }
         };
 
         /// <summary>

@@ -524,6 +524,10 @@ namespace MyHomelabBrowser
                         ResumeSuspendedTab(rr, st);
                     break;
 
+                case "diagnostic":
+                    OpenDiagnostics();
+                    break;
+
                 case "history":
                     OpenHistory();
                     break;
