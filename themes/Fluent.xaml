@@ -1,7 +1,9 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <SolidColorBrush x:Key="FluentBg" Color="#0E1014"/>
-    <SolidColorBrush x:Key="FluentSurface" Color="#15181E"/>
-    <SolidColorBrush x:Key="FluentHover" Color="#242A34"/>
-    <SolidColorBrush x:Key="FluentAccent" Color="#58A6FF"/>
-    <SolidColorBrush x:Key="FluentText" Color="#F4F7FB"/>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Alias historiques, alignés sur la palette de Colors.xaml. -->
+    <SolidColorBrush x:Key="FluentBg" Color="{StaticResource BgMain}"/>
+    <SolidColorBrush x:Key="FluentSurface" Color="{StaticResource BgSecondary}"/>
+    <SolidColorBrush x:Key="FluentHover" Color="{StaticResource BgHover}"/>
+    <SolidColorBrush x:Key="FluentAccent" Color="{StaticResource Accent}"/>
+    <SolidColorBrush x:Key="FluentText" Color="{StaticResource TextMain}"/>
 </ResourceDictionary>

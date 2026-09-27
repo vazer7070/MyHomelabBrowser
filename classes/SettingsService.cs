@@ -90,6 +90,11 @@ namespace MyHomelabBrowser.classes
 
         private static void ApplyRuntimeDefaults(BrowserSettings settings)
         {
+            MergeMissingCommands(settings);
+
+            if (settings.SuspendDelayMinutes < 1)
+                settings.SuspendDelayMinutes = 5;
+
             try
             {
                 string defaultBasilisk = GetDefaultBasiliskPortablePath();
@@ -116,16 +121,38 @@ namespace MyHomelabBrowser.classes
                 StartPage = "https://google.com",
                 NewTabPage = "https://duckduckgo.com",
                 EnableCommands = true,
-                Commands = new List<CommandSetting>
-                {
-                    new() { Key = "new", Description = "Nouvel onglet", Enabled = true },
-                    new() { Key = "close", Description = "Fermer onglet", Enabled = true },
-                    new() { Key = "close others", Description = "Fermer les autres", Enabled = true },
-                    new() { Key = "reload", Description = "Recharger", Enabled = true },
-                    new() { Key = "suspend", Description = "Suspendre onglet", Enabled = true },
-                    new() { Key = "resume", Description = "Réactiver onglet", Enabled = true }
-                }
+                Commands = CreateDefaultCommands()
             };
+        }
+
+        private static List<CommandSetting> CreateDefaultCommands() => new()
+        {
+            new() { Key = "new", Description = "Nouvel onglet", Enabled = true },
+            new() { Key = "close", Description = "Fermer l’onglet", Enabled = true },
+            new() { Key = "close others", Description = "Fermer les autres onglets", Enabled = true },
+            new() { Key = "reload", Description = "Recharger la page", Enabled = true },
+            new() { Key = "suspend", Description = "Suspendre l’onglet", Enabled = true },
+            new() { Key = "resume", Description = "Réactiver l’onglet", Enabled = true },
+            new() { Key = "suspend inactive", Description = "Suspendre les onglets inactifs", Enabled = true },
+            new() { Key = "history", Description = "Ouvrir l’historique", Enabled = true }
+        };
+
+        /// <summary>
+        /// Ajoute les commandes apparues dans une version plus récente sans toucher
+        /// aux choix (activé/désactivé) déjà enregistrés par l'utilisateur.
+        /// </summary>
+        private static void MergeMissingCommands(BrowserSettings settings)
+        {
+            settings.Commands ??= new List<CommandSetting>();
+
+            foreach (CommandSetting command in CreateDefaultCommands())
+            {
+                bool exists = settings.Commands.Exists(existing =>
+                    string.Equals(existing.Key, command.Key, StringComparison.OrdinalIgnoreCase));
+
+                if (!exists)
+                    settings.Commands.Add(command);
+            }
         }
 
         private static string GetDefaultBasiliskPortablePath()

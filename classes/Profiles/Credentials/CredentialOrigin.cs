@@ -1,5 +1,4 @@
-using System.Net;
-
+﻿
 namespace MyHomelabBrowser.classes.Profiles.Credentials
 {
     public static class CredentialOrigin
@@ -77,32 +76,8 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             return builder.Uri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
         }
 
+        // Le HTTP n'est accepté que pour les services du réseau local (homelab).
         private static bool IsAllowedInsecureHost(string host)
-        {
-            if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
-                || host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase)
-                || host.EndsWith(".lan", StringComparison.OrdinalIgnoreCase)
-                || host.EndsWith(".local", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            if (!IPAddress.TryParse(host, out var address))
-                return false;
-
-            if (IPAddress.IsLoopback(address))
-                return true;
-
-            var bytes = address.GetAddressBytes();
-            if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
-            {
-                return bytes[0] == 10
-                    || (bytes[0] == 172 && bytes[1] is >= 16 and <= 31)
-                    || (bytes[0] == 192 && bytes[1] == 168)
-                    || (bytes[0] == 169 && bytes[1] == 254);
-            }
-
-            return address.IsIPv6LinkLocal || address.IsIPv6SiteLocal;
-        }
+            => UrlResolver.IsLocalHost(host);
     }
 }

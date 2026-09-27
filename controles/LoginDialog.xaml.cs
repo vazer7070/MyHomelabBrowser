@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 
@@ -12,6 +13,9 @@ namespace MyHomelabBrowser.controles
             set => UsernameBox.Text = value;
         }
         public Func<string, string, bool>? ValidateLogin { get; set; }
+
+        // Message affiché à la place de « Mot de passe incorrect » (verrouillage temporaire…).
+        public Func<string, string?>? FailureMessageProvider { get; set; }
 
         public string Password => PasswordBox.Password ?? "";
 
@@ -28,9 +32,8 @@ namespace MyHomelabBrowser.controles
     PasswordBox.Password.Length > 0;
 
 
-                // reset erreur visuelle
-                PasswordBox.BorderBrush =
-                    new SolidColorBrush(Color.FromRgb(58, 58, 58));
+                // Retour au style du thème.
+                PasswordBox.ClearValue(Control.BorderBrushProperty);
                 PasswordErrorText.Visibility = Visibility.Collapsed;
             };
         }
@@ -51,9 +54,10 @@ namespace MyHomelabBrowser.controles
             );
         }
 
-        public void ShowPasswordError()
+        public void ShowPasswordError(string? message = null)
         {
-            PasswordBox.BorderBrush = Brushes.Red;
+            PasswordBox.SetResourceReference(Control.BorderBrushProperty, "DangerBrush");
+            PasswordErrorText.Text = string.IsNullOrWhiteSpace(message) ? "Mot de passe incorrect" : message;
             PasswordErrorText.Visibility = Visibility.Visible;
 
             ShakePasswordBox();
@@ -66,8 +70,8 @@ namespace MyHomelabBrowser.controles
             if (ValidateLogin == null ||
                 !ValidateLogin(Username, Password))
             {
-                ShowPasswordError();
-                return; 
+                ShowPasswordError(FailureMessageProvider?.Invoke(Username));
+                return;
             }
 
             DialogResult = true; 

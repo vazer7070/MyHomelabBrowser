@@ -1,4 +1,4 @@
-using Microsoft.Web.WebView2.Wpf;
+﻿using Microsoft.Web.WebView2.Wpf;
 using MyHomelabBrowser.classes.AdBlock.Integration;
 using MyHomelabBrowser.classes.AdBlock.Models;
 using MyHomelabBrowser.classes.AdBlock.Services;
@@ -70,7 +70,7 @@ namespace MyHomelabBrowser
             }
             catch { }
 
-            Dispatcher.BeginInvoke(new Action(UpdateAdBlockToolbar));
+            _ = Dispatcher.BeginInvoke(new Action(UpdateAdBlockToolbar));
         }
 
         private void UpdateActiveAdBlockSession()

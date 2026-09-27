@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Text.Json;
 
@@ -24,24 +24,38 @@ namespace MyHomelabBrowser.classes.Session
                 WriteIndented = true
             });
 
-            File.WriteAllText(GetPath(), json);
+            AtomicFile.WriteAllText(GetPath(), json);
         }
 
         public static BrowserSessionState? Load()
         {
-            var path = GetPath();
-            if (!File.Exists(path))
-                return null;
+            try
+            {
+                var path = GetPath();
+                if (!File.Exists(path))
+                    return null;
 
-            var json = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<BrowserSessionState>(json);
+                var json = File.ReadAllText(path);
+                return JsonSerializer.Deserialize<BrowserSessionState>(json);
+            }
+            catch
+            {
+                // Session illisible : démarrage normal.
+                return null;
+            }
         }
 
         public static void Clear()
         {
-            var path = GetPath();
-            if (File.Exists(path))
-                File.Delete(path);
+            try
+            {
+                var path = GetPath();
+                if (File.Exists(path))
+                    File.Delete(path);
+            }
+            catch
+            {
+            }
         }
     }
 }

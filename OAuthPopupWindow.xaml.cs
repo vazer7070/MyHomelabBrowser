@@ -1,4 +1,4 @@
-using Microsoft.Web.WebView2.Core;
+﻿using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using System;
 using MyHomelabBrowser.classes.Profiles;
@@ -17,9 +17,15 @@ namespace MyHomelabBrowser
             InitializeComponent();
         }
 
-        public async Task EnsureReadyAsync(CoreWebView2Environment env)
+        public async Task EnsureReadyAsync(CoreWebView2Environment env, CoreWebView2ControllerOptions? options = null)
         {
-            await PopupWeb.EnsureCoreWebView2Async(env);
+            if (PopupWeb.CoreWebView2 == null)
+            {
+                if (options != null)
+                    await PopupWeb.EnsureCoreWebView2Async(env, options);
+                else
+                    await PopupWeb.EnsureCoreWebView2Async(env);
+            }
 
             if (PopupWeb.CoreWebView2 is not null)
             {
@@ -28,18 +34,5 @@ namespace MyHomelabBrowser
                     AppDataContext.Root);
             }
         }
-        public void EnableAutoCloseOnSuccess()
-        {
-            PopupWeb.CoreWebView2.NavigationCompleted += (_, __) =>
-            {
-                var uri = PopupWeb.Source?.ToString() ?? "";
-                if (uri.Contains("gameforge.com", StringComparison.OrdinalIgnoreCase) &&
-                    !uri.Contains("/external-auth/", StringComparison.OrdinalIgnoreCase))
-                {
-                    Close();
-                }
-            };
-        }
-
     }
 }

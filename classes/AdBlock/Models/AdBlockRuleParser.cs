@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -43,7 +43,7 @@ namespace MyHomelabBrowser.classes.AdBlock.Models
                     if (line.Length == 0 || line[0] == '!' || line[0] == '[')
                         continue;
 
-                    if (TryParseCosmeticRule(line, out AdBlockCosmeticRule? cosmetic))
+                    if (TryParseCosmeticRule(line, out AdBlockCosmeticRule? cosmetic) && cosmetic != null)
                     {
                         cosmetics.Add(cosmetic);
                         continue;
@@ -52,7 +52,7 @@ namespace MyHomelabBrowser.classes.AdBlock.Models
                     if (LooksLikeUnsupportedCosmeticRule(line))
                         continue;
 
-                    if (!TryParseNetworkRule(line, nextRuleId, pageExceptions, genericHideExceptions, out AdBlockNetworkRule? rule))
+                    if (!TryParseNetworkRule(line, nextRuleId, pageExceptions, genericHideExceptions, out AdBlockNetworkRule? rule) || rule == null)
                         continue;
 
                     nextRuleId++;

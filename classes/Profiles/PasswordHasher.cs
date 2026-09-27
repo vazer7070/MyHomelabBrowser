@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 
 namespace MyHomelabBrowser.classes.Profiles
 {
@@ -6,36 +6,42 @@ namespace MyHomelabBrowser.classes.Profiles
     {
         const int SaltSize = 16;
         const int HashSize = 32;
-        const int Iterations = 100_000;
+
+        // Valeur des profils créés avant la version 0.9.8, conservée pour les vérifier.
+        public const int LegacyIterations = 100_000;
+
+        // Recommandation OWASP actuelle pour PBKDF2-HMAC-SHA256.
+        public const int CurrentIterations = 600_000;
 
         public static (byte[] hash, byte[] salt) Hash(string password)
         {
-            using var rng = RandomNumberGenerator.Create();
-            var salt = new byte[SaltSize];
-            rng.GetBytes(salt);
-
-            using var pbkdf2 = new Rfc2898DeriveBytes(
-                password,
-                salt,
-                Iterations,
-                HashAlgorithmName.SHA256
-            );
-
-            var hash = pbkdf2.GetBytes(HashSize);
+            byte[] salt = RandomNumberGenerator.GetBytes(SaltSize);
+            byte[] hash = Derive(password, salt, CurrentIterations);
             return (hash, salt);
         }
 
-        public static bool Verify(string password, byte[] hash, byte[] salt)
+        public static bool Verify(string password, byte[] hash, byte[] salt, int iterations = LegacyIterations)
         {
-            using var pbkdf2 = new Rfc2898DeriveBytes(
-                password,
-                salt,
-                Iterations,
-                HashAlgorithmName.SHA256
-            );
+            if (hash is not { Length: HashSize } || salt is not { Length: > 0 })
+                return false;
 
-            var computed = pbkdf2.GetBytes(HashSize);
-            return CryptographicOperations.FixedTimeEquals(computed, hash);
+            byte[] computed = Derive(password, salt, iterations > 0 ? iterations : LegacyIterations);
+            try
+            {
+                return CryptographicOperations.FixedTimeEquals(computed, hash);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(computed);
+            }
         }
+
+        static byte[] Derive(string password, byte[] salt, int iterations)
+            => Rfc2898DeriveBytes.Pbkdf2(
+                password ?? string.Empty,
+                salt,
+                iterations,
+                HashAlgorithmName.SHA256,
+                HashSize);
     }
 }

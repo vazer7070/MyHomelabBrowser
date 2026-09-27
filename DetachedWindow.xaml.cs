@@ -1,4 +1,4 @@
-using Microsoft.Web.WebView2.Wpf;
+﻿using Microsoft.Web.WebView2.Wpf;
 using System;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -83,10 +83,7 @@ namespace MyHomelabBrowser
                 _main.Dispatcher.BeginInvoke(() =>
                 {
                     // Redock du state complet : le moteur reste vivant.
-                    if (RequestRedock != null)
-                        RequestRedock(_state);
-                    else
-                        _main.RedockWebView(_web);
+                    RequestRedock?.Invoke(_state);
                 });
                 return;
             }

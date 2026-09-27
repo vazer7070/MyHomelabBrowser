@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -12,6 +12,7 @@ namespace MyHomelabBrowser.classes
         // --------------------
         public string StartPage { get; set; } = "https://google.com";
         public string NewTabPage { get; set; } = "https://duckduckgo.com";
+        public SearchEngine Search { get; set; } = SearchEngine.Google;
 
         // DNS sécurisé WebView2. Le changement est appliqué au prochain démarrage.
         public SecureDnsMode DnsMode { get; set; } = SecureDnsMode.System;
@@ -70,6 +71,7 @@ namespace MyHomelabBrowser.classes
             {
                 StartPage = StartPage,
                 NewTabPage = NewTabPage,
+                Search = Search,
                 CustomStartupPage = CustomStartupPage,
                 Startup = Startup,
 
@@ -119,6 +121,16 @@ namespace MyHomelabBrowser.classes
             Quad9,
             AdGuard,
             Custom
+        }
+
+        public enum SearchEngine
+        {
+            Google,
+            DuckDuckGo,
+            Bing,
+            Qwant,
+            Startpage,
+            Ecosia
         }
 
         public enum StartupMode

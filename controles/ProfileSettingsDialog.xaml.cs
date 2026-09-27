@@ -2,6 +2,7 @@
 using MyHomelabBrowser.classes.Profiles.Credentials;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -20,7 +21,6 @@ namespace MyHomelabBrowser.controles
     public partial class ProfileSettingsDialog : Window
     {
         readonly ProfileService _profileService;
-        public event Action? PasswordsRequested;
         readonly CredentialVaultService _vault;
 
 
@@ -169,14 +169,36 @@ namespace MyHomelabBrowser.controles
 
             if (username.Length == 0)
             {
-                MessageBox.Show("Nom invalide");
+                MessageBox.Show("Le nom du profil est obligatoire.", "Profil",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            _profileService.UpdateProfile(
-                username,
-                string.IsNullOrWhiteSpace(password) ? null : password
-            );
+            if (!string.IsNullOrEmpty(password) && password.Length < 6)
+            {
+                MessageBox.Show("Le mot de passe doit faire au moins 6 caractères.", "Profil",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                _profileService.UpdateProfile(
+                    username,
+                    string.IsNullOrWhiteSpace(password) ? null : password
+                );
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+            {
+                MessageBox.Show(
+                    ex is InvalidOperationException
+                        ? ex.Message
+                        : "Impossible de renommer le dossier du profil. Fermez les onglets Flash Legacy puis réessayez.\n\n" + ex.Message,
+                    "Profil",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
 
             DialogResult = true;
         }

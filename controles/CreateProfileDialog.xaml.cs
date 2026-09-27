@@ -7,6 +7,8 @@ namespace MyHomelabBrowser.controles
         public string Username => UsernameBox.Text?.Trim() ?? "";
         public string Password => PasswordBox.Password ?? "";
 
+        public Func<string, bool>? UsernameExists { get; set; }
+
         public CreateProfileDialog()
         {
             InitializeComponent();
@@ -14,10 +16,20 @@ namespace MyHomelabBrowser.controles
 
         private void Create_Click(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(Username))
+            if (!ProfileService.TryValidateUsername(Username, out string usernameError))
             {
                 MessageBox.Show(
-                    "Le nom d’utilisateur est obligatoire.",
+                    usernameError,
+                    "Erreur",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            if (UsernameExists?.Invoke(Username) == true)
+            {
+                MessageBox.Show(
+                    "Un profil porte déjà ce nom.",
                     "Erreur",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);

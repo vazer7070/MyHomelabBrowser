@@ -10,7 +10,6 @@ namespace MyHomelabBrowser
     public partial class MainWindow
     {
         private readonly HashSet<TabItem> _tabsBeingClosed = new();
-        private readonly HashSet<WebView2> _disposedClosedWebViews = new();
 
         /// <summary>
         /// Arrête réellement le moteur WebView2 d'un onglet.
@@ -21,9 +20,18 @@ namespace MyHomelabBrowser
             if (content == null)
                 return;
 
+            content.IsClosed = true;
+
             WebView2? web = content.Web;
-            if (web == null || !_disposedClosedWebViews.Add(web))
+            if (web == null || content.IsShutDown)
+            {
+                await StopLegacyProcessAsync(content);
                 return;
+            }
+
+            // Marqueur porté par l'onglet : l'ancien HashSet gardait chaque WebView2
+            // fermé en mémoire jusqu'à la fin de la session.
+            content.IsShutDown = true;
 
             // Coupure immédiate côté WPF.
             try
@@ -58,28 +66,6 @@ namespace MyHomelabBrowser
 
             try { content.FlashOverlay?.Hide(); } catch { }
             try { content.LegacyHost?.DetachExternalWindow(); } catch { }
-
-            // Fermer uniquement le Basilisk appartenant à cet onglet.
-            try
-            {
-                if (content.LegacyProc is { HasExited: false })
-                {
-                    content.LegacyProc.CloseMainWindow();
-                    if (!content.LegacyProc.WaitForExit(500))
-                        content.LegacyProc.Kill(entireProcessTree: true);
-                }
-            }
-            catch
-            {
-                try { content.LegacyProc?.Kill(entireProcessTree: true); } catch { }
-            }
-            finally
-            {
-                try { content.LegacyProc?.Dispose(); } catch { }
-                content.LegacyProc = null;
-                content.LegacyProfileLease?.Dispose();
-                content.LegacyProfileLease = null;
-            }
 
             var core = web.CoreWebView2;
             if (core != null)
@@ -135,6 +121,9 @@ namespace MyHomelabBrowser
                 try { core.IsMuted = true; } catch { }
             }
 
+            // Basilisk est arrêté après la coupure du son de la page.
+            await StopLegacyProcessAsync(content);
+
             // Enlever toutes les références visuelles avant Dispose().
             try
             {
@@ -151,6 +140,43 @@ namespace MyHomelabBrowser
             catch { }
 
             try { web.Dispose(); } catch { }
+        }
+
+        /// <summary>
+        /// Ferme uniquement le Basilisk de cet onglet, sans bloquer l'interface.
+        /// </summary>
+        private static async Task StopLegacyProcessAsync(WebTabContent content)
+        {
+            var process = content.LegacyProc;
+            content.LegacyProc = null;
+
+            try
+            {
+                if (process is { HasExited: false })
+                {
+                    process.CloseMainWindow();
+
+                    using var timeout = new System.Threading.CancellationTokenSource(TimeSpan.FromMilliseconds(800));
+                    try
+                    {
+                        await process.WaitForExitAsync(timeout.Token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                }
+            }
+            catch
+            {
+                try { process?.Kill(entireProcessTree: true); } catch { }
+            }
+            finally
+            {
+                try { process?.Dispose(); } catch { }
+                content.LegacyProfileLease?.Dispose();
+                content.LegacyProfileLease = null;
+            }
         }
     }
 }

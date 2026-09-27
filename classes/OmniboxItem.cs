@@ -1,20 +1,35 @@
-﻿using MyHomelabBrowser.classes;
+using MyHomelabBrowser.classes;
+using System.Windows.Controls;
 
 enum OmniboxItemType
 {
     Command,
-    History
+    History,
+    Favorite,
+    Url,
+    Search,
+    Tab
 }
 
 class OmniboxItem
 {
     public OmniboxItemType Type { get; init; }
 
-    // commun
     public string Primary { get; init; } = "";
     public string? Secondary { get; init; }
 
-    // payload
+    // Glyphe Segoe Fluent Icons affiché à gauche de la suggestion.
+    public string Icon => Type switch
+    {
+        OmniboxItemType.Command => "",
+        OmniboxItemType.History => "",
+        OmniboxItemType.Favorite => "",
+        OmniboxItemType.Url => "",
+        OmniboxItemType.Tab => "",
+        _ => ""
+    };
+
+    public string? Url { get; init; }
     public CommandSetting? Command { get; init; }
-    public HistoryEntry? History { get; init; }
+    public TabItem? Tab { get; init; }
 }
