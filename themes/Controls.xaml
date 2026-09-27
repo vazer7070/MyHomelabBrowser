@@ -11,6 +11,9 @@
     <CornerRadius x:Key="ControlCornerRadius">8</CornerRadius>
     <CornerRadius x:Key="CardCornerRadius">12</CornerRadius>
 
+    <!-- Icône de navigation privée (chapeau et lunettes), grille 24 × 24. -->
+    <Geometry x:Key="PrivateIconGeometry">F1 M5.8,9.6 L7.7,3.8 C7.95,3.1 8.7,2.75 9.4,3 L12,3.9 L14.6,3 C15.3,2.75 16.05,3.1 16.3,3.8 L18.2,9.6 Z M2.8,10.6 H21.2 C21.65,10.6 22,10.95 22,11.4 V11.9 C22,12.35 21.65,12.7 21.2,12.7 H2.8 C2.35,12.7 2,12.35 2,11.9 V11.4 C2,10.95 2.35,10.6 2.8,10.6 Z M3,17.6 A3.9,3.9 0 1 1 10.8,17.6 A3.9,3.9 0 1 1 3,17.6 Z M4.9,17.6 A2,2 0 1 0 8.9,17.6 A2,2 0 1 0 4.9,17.6 Z M13.2,17.6 A3.9,3.9 0 1 1 21,17.6 A3.9,3.9 0 1 1 13.2,17.6 Z M15.1,17.6 A2,2 0 1 0 19.1,17.6 A2,2 0 1 0 15.1,17.6 Z M10.6,16.4 C11.5,15.8 12.5,15.8 13.4,16.4 L13.4,17.9 C12.5,17.4 11.5,17.4 10.6,17.9 Z</Geometry>
+
     <Style x:Key="FocusVisualStyleModern" TargetType="Control">
         <Setter Property="Template">
             <Setter.Value>
@@ -473,6 +476,30 @@
                                           ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
                                           TextElement.Foreground="{TemplateBinding Foreground}"/>
 
+                        <!-- Saisie libre (IsEditable) : la flèche reste cliquable à droite. -->
+                        <TextBox x:Name="PART_EditableTextBox"
+                                 Style="{x:Null}"
+                                 Visibility="Collapsed"
+                                 Margin="10,0,34,0"
+                                 VerticalAlignment="Center"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Cursor="IBeam"
+                                 Foreground="{TemplateBinding Foreground}"
+                                 CaretBrush="{StaticResource TextPrimaryBrush}"
+                                 SelectionBrush="{StaticResource AccentBrush}"
+                                 IsReadOnly="{Binding IsReadOnly, RelativeSource={RelativeSource TemplatedParent}}">
+                            <TextBox.Template>
+                                <ControlTemplate TargetType="TextBox">
+                                    <ScrollViewer x:Name="PART_ContentHost"
+                                                  Focusable="False"
+                                                  Background="Transparent"
+                                                  HorizontalScrollBarVisibility="Hidden"
+                                                  VerticalScrollBarVisibility="Hidden"/>
+                                </ControlTemplate>
+                            </TextBox.Template>
+                        </TextBox>
+
                         <Popup x:Name="PART_Popup"
                                Placement="Bottom"
                                VerticalOffset="4"
@@ -511,6 +538,10 @@
                         </Trigger>
                         <Trigger Property="HasItems" Value="False">
                             <Setter TargetName="DropDownBorder" Property="MinHeight" Value="40"/>
+                        </Trigger>
+                        <Trigger Property="IsEditable" Value="True">
+                            <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="ContentSite" Property="Visibility" Value="Hidden"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -839,7 +870,14 @@
     <!-- ================================================================
          INFOBULLES
          ================================================================ -->
+    <!--
+        Les infobulles et les menus contextuels héritent la police de l'élément qui les ouvre :
+        sur un bouton d'icône, ce serait la police d'icônes (texte affiché en carrés).
+    -->
     <Style TargetType="ToolTip">
+        <Setter Property="FontFamily" Value="{StaticResource TextFont}"/>
+        <Setter Property="FontWeight" Value="Normal"/>
+        <Setter Property="FontStyle" Value="Normal"/>
         <Setter Property="Background" Value="{StaticResource SurfaceRaisedBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource BorderStrongBrush}"/>
@@ -873,6 +911,9 @@
          MENUS
          ================================================================ -->
     <Style TargetType="ContextMenu">
+        <Setter Property="FontFamily" Value="{StaticResource TextFont}"/>
+        <Setter Property="FontWeight" Value="Normal"/>
+        <Setter Property="FontStyle" Value="Normal"/>
         <Setter Property="Background" Value="{StaticResource PanelBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource BorderStrongBrush}"/>
@@ -922,6 +963,7 @@
         sous-menu, élément de sous-menu). Le sous-menu utilise le même fond sombre.
     -->
     <Style TargetType="MenuItem">
+        <Setter Property="FontFamily" Value="{StaticResource TextFont}"/>
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Padding" Value="10,7"/>
@@ -1047,14 +1089,14 @@
     <Style TargetType="Window">
         <Setter Property="Background" Value="{StaticResource WindowBackgroundBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-        <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
+        <Setter Property="FontFamily" Value="{StaticResource TextFont}"/>
         <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
         <Setter Property="TextOptions.TextRenderingMode" Value="ClearType"/>
     </Style>
 
     <Style TargetType="UserControl">
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-        <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
+        <Setter Property="FontFamily" Value="{StaticResource TextFont}"/>
         <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
     </Style>
 
@@ -1076,7 +1118,7 @@
         <Setter Property="ShowInTaskbar" Value="False"/>
         <Setter Property="WindowStartupLocation" Value="CenterOwner"/>
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-        <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
+        <Setter Property="FontFamily" Value="{StaticResource TextFont}"/>
         <Setter Property="FontSize" Value="13"/>
         <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
         <Setter Property="UseLayoutRounding" Value="True"/>

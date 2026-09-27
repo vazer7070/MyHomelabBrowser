@@ -456,7 +456,7 @@ namespace MyHomelabBrowser
 
         void ClearFlashCompatibility_Click(object sender, RoutedEventArgs e)
         {
-            MessageBoxResult result = MessageBox.Show(
+            MessageBoxResult result = MessageDialog.Show(
                 Tr("Effacer les choix Ruffle/Legacy appris pour le profil actuel ?"),
                 Tr("Compatibilité Flash"),
                 MessageBoxButton.YesNo,
@@ -466,7 +466,7 @@ namespace MyHomelabBrowser
                 return;
 
             FlashCompatibilityMemory.ClearForCurrentProfile();
-            MessageBox.Show(
+            MessageDialog.Show(
                 Tr("La compatibilité apprise a été réinitialisée."),
                 Tr("Compatibilité Flash"),
                 MessageBoxButton.OK,
@@ -517,7 +517,7 @@ namespace MyHomelabBrowser
 
             if (!IsValidHost(host))
             {
-                MessageBox.Show(
+                MessageDialog.Show(
                     Tr("Domaine invalide.\nExemple : jeu.exemple.com"),
                     Tr("Erreur"),
                     MessageBoxButton.OK,

@@ -1,122 +1,60 @@
-﻿<Window x:Class="MyHomelabBrowser.controles.EditFavoriteDialog"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Width="420"
-        Height="260"
-        WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize"
-        WindowStyle="None"
-        AllowsTransparency="True"
-        Background="Transparent">
-
-    <Border CornerRadius="12"
-            Background="{StaticResource PanelBrush}"
-            BorderBrush="{StaticResource BorderBrush}"
-            BorderThickness="1">
-
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="48"/>   <!-- HEADER -->
-                <RowDefinition Height="*"/>    <!-- CONTENT -->
-                <RowDefinition Height="56"/>   <!-- FOOTER -->
-            </Grid.RowDefinitions>
-
-            <!-- ================= HEADER ================= -->
-            <Grid Grid.Row="0"
-                  Background="{StaticResource PanelBrush}">
+﻿<controles:DialogWindow x:Class="MyHomelabBrowser.controles.EditFavoriteDialog"
+                        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                        xmlns:controles="clr-namespace:MyHomelabBrowser.controles"
+                        Title="Modifier le favori"
+                        Width="460">
+    <StackPanel>
+        <!-- Rappel de la page concernée -->
+        <Border Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource ControlCornerRadius}"
+                Padding="10,8"
+                Margin="0,0,0,16">
+            <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition/>
-                    <ColumnDefinition Width="48"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-
-                <TextBlock Text="Modifier le favori"
+                <Image x:Name="FaviconImage"
+                       Width="16" Height="16"
+                       Margin="0,0,10,0"
+                       VerticalAlignment="Center"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                <TextBlock x:Name="UrlText"
+                           Grid.Column="1"
                            VerticalAlignment="Center"
-                           Margin="16,0"
-                           FontSize="16"
-                           FontWeight="SemiBold"
-                           Foreground="{StaticResource TextPrimaryBrush}"/>
-
-                <Button Grid.Column="1"
-                        Content="✕"
-                        Width="32"
-                        Height="32"
-                        Margin="8"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Foreground="{StaticResource TextSecondaryBrush}"
-                        Click="Cancel_Click"/>
+                           FontSize="12"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           TextTrimming="CharacterEllipsis"/>
             </Grid>
+        </Border>
 
-            <!-- ================= CONTENT ================= -->
-            <StackPanel Grid.Row="1"
-                        Margin="16,12"
-                        VerticalAlignment="Top">
+        <TextBlock Text="Titre" Style="{StaticResource DialogHintStyle}" Margin="0,0,0,6"/>
+        <TextBox x:Name="TitleBox" TextChanged="TitleBox_TextChanged"/>
 
-                <TextBlock Text="Titre"
-                           Foreground="{StaticResource TextSecondaryBrush}"
-                           Margin="0,0,0,4"/>
+        <TextBlock Text="Dossier (optionnel)" Style="{StaticResource DialogHintStyle}" Margin="0,14,0,6"/>
+        <ComboBox x:Name="FolderBox" IsEditable="True"/>
+        <TextBlock Text="Laissez vide pour ranger le favori à la racine de la barre."
+                   Style="{StaticResource DialogHintStyle}"
+                   FontSize="11.5"
+                   Margin="0,4,0,0"/>
 
-                <TextBox x:Name="TitleBox"
-                         Height="34"
-                         Padding="10,4"
-                         Background="{StaticResource SurfaceRaisedBrush}"
-                         Foreground="{StaticResource TextPrimaryBrush}"
-                         BorderThickness="0"
-                         Margin="0,0,0,16"/>
+        <Grid Margin="0,22,0,0">
+            <Button Content="Supprimer"
+                    HorizontalAlignment="Left"
+                    Style="{StaticResource DangerButtonStyle}"
+                    Click="Delete_Click"/>
 
-                <TextBlock Text="Dossier (optionnel)"
-                           Foreground="{StaticResource TextSecondaryBrush}"
-                           Margin="0,0,0,4"/>
-
-                <TextBox x:Name="FolderBox"
-                         Height="34"
-                         Padding="10,4"
-                         Background="{StaticResource SurfaceRaisedBrush}"
-                         Foreground="{StaticResource TextPrimaryBrush}"
-                         BorderThickness="0"/>
-            </StackPanel>
-
-            <!-- ================= FOOTER ================= -->
-            <Grid Grid.Row="2"
-                  Background="{StaticResource PanelBrush}">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <!-- Danger -->
-                <Button Grid.Column="0"
-                        Content="Supprimer"
-                        Margin="16,-3,16,3"
-                        Padding="14,6"
-                        Foreground="{StaticResource DangerBrush}"
-                        Background="{StaticResource DangerSoftBrush}"
-                        BorderThickness="0"
-                        Click="Delete_Click"/>
-
-                <!-- Cancel -->
-                <Button Grid.Column="2"
-                        Content="Annuler"
-                        Margin="0,-3,8,3"
-                        Padding="14,6"
-                        Background="{StaticResource SurfaceRaisedBrush}"
-                        Foreground="{StaticResource TextPrimaryBrush}"
-                        BorderThickness="0"
-                        Click="Cancel_Click"/>
-
-                <!-- OK -->
-                <Button Grid.Column="3"
-                        Content="OK"
-                        Margin="0,-4,16,4"
-                        Padding="16,6"
-                        Background="{StaticResource AccentStrongBrush}"
-                        Foreground="White"
-                        BorderThickness="0"
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Annuler" Command="ApplicationCommands.Close" Margin="0,0,8,0"/>
+                <Button x:Name="SaveButton"
+                        Content="Enregistrer"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        IsDefault="True"
                         Click="Ok_Click"/>
-            </Grid>
-
+            </StackPanel>
         </Grid>
-    </Border>
-</Window>
+    </StackPanel>
+</controles:DialogWindow>

@@ -125,7 +125,7 @@ namespace MyHomelabBrowser.controles.settings
                 return;
 
             CertificateImportResult result = _certificateService.ImportAuthorityForBrowser(filePath);
-            MessageBox.Show(
+            MessageDialog.Show(
                 result.Message,
                 result.Success ? Tr("Certificat ajouté") : Tr("Import impossible"),
                 MessageBoxButton.OK,
@@ -144,7 +144,7 @@ namespace MyHomelabBrowser.controles.settings
             if (SelectedCertificate is null || !SelectedCertificate.CanRemove)
                 return;
 
-            MessageBoxResult confirmation = MessageBox.Show(
+            MessageBoxResult confirmation = MessageDialog.Show(
                 Tr("Retirer « {0} » des autorités de confiance de ce profil PommeBrowser ?\n\n", SelectedCertificate.DisplayName) +
                 Tr("Les sites qui dépendent de cette CA pourront à nouveau afficher une erreur TLS."),
                 Tr("Retirer l’autorité"),
@@ -157,7 +157,7 @@ namespace MyHomelabBrowser.controles.settings
             CertificateOperationResult result =
                 _certificateService.RemoveBrowserAuthority(SelectedCertificate);
 
-            MessageBox.Show(
+            MessageDialog.Show(
                 result.Message,
                 result.Success ? Tr("Certificat retiré") : Tr("Suppression impossible"),
                 MessageBoxButton.OK,
@@ -177,7 +177,7 @@ namespace MyHomelabBrowser.controles.settings
             if (filePath is null)
                 return;
 
-            MessageBoxResult confirmation = MessageBox.Show(
+            MessageBoxResult confirmation = MessageDialog.Show(
                 Tr("Cette opération est différente de l’ajout à PommeBrowser.\n\n") +
                 Tr("L’autorité sera installée dans le magasin Windows de l’utilisateur courant et pourra être utilisée par d’autres applications de ce compte.\n\n") +
                 Tr("Continuer ?"),
@@ -191,7 +191,7 @@ namespace MyHomelabBrowser.controles.settings
             CertificateImportResult result =
                 _certificateService.ImportAuthorityToWindowsCurrentUser(filePath);
 
-            MessageBox.Show(
+            MessageDialog.Show(
                 result.Message,
                 result.Success ? Tr("Certificat installé") : Tr("Installation impossible"),
                 MessageBoxButton.OK,
@@ -233,7 +233,7 @@ namespace MyHomelabBrowser.controles.settings
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
+                MessageDialog.Show(
                     Tr("Impossible d’ouvrir le gestionnaire Windows : {0}", ex.Message),
                     Tr("Certificats"),
                     MessageBoxButton.OK,

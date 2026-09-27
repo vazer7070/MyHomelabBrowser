@@ -1,40 +1,26 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using MyHomelabBrowser.controles;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
+using System.Windows.Threading;
 
 namespace MyHomelabBrowser
 {
-    /// <summary>
-    /// Logique d'interaction pour AddLegacySiteDialog.xaml
-    /// </summary>
-    public partial class AddLegacySiteDialog : Window
+    public partial class AddLegacySiteDialog : DialogWindow
     {
         public string? ResultDomain { get; private set; }
 
         public AddLegacySiteDialog()
         {
             InitializeComponent();
+            Loaded += (_, _) => Dispatcher.BeginInvoke(() => DomainBox.Focus(), DispatcherPriority.Input);
+        }
 
-            OkBtn.Click += (_, _) =>
-            {
-                ResultDomain = DomainBox.Text;
-                DialogResult = true;
-                Close();
-            };
+        private void DomainBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+            => OkBtn.IsEnabled = DomainBox.Text.Trim().Length > 0;
 
-            CancelBtn.Click += (_, _) =>
-            {
-                DialogResult = false;
-                Close();
-            };
+        private void OkBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ResultDomain = DomainBox.Text.Trim();
+            DialogResult = true;
         }
     }
 }

@@ -59,7 +59,8 @@ namespace MyHomelabBrowser.controles
             {
                 ShowDialog(
                     Tr("Trop rapide"),
-                    Tr("Merci d’attendre quelques secondes avant un nouvel envoi."));
+                    Tr("Merci d’attendre quelques secondes avant un nouvel envoi."),
+                    MessageBoxImage.Warning);
                 return;
             }
 
@@ -72,7 +73,8 @@ namespace MyHomelabBrowser.controles
             {
                 ShowDialog(
                     Tr("Champs manquants"),
-                    Tr("Merci de remplir le titre et la description avant l’envoi."));
+                    Tr("Merci de remplir le titre et la description avant l’envoi."),
+                    MessageBoxImage.Warning);
                 return;
             }
 
@@ -80,11 +82,12 @@ namespace MyHomelabBrowser.controles
             {
                 ShowDialog(
                     Tr("Message trop long"),
-                    Tr("La description est trop longue pour être envoyée."));
+                    Tr("La description est trop longue pour être envoyée."),
+                    MessageBoxImage.Warning);
                 return;
             }
 
-            MessageBoxResult confirm = MessageBox.Show(
+            MessageBoxResult confirm = MessageDialog.Show(
                 Tr("Envoyer ce rapport concernant {0} ?", GetModuleLabel(module)),
                 Tr("Confirmation"),
                 MessageBoxButton.YesNo,
@@ -158,13 +161,15 @@ namespace MyHomelabBrowser.controles
             {
                 ShowDialog(
                     Tr("Rapport refusé"),
-                    ex.Message);
+                    ex.Message,
+                    MessageBoxImage.Error);
             }
             catch (Exception ex)
             {
                 ShowDialog(
                     Tr("Erreur d’envoi"),
-                    Tr("Impossible d’envoyer le message.\n\n") + ex.Message);
+                    Tr("Impossible d’envoyer le message.\n\n") + ex.Message,
+                    MessageBoxImage.Error);
             }
             finally
             {
@@ -389,12 +394,9 @@ Aucun log console n’a été généré pour cette session.
             }
         }
 
-        private void ShowDialog(string title, string message)
+        private void ShowDialog(string title, string message, MessageBoxImage image = MessageBoxImage.Information)
         {
-            ThemedDialogWindow.Show(
-                Window.GetWindow(this),
-                title,
-                message);
+            MessageDialog.Show(Window.GetWindow(this), message, title, MessageBoxButton.OK, image);
         }
 
         private static string GenerateReportId()

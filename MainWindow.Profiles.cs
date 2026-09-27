@@ -237,7 +237,7 @@ namespace MyHomelabBrowser
             }
             catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
             {
-                MessageBox.Show(this, ex.Message, Tr("Créer un profil"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageDialog.Show(this, ex.Message, Tr("Créer un profil"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 

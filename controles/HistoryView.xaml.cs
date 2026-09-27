@@ -105,7 +105,7 @@ namespace MyHomelabBrowser.controles
             if (_allVm.Count == 0)
                 return;
 
-            var answer = MessageBox.Show(
+            var answer = MessageDialog.Show(
                 Window.GetWindow(this),
                 Tr("Effacer tout l’historique de navigation de ce profil ?"),
                 Tr("Historique"),

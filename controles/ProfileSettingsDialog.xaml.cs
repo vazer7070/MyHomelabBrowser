@@ -19,7 +19,7 @@ namespace MyHomelabBrowser.controles
     /// <summary>
     /// Logique d'interaction pour ProfileSettingsDialog.xaml
     /// </summary>
-    public partial class ProfileSettingsDialog : Window
+    public partial class ProfileSettingsDialog : DialogWindow
     {
         readonly ProfileService _profileService;
         readonly CredentialVaultService _vault;
@@ -67,13 +67,13 @@ namespace MyHomelabBrowser.controles
                 var pw2 = confirm.Password;
                 if (!string.Equals(pw1, pw2, StringComparison.Ordinal))
                 {
-                    MessageBox.Show(Tr("Les mots de passe ne correspondent pas."));
+                    MessageDialog.Show(Tr("Les mots de passe ne correspondent pas."));
                     return;
                 }
 
                 if (!_vault.TryInitializeNewVault(pw1))
                 {
-                    MessageBox.Show(Tr("Impossible de créer le coffre."));
+                    MessageDialog.Show(Tr("Impossible de créer le coffre."));
                     return;
                 }
             }
@@ -90,7 +90,7 @@ namespace MyHomelabBrowser.controles
 
                 if (!_vault.TryUnlock(ask.Password))
                 {
-                    MessageBox.Show(Tr("Mot de passe du coffre incorrect (ou trop de tentatives)."));
+                    MessageDialog.Show(Tr("Mot de passe du coffre incorrect (ou trop de tentatives)."));
                     return;
                 }
             }
@@ -106,7 +106,7 @@ namespace MyHomelabBrowser.controles
 
             if (!_vault.VaultExists)
             {
-                MessageBox.Show(Tr("Le coffre n'est pas encore créé. Ouvrez-le une première fois pour définir un mot de passe."));
+                MessageDialog.Show(Tr("Le coffre n'est pas encore créé. Ouvrez-le une première fois pour définir un mot de passe."));
                 return;
             }
 
@@ -148,17 +148,17 @@ namespace MyHomelabBrowser.controles
 
             if (!string.Equals(newDlg.Password, confirm.Password, StringComparison.Ordinal))
             {
-                MessageBox.Show(Tr("Les mots de passe ne correspondent pas."));
+                MessageDialog.Show(Tr("Les mots de passe ne correspondent pas."));
                 return;
             }
 
             if (!_vault.TryChangeVaultPassword(oldDlg.Password, newDlg.Password))
             {
-                MessageBox.Show(Tr("Impossible de changer le mot de passe du coffre (ancien mot de passe incorrect ?)."));
+                MessageDialog.Show(Tr("Impossible de changer le mot de passe du coffre (ancien mot de passe incorrect ?)."));
                 return;
             }
 
-            MessageBox.Show(Tr("Mot de passe du coffre mis à jour."));
+            MessageDialog.Show(Tr("Mot de passe du coffre mis à jour."));
         }
 
 
@@ -170,14 +170,14 @@ namespace MyHomelabBrowser.controles
 
             if (username.Length == 0)
             {
-                MessageBox.Show(Tr("Le nom du profil est obligatoire."), Tr("Profil"),
+                MessageDialog.Show(Tr("Le nom du profil est obligatoire."), Tr("Profil"),
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             if (!string.IsNullOrEmpty(password) && password.Length < 6)
             {
-                MessageBox.Show(Tr("Le mot de passe doit faire au moins 6 caractères."), Tr("Profil"),
+                MessageDialog.Show(Tr("Le mot de passe doit faire au moins 6 caractères."), Tr("Profil"),
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -191,7 +191,7 @@ namespace MyHomelabBrowser.controles
             }
             catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
             {
-                MessageBox.Show(
+                MessageDialog.Show(
                     ex is InvalidOperationException
                         ? ex.Message
                         : Tr("Impossible de renommer le dossier du profil. Fermez les onglets Flash Legacy puis réessayez.\n\n") + ex.Message,
@@ -206,7 +206,7 @@ namespace MyHomelabBrowser.controles
 
         private void Delete_Click(object sender, RoutedEventArgs e)
         {
-            var res = MessageBox.Show(
+            var res = MessageDialog.Show(
                 Tr("Supprimer ce profil définitivement ?"),
                 Tr("Confirmation"),
                 MessageBoxButton.YesNo,

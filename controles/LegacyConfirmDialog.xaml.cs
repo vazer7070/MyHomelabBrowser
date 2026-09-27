@@ -2,9 +2,9 @@
 
 namespace MyHomelabBrowser.controles
 {
-    public partial class LegacyConfirmDialog : Window
+    public partial class LegacyConfirmDialog : DialogWindow
     {
-        public bool AddRule { get; private set; } = false;
+        public bool AddRule { get; private set; }
 
         public LegacyConfirmDialog()
         {
@@ -15,13 +15,6 @@ namespace MyHomelabBrowser.controles
         {
             AddRule = AddRuleCheck.IsChecked == true;
             DialogResult = true;
-            Close();
-        }
-
-        private void Cancel_Click(object sender, RoutedEventArgs e)
-        {
-            DialogResult = false;
-            Close();
         }
     }
 }

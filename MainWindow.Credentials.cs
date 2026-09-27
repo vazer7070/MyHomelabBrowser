@@ -231,7 +231,7 @@ namespace MyHomelabBrowser
 
                 if (!string.Equals(first.Password, confirmation.Password, StringComparison.Ordinal))
                 {
-                    MessageBox.Show(
+                    MessageDialog.Show(
                         this,
                         Tr("Les mots de passe ne correspondent pas."),
                         Tr("Coffre des mots de passe"),
@@ -242,7 +242,7 @@ namespace MyHomelabBrowser
 
                 if (!_vault.TryInitializeNewVault(first.Password))
                 {
-                    MessageBox.Show(
+                    MessageDialog.Show(
                         this,
                         Tr("Impossible de créer le coffre."),
                         Tr("Coffre des mots de passe"),
@@ -270,7 +270,7 @@ namespace MyHomelabBrowser
                 ? Tr("Le coffre est temporairement verrouillé jusqu’à {0:HH:mm:ss}.", lockedUntil.Value.ToLocalTime())
                 : Tr("Mot de passe du coffre incorrect.");
 
-            MessageBox.Show(
+            MessageDialog.Show(
                 this,
                 message,
                 Tr("Coffre des mots de passe"),

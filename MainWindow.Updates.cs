@@ -1,4 +1,5 @@
 using MyHomelabBrowser.classes;
+using MyHomelabBrowser.controles;
 using System.Windows;
 using static MyHomelabBrowser.classes.Localization.Loc;
 
@@ -146,7 +147,7 @@ namespace MyHomelabBrowser
                 {
                     view.SetUpdateStatus(Tr("Erreur pendant l'installation."));
                     view.ShowUpdateProgress(false);
-                    MessageBox.Show(this, Tr("Erreur de mise à jour :\n") + ex.Message, Tr("Mise à jour"),
+                    MessageDialog.Show(this, Tr("Erreur de mise à jour :\n") + ex.Message, Tr("Mise à jour"),
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
                 finally

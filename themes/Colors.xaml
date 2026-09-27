@@ -99,6 +99,7 @@
 
     <!-- Police d'icônes : Segoe Fluent Icons (Windows 11), repli MDL2 (Windows 10). -->
     <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+    <FontFamily x:Key="TextFont">Segoe UI Variable Text, Segoe UI</FontFamily>
 
     <DropShadowEffect x:Key="PopupShadow"
                       BlurRadius="28"

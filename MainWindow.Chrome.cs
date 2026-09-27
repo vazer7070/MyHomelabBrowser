@@ -291,12 +291,9 @@ namespace MyHomelabBrowser
 
         void EditFavorite(FavoriteItem fav)
         {
-            var dlg = new EditFavoriteDialog(fav)
-            {
-                Owner = this
-            };
+            var dlg = new EditFavoriteDialog(fav, _favorites.Where(f => f.Folder != null).Select(f => f.Folder!));
 
-            if (dlg.ShowDialog() != true)
+            if (!dlg.ShowFor(this))
                 return;
 
             if (dlg.Deleted)
