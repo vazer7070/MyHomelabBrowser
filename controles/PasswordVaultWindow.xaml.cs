@@ -113,6 +113,21 @@ namespace MyHomelabBrowser.controles
             dialog.ShowDialog();
         }
 
+        private void Totp_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not CredentialEntry credential)
+                return;
+
+            var dialog = new TotpDialog(_vault, credential);
+            dialog.ShowFor(this);
+
+            if (dialog.Changed)
+            {
+                Refresh();
+                ShowStatus(credential.HasTotp ? "Code de double authentification enregistré." : "Code de double authentification retiré.");
+            }
+        }
+
         private async void Copy_Click(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is not CredentialEntry credential)

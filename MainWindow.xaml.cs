@@ -102,6 +102,8 @@ namespace MyHomelabBrowser
 
             _settings = new SettingsService();
             InitializeAdBlockModule();
+            InitializeHomelab();
+            InitializeCertificatePrompts();
 
             _legacyLauncher = new LegacyLauncher(_settings);
             _settings.SettingsChanged += ApplySettings;
@@ -133,6 +135,7 @@ namespace MyHomelabBrowser
 
                 Dispatcher.Invoke(() =>
                 {
+                    ReloadHomelabForProfile();
                     RefreshProfileUI();
                     RefreshFavoritesBar();
                     UpdateFavoriteButton();

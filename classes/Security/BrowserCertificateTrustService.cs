@@ -1,5 +1,6 @@
 using Microsoft.Web.WebView2.Core;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -9,11 +10,46 @@ using System.Threading.Tasks;
 
 namespace MyHomelabBrowser.classes.Security
 {
+    /// <summary>
+    /// Certificat non reconnu présenté par un service local : l'utilisateur décide
+    /// s'il lui fait confiance (confiance au premier usage).
+    /// </summary>
+    public sealed record CertificatePromptRequest(
+        Uri Uri,
+        string Sha256,
+        string Subject,
+        string Issuer,
+        DateTime NotBefore,
+        DateTime NotAfter,
+        bool IsSelfSigned,
+        bool NameMismatch,
+        PinnedCertificate? PreviousPin)
+    {
+        public string Authority => CertificatePinStore.AuthorityFor(Uri);
+        public bool IsExpired => NotAfter < DateTime.Now || NotBefore > DateTime.Now;
+        public bool HasChanged => PreviousPin != null;
+    }
+
     public sealed class BrowserCertificateTrustService
     {
         private const string ServerAuthenticationOid = "1.3.6.1.5.5.7.3.1";
+        private const string PinFileName = "pinned-certificates.json";
         private readonly object _sync = new();
         private readonly List<AttachedWebView> _attachedWebViews = new();
+        private readonly ConcurrentDictionary<string, CertificatePinStore> _pinStores = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, Task<bool>> _pendingPrompts = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Demande à l'utilisateur s'il fait confiance au certificat (appelé sur le thread UI).
+        /// Sans gestionnaire, la page d'avertissement du moteur s'affiche.
+        /// </summary>
+        public Func<CertificatePromptRequest, Task<bool>>? PromptAsync { get; set; }
+
+        public CertificatePinStore GetPinStore(string profileRoot)
+        {
+            string root = Path.GetFullPath(profileRoot);
+            return _pinStores.GetOrAdd(root, r => new CertificatePinStore(() => Path.Combine(r, PinFileName)));
+        }
 
         public void Attach(CoreWebView2 coreWebView, string profileRoot)
         {
@@ -92,10 +128,19 @@ namespace MyHomelabBrowser.classes.Security
                     return;
                 }
 
-                if (args.ErrorStatus is CoreWebView2WebErrorStatus.CertificateExpired
-                    or CoreWebView2WebErrorStatus.CertificateCommonNameIsIncorrect
-                    or CoreWebView2WebErrorStatus.CertificateRevoked
+                bool isLocal = UrlResolver.IsLocalHost(requestUri.Host);
+
+                if (args.ErrorStatus is CoreWebView2WebErrorStatus.CertificateRevoked
                     or CoreWebView2WebErrorStatus.ClientCertificateContainsErrors)
+                {
+                    args.Action = CoreWebView2ServerCertificateErrorAction.Cancel;
+                    return;
+                }
+
+                // Sur Internet, un certificat expiré ou au mauvais nom n'est jamais accepté.
+                // Pour un service local (accès par IP, certificat d'usine), l'utilisateur décide.
+                if (!isLocal && args.ErrorStatus is CoreWebView2WebErrorStatus.CertificateExpired
+                    or CoreWebView2WebErrorStatus.CertificateCommonNameIsIncorrect)
                 {
                     args.Action = CoreWebView2ServerCertificateErrorAction.Cancel;
                     return;
@@ -125,8 +170,14 @@ namespace MyHomelabBrowser.classes.Security
                     requestUri,
                     profileRoot));
 
-                args.Action = trusted
-                    ? CoreWebView2ServerCertificateErrorAction.AlwaysAllow
+                if (trusted)
+                {
+                    args.Action = CoreWebView2ServerCertificateErrorAction.AlwaysAllow;
+                    return;
+                }
+
+                args.Action = isLocal
+                    ? await DecideLocalCertificateAsync(requestUri, leafRaw, profileRoot)
                     : CoreWebView2ServerCertificateErrorAction.Default;
             }
             catch
@@ -137,6 +188,58 @@ namespace MyHomelabBrowser.classes.Security
             {
                 deferral.Complete();
             }
+        }
+
+        /// <summary>
+        /// Confiance au premier usage : un certificat accepté est épinglé pour l'hôte et le port.
+        /// </summary>
+        private async Task<CoreWebView2ServerCertificateErrorAction> DecideLocalCertificateAsync(
+            Uri requestUri,
+            byte[] leafRaw,
+            string profileRoot)
+        {
+            using var leaf = X509CertificateLoader.LoadCertificate(leafRaw);
+            string sha256 = leaf.GetCertHashString(HashAlgorithmName.SHA256);
+            CertificatePinStore pins = GetPinStore(profileRoot);
+
+            CertificatePinMatch match = pins.Check(requestUri, sha256);
+            if (match == CertificatePinMatch.Matches)
+                return CoreWebView2ServerCertificateErrorAction.AlwaysAllow;
+
+            Func<CertificatePromptRequest, Task<bool>>? prompt = PromptAsync;
+            if (prompt == null)
+                return CoreWebView2ServerCertificateErrorAction.Default;
+
+            var request = new CertificatePromptRequest(
+                requestUri,
+                sha256,
+                leaf.Subject,
+                leaf.Issuer,
+                leaf.NotBefore,
+                leaf.NotAfter,
+                IsSelfSigned: string.Equals(leaf.Subject, leaf.Issuer, StringComparison.OrdinalIgnoreCase),
+                NameMismatch: !leaf.MatchesHostname(requestUri.IdnHost, allowWildcards: true, allowCommonName: true),
+                PreviousPin: match == CertificatePinMatch.Changed ? pins.Get(requestUri) : null);
+
+            // Les ressources d'une même page déclenchent plusieurs erreurs : une seule question.
+            string key = profileRoot + "|" + request.Authority + "|" + CertificatePinStore.NormalizeFingerprint(sha256);
+            Task<bool> decision = _pendingPrompts.GetOrAdd(key, _ => prompt(request));
+
+            bool accepted;
+            try
+            {
+                accepted = await decision;
+            }
+            finally
+            {
+                _pendingPrompts.TryRemove(key, out _);
+            }
+
+            if (!accepted)
+                return CoreWebView2ServerCertificateErrorAction.Cancel;
+
+            pins.Pin(requestUri, sha256, leaf.Subject, leaf.Issuer, leaf.NotAfter);
+            return CoreWebView2ServerCertificateErrorAction.AlwaysAllow;
         }
 
         private static bool ValidateWithBrowserAuthorities(

@@ -248,6 +248,66 @@
                     </StackPanel>
                 </Border>
 
+                <!-- SERVICES DU HOMELAB -->
+                <Border Style="{StaticResource SettingsCard}">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="&#xE968;"
+                                       FontFamily="{StaticResource IconFont}"
+                                       FontSize="18"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2"
+                                       Text="Services du homelab"
+                                       Style="{StaticResource SettingsTitle}"
+                                       Margin="0"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <TextBlock Text="Les services s’ajoutent depuis la page d’accueil ou le menu « Ajouter la page aux services »."
+                                   Style="{StaticResource SettingsLabel}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,10"/>
+
+                        <CheckBox Content="Vérifier régulièrement que les services répondent"
+                                  IsChecked="{Binding ServiceMonitoring}"
+                                  Margin="0,0,0,10"/>
+
+                        <Grid Margin="24,0,0,10"
+                              IsEnabled="{Binding ServiceMonitoring}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="200"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Fréquence"
+                                       Style="{StaticResource SettingsLabel}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,12,0"/>
+                            <ComboBox x:Name="ServiceIntervalBox"
+                                      Grid.Column="1"
+                                      Style="{StaticResource DnsComboBoxStyle}"
+                                      SelectedValuePath="Value"
+                                      SelectedValue="{Binding ServiceCheckIntervalSeconds, Mode=TwoWay}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Label}" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
+
+                        <CheckBox Content="Me prévenir quand un service tombe ou revient"
+                                  IsChecked="{Binding ServiceAlerts}"
+                                  IsEnabled="{Binding ServiceMonitoring}"
+                                  Margin="24,0,0,0"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- DNS -->
                 <Border Style="{StaticResource SettingsCard}">
                     <StackPanel>
@@ -391,6 +451,11 @@
                                        FontSize="12"
                                        Foreground="{StaticResource TextMutedBrush}"
                                        Text="Chargement des certificats du profil…"/>
+                            <Button Content="Certificats acceptés pour les services locaux…"
+                                    Style="{StaticResource TextButtonStyle}"
+                                    HorizontalAlignment="Left"
+                                    Margin="-8,6,0,0"
+                                    Click="OpenPinnedCertificates_Click"/>
                         </StackPanel>
 
                         <Button Grid.Column="2"

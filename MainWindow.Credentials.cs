@@ -1,4 +1,6 @@
+using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Profiles.Credentials;
+using MyHomelabBrowser.classes.Security;
 using MyHomelabBrowser.controles;
 using System.Diagnostics;
 using System.Text.Json;
@@ -276,7 +278,7 @@ namespace MyHomelabBrowser
             return false;
         }
 
-        void FillCredential_Click(object sender, RoutedEventArgs e)
+        async void FillCredential_Click(object sender, RoutedEventArgs e)
         {
             if (Tabs.SelectedItem is not TabItem tab ||
                 tab.Tag is not WebTabContent content)
@@ -304,10 +306,17 @@ namespace MyHomelabBrowser
             var usernameJson = JsonSerializer.Serialize(credential.Username);
             var passwordJson = JsonSerializer.Serialize(credential.Password);
 
+            // Code de double authentification, s'il est enregistré pour ce compte.
+            string? otpCode = credential.HasTotp && Totp.TryParse(credential.TotpSecret, out TotpParameters totp, out _)
+                ? Totp.Generate(totp, DateTimeOffset.UtcNow)
+                : null;
+            var otpJson = JsonSerializer.Serialize(otpCode);
+
             var script = $$"""
             (() => {
               let username = {{usernameJson}};
               let password = {{passwordJson}};
+              let otp = {{otpJson}};
 
               function isUsable(element) {
                 if (!element || element.disabled || element.readOnly) return false;
@@ -331,16 +340,31 @@ namespace MyHomelabBrowser
                 document.querySelectorAll('input[type="password"]')
               ).filter(isUsable);
 
-              if (passwordFields.length === 0) return;
+              // Page de double authentification : pas de mot de passe, un champ de code.
+              if (passwordFields.length === 0) {
+                if (!otp) return 'none';
+                const hint = /(otp|totp|2fa|mfa|two.?factor|one.?time|verif|token|code)/i;
+                const otpField =
+                  Array.from(document.querySelectorAll('input[autocomplete="one-time-code"]')).find(isUsable) ||
+                  Array.from(document.querySelectorAll('input')).find(el =>
+                    isUsable(el) &&
+                    ['text', 'tel', 'number', ''].includes((el.getAttribute('type') || '').toLowerCase()) &&
+                    hint.test([el.name, el.id, el.placeholder, el.getAttribute('aria-label')].join(' ')));
+                if (!otpField || otpField.value) return 'none';
+                setValue(otpField, otp);
+                otp = '';
+                return 'otp';
+              }
+
               if (passwordFields.some(field =>
-                    (field.autocomplete || '').toLowerCase() === 'new-password')) return;
+                    (field.autocomplete || '').toLowerCase() === 'new-password')) return 'none';
 
               const passwordField =
                 passwordFields.find(field =>
                   (field.autocomplete || '').toLowerCase() === 'current-password') ||
                 (passwordFields.length === 1 ? passwordFields[0] : null);
 
-              if (!passwordField) return;
+              if (!passwordField) return 'none';
 
               const root = passwordField.form || document;
               const usernameField =
@@ -358,10 +382,33 @@ namespace MyHomelabBrowser
 
               username = '';
               password = '';
+              otp = '';
+              return 'password';
             })();
             """;
 
-            _ = web.ExecuteScriptAsync(script);
+            string result;
+            try
+            {
+                result = await web.ExecuteScriptAsync(script);
+            }
+            catch
+            {
+                return;
+            }
+
+            if (otpCode == null)
+                return;
+
+            if (result == "\"otp\"")
+            {
+                ShowToast("Code 2FA rempli", credential.DisplayHost, ToastKind.Success);
+            }
+            else if (ClipboardHelper.TryCopyWithAutoClear(otpCode))
+            {
+                // Le code sera demandé à l'étape suivante : il est prêt à être collé.
+                ShowToast("Code 2FA copié", "Collez-le à l’étape de double authentification (effacé du presse-papiers dans 30 s).", ToastKind.Info);
+            }
         }
 
         void UpdateFillCredentialButtonState()

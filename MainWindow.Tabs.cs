@@ -181,6 +181,7 @@ namespace MyHomelabBrowser
                 else
                     _ = CreateTabInternal(url);
             };
+            WireStartPageServices(view, owningTab);
             return view;
         }
 

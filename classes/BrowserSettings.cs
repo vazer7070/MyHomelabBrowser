@@ -32,6 +32,13 @@ namespace MyHomelabBrowser.classes
         public int SuspendDelayMinutes { get; set; } = 5;
 
         // --------------------
+        // Services du homelab (page d'accueil)
+        // --------------------
+        public bool ServiceMonitoring { get; set; } = true;
+        public int ServiceCheckIntervalSeconds { get; set; } = 60;
+        public bool ServiceAlerts { get; set; } = true;
+
+        // --------------------
         // Téléchargements
         // --------------------
         public string DownloadFolder { get; set; }
@@ -81,6 +88,10 @@ namespace MyHomelabBrowser.classes
 
                 EnableSuspension = EnableSuspension,
                 SuspendDelayMinutes = SuspendDelayMinutes,
+
+                ServiceMonitoring = ServiceMonitoring,
+                ServiceCheckIntervalSeconds = ServiceCheckIntervalSeconds,
+                ServiceAlerts = ServiceAlerts,
 
                 EnableCommands = EnableCommands,
                 DownloadFolder = DownloadFolder,

@@ -1,0 +1,44 @@
+<controles:DialogWindow x:Class="MyHomelabBrowser.controles.PinnedCertificatesDialog"
+                        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                        xmlns:controles="clr-namespace:MyHomelabBrowser.controles"
+                        Title="Certificats acceptés"
+                        Width="560">
+    <StackPanel>
+        <TextBlock Text="Certificats non reconnus que vous avez acceptés pour des services locaux. Retirer un certificat fera réapparaître la question à la prochaine visite."
+                   Style="{StaticResource DialogHintStyle}"
+                   Margin="0,0,0,12"/>
+
+        <ListBox x:Name="PinsList" MaxHeight="320" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="4,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="{Binding Authority}" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding Detail}" Style="{StaticResource DialogHintStyle}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+                        </StackPanel>
+                        <Button Grid.Column="1"
+                                Content="Retirer"
+                                Style="{StaticResource TextButtonStyle}"
+                                VerticalAlignment="Center"
+                                Tag="{Binding Authority}"
+                                Click="Remove_Click"/>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <TextBlock x:Name="EmptyText"
+                   Text="Aucun certificat accepté pour le moment."
+                   Style="{StaticResource DialogHintStyle}"
+                   Visibility="Collapsed"/>
+
+        <StackPanel Style="{StaticResource DialogButtonBarStyle}">
+            <Button Content="Fermer" Command="ApplicationCommands.Close" IsDefault="True"/>
+        </StackPanel>
+    </StackPanel>
+</controles:DialogWindow>

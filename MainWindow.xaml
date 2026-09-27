@@ -151,6 +151,11 @@
                     <TextBlock Text="&#xE72E;"/>
                 </MenuItem.Icon>
             </MenuItem>
+            <MenuItem Header="Ajouter la page aux services…" Click="MainMenu_AddService_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE968;"/>
+                </MenuItem.Icon>
+            </MenuItem>
             <MenuItem Header="Importer des favoris…" Click="MainMenu_ImportFavorites_Click">
                 <MenuItem.Icon>
                     <TextBlock Text="&#xE8B5;"/>

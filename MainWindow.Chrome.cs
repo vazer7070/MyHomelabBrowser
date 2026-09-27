@@ -302,6 +302,8 @@ namespace MyHomelabBrowser
                     page.SetFavorites(_favorites);
                 }
             }
+
+            RefreshStartPageServices();
         }
 
         string? GetCurrentPageUrl()

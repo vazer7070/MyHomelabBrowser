@@ -1,10 +1,15 @@
 <UserControl x:Class="MyHomelabBrowser.controles.EmptyStartPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controles="clr-namespace:MyHomelabBrowser.controles"
+             xmlns:homelab="clr-namespace:MyHomelabBrowser.classes.Homelab"
              Background="{StaticResource WindowBackgroundBrush}"
-             Loaded="StartPage_Loaded">
+             Loaded="StartPage_Loaded"
+             Unloaded="StartPage_Unloaded">
 
     <UserControl.Resources>
+        <controles:FaviconForUrlConverter x:Key="FaviconForUrl"/>
+
         <!-- Logo décodé à sa taille d'affichage (l'original fait 1024 px, soit 4 Mo en mémoire). -->
         <BitmapImage x:Key="LogoImage"
                      UriSource="pack://application:,,,/Assets/PommeBrowser_geek.png"
@@ -202,6 +207,177 @@
                            Foreground="{StaticResource TextTertiaryBrush}"
                            HorizontalAlignment="Center"
                            Margin="0,12,0,0"/>
+
+                <!-- ================= SERVICES ================= -->
+                <StackPanel x:Name="ServicesSection" Margin="0,36,0,0">
+                    <Grid Margin="6,0,6,6">
+                        <TextBlock Text="Mes services"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextTertiaryBrush}"
+                                   VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button x:Name="CheckAllServicesButton"
+                                    Style="{StaticResource TextButtonStyle}"
+                                    FontSize="12"
+                                    MinHeight="24"
+                                    Padding="8,2"
+                                    ToolTip="Vérifier l’état de tous les services"
+                                    Click="CheckAllServices_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE72C;" FontFamily="{StaticResource IconFont}" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock Text="Actualiser"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource TextButtonStyle}"
+                                    FontSize="12"
+                                    MinHeight="24"
+                                    Padding="8,2"
+                                    Click="AddService_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE710;" FontFamily="{StaticResource IconFont}" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock Text="Ajouter"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <ItemsControl x:Name="ServicesTiles" HorizontalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel HorizontalAlignment="Center" MaxWidth="600"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.GroupStyle>
+                            <GroupStyle>
+                                <GroupStyle.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock x:Name="GroupHeader"
+                                                   Text="{Binding Name}"
+                                                   FontSize="11.5"
+                                                   Foreground="{StaticResource TextTertiaryBrush}"
+                                                   HorizontalAlignment="Center"
+                                                   Margin="0,10,0,0"/>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding Name}" Value="{x:Null}">
+                                                <Setter TargetName="GroupHeader" Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </GroupStyle.HeaderTemplate>
+                            </GroupStyle>
+                        </ItemsControl.GroupStyle>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type homelab:ServiceTile}">
+                                <Button Style="{StaticResource TileButtonStyle}"
+                                        Width="116"
+                                        Height="104"
+                                        Tag="{Binding}"
+                                        Click="ServiceTile_Click"
+                                        PreviewMouseUp="ServiceTile_PreviewMouseUp">
+                                    <Button.ToolTip>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Url}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding StatusText}"/>
+                                        </StackPanel>
+                                    </Button.ToolTip>
+                                    <Button.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Ouvrir dans un nouvel onglet" Click="ServiceOpenInNewTab_Click"/>
+                                            <MenuItem Header="Vérifier maintenant" Click="ServiceCheck_Click"/>
+                                            <Separator/>
+                                            <MenuItem Header="Modifier…" Click="ServiceEdit_Click"/>
+                                            <MenuItem Header="Supprimer" Click="ServiceDelete_Click"/>
+                                        </ContextMenu>
+                                    </Button.ContextMenu>
+                                    <StackPanel>
+                                        <Grid Width="46" Height="46" HorizontalAlignment="Center">
+                                            <Border Width="44" Height="44"
+                                                    CornerRadius="22"
+                                                    Background="{StaticResource SurfaceRaisedBrush}">
+                                                <Grid>
+                                                    <TextBlock Text="{Binding Initial}"
+                                                               FontSize="17"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{StaticResource AccentBrush}"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                                    <Border Width="44" Height="44" CornerRadius="22"
+                                                            Background="{StaticResource SurfaceRaisedBrush}"
+                                                            Visibility="{Binding Source, ElementName=ServiceIcon, Converter={StaticResource NonEmptyToVisibility}}">
+                                                        <Image x:Name="ServiceIcon"
+                                                               Source="{Binding Url, Converter={StaticResource FaviconForUrl}}"
+                                                               Width="22" Height="22"
+                                                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+                                            <Ellipse x:Name="StatusDot"
+                                                     Width="13" Height="13"
+                                                     HorizontalAlignment="Right"
+                                                     VerticalAlignment="Bottom"
+                                                     StrokeThickness="2.5"
+                                                     Stroke="{StaticResource WindowBackgroundBrush}"
+                                                     Fill="{StaticResource TextTertiaryBrush}"/>
+                                        </Grid>
+                                        <TextBlock Text="{Binding Name}"
+                                                   Margin="0,7,0,0"
+                                                   FontSize="12"
+                                                   MaxWidth="100"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   TextAlignment="Center"
+                                                   HorizontalAlignment="Center"
+                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"/>
+                                        <TextBlock x:Name="StatusLabel"
+                                                   Text="{Binding StatusText}"
+                                                   FontSize="10.5"
+                                                   MaxWidth="104"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   TextAlignment="Center"
+                                                   HorizontalAlignment="Center"
+                                                   Foreground="{StaticResource TextTertiaryBrush}"/>
+                                    </StackPanel>
+                                </Button>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding State}" Value="Online">
+                                        <Setter TargetName="StatusDot" Property="Fill" Value="{StaticResource SuccessBrush}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding State}" Value="Degraded">
+                                        <Setter TargetName="StatusDot" Property="Fill" Value="{StaticResource WarningBrush}"/>
+                                        <Setter TargetName="StatusLabel" Property="Foreground" Value="{StaticResource WarningBrush}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding State}" Value="Offline">
+                                        <Setter TargetName="StatusDot" Property="Fill" Value="{StaticResource DangerBrush}"/>
+                                        <Setter TargetName="StatusLabel" Property="Foreground" Value="{StaticResource DangerBrush}"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Aucun service : invitation à en ajouter -->
+                    <Border x:Name="ServicesEmptyState"
+                            Margin="6,4,6,0"
+                            Padding="16,14"
+                            CornerRadius="12"
+                            Background="{StaticResource SurfaceBrush}"
+                            Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock Text="Ajoutez les services de votre homelab (NAS, Proxmox, routeur…) pour voir d’un coup d’œil s’ils répondent."
+                                       TextWrapping="Wrap"
+                                       TextAlignment="Center"
+                                       FontSize="12.5"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
+                                <Button Content="Ajouter un service" Click="AddService_Click" Margin="0,0,8,0"/>
+                                <Button x:Name="ImportLocalFavoritesButton"
+                                        Style="{StaticResource TextButtonStyle}"
+                                        Click="ImportLocalFavorites_Click"
+                                        Visibility="Collapsed"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
 
                 <!-- ================= FAVORIS ================= -->
                 <StackPanel x:Name="FavoritesSection" Margin="0,36,0,0" Visibility="Collapsed">

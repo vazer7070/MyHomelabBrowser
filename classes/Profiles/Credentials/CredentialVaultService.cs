@@ -411,6 +411,29 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             Save();
         }
 
+        /// <summary>
+        /// Associe (ou retire, avec null) une clé TOTP à un identifiant enregistré.
+        /// </summary>
+        public void SetTotpSecret(string origin, string username, string? secret)
+        {
+            EnsureUnlocked();
+            var normalizedOrigin = CredentialOrigin.NormalizeStoredValue(origin);
+            var existing = _cache.FirstOrDefault(x =>
+                string.Equals(x.Host, normalizedOrigin, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(x.Username, username, StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException("Identifiant introuvable dans le coffre.");
+
+            if (!string.IsNullOrWhiteSpace(secret) &&
+                !MyHomelabBrowser.classes.Security.Totp.TryParse(secret, out _, out string error))
+            {
+                throw new ArgumentException(error, nameof(secret));
+            }
+
+            existing.TotpSecret = string.IsNullOrWhiteSpace(secret) ? null : secret.Trim();
+            existing.UpdatedAt = DateTime.UtcNow;
+            Save();
+        }
+
         public void Delete(string origin, string username)
         {
             EnsureUnlocked();

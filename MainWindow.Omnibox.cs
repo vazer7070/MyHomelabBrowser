@@ -32,6 +32,8 @@ namespace MyHomelabBrowser
                     page.SearchEngine = s.Search;
                 }
             }
+
+            ApplyServiceMonitoringSettings(s);
         }
 
         // ---------------------------

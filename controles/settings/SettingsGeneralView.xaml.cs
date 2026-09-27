@@ -49,6 +49,14 @@ namespace MyHomelabBrowser.controles.settings
                     "Personnalisé")
             };
 
+            ServiceIntervalBox.ItemsSource = new[]
+            {
+                new DnsOption<int>(30, "Toutes les 30 secondes"),
+                new DnsOption<int>(60, "Toutes les minutes"),
+                new DnsOption<int>(300, "Toutes les 5 minutes"),
+                new DnsOption<int>(900, "Toutes les 15 minutes")
+            };
+
             SearchEngineBox.ItemsSource = Enum.GetValues<BrowserSettings.SearchEngine>()
                 .Select(engine => new DnsOption<BrowserSettings.SearchEngine>(engine, UrlResolver.GetSearchEngineName(engine)))
                 .ToArray();
@@ -209,6 +217,9 @@ namespace MyHomelabBrowser.controles.settings
             window.ShowDialog();
             _ = UpdateCertificateSummaryAsync();
         }
+
+        private void OpenPinnedCertificates_Click(object sender, RoutedEventArgs e)
+            => new PinnedCertificatesDialog().ShowFor(Window.GetWindow(this));
 
         public sealed record DnsOption<T>(T Value, string Label)
         {

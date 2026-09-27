@@ -34,6 +34,13 @@
     <Compile Include="..\..\classes\FavoriteItem.cs" Link="App\FavoriteItem.cs" />
     <Compile Include="..\..\classes\SiteZoomStore.cs" Link="App\SiteZoomStore.cs" />
     <Compile Include="..\..\classes\Import\BookmarkImporter.cs" Link="App\Import\BookmarkImporter.cs" />
+    <Compile Include="..\..\classes\Security\Totp.cs" Link="App\Security\Totp.cs" />
+    <Compile Include="..\..\classes\Security\CertificatePinStore.cs" Link="App\Security\CertificatePinStore.cs" />
+    <Compile Include="..\..\classes\Homelab\HomelabService.cs" Link="App\Homelab\HomelabService.cs" />
+    <Compile Include="..\..\classes\Homelab\HomelabServiceStore.cs" Link="App\Homelab\HomelabServiceStore.cs" />
+    <Compile Include="..\..\classes\Homelab\ServiceHealthChecker.cs" Link="App\Homelab\ServiceHealthChecker.cs" />
+    <Compile Include="..\..\classes\Homelab\ServiceMonitor.cs" Link="App\Homelab\ServiceMonitor.cs" />
+    <Compile Include="..\..\classes\Workspaces\WorkspaceStore.cs" Link="App\Workspaces\WorkspaceStore.cs" />
     <Compile Include="..\..\classes\Profiles\PasswordHasher.cs" Link="App\Profiles\PasswordHasher.cs" />
     <Compile Include="..\..\classes\Profiles\ProfileNameRules.cs" Link="App\Profiles\ProfileNameRules.cs" />
     <Compile Include="..\..\classes\Profiles\WebViewProfileData.cs" Link="App\Profiles\WebViewProfileData.cs" />
