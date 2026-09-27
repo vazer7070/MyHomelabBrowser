@@ -18,13 +18,7 @@
             <classes:EnumOpacityConverter x:Key="EnumOpacityConverter"/>
 
             <classes:BoolToVisibility x:Key="BoolToVisibility"/>
-
-
-            <!-- ================= BRUSHES EXISTANTS ================= -->
-
-            <SolidColorBrush x:Key="PrivateSurfaceBrush" Color="#241632"/>
-            <SolidColorBrush x:Key="PrivateAddressBrush" Color="#2D1B3F"/>
-            <SolidColorBrush x:Key="NormalSurfaceBrush" Color="#1E1E1E"/>
+            <classes:NonEmptyToVisibility x:Key="NonEmptyToVisibility"/>
 
 
             <!-- ================= THEMES ================= -->

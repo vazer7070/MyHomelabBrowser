@@ -1,16 +1,26 @@
-﻿using MyHomelabBrowser.classes.Profiles;
-using MyHomelabBrowser.classes.Profiles.Credentials;
+using MyHomelabBrowser.classes;
+using MyHomelabBrowser.classes.Profiles;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
-using System.Windows;
 
 public class ProfileService
 {
     static readonly JsonSerializerOptions JsonOpts = new()
     {
         WriteIndented = true
+    };
+
+    const int MaxAttempts = 5;
+    const int BaseLockSeconds = 10;
+    const int MaxLockSeconds = 15 * 60;
+    public const int MaxUsernameLength = 32;
+
+    static readonly HashSet<string> ReservedWindowsNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
     };
 
     readonly string _rootDir;
@@ -23,6 +33,9 @@ public class ProfileService
     public bool IsLocked { get; private set; }
 
     public event Action<UserProfile?>? ProfileChanged;
+
+    // Levé avant tout changement de dossier de profil, pour terminer les écritures en attente.
+    public event Action? ProfileChanging;
 
     public ProfileService(string globalAppDataRoot)
     {
@@ -39,38 +52,64 @@ public class ProfileService
         LoadProfiles();
         LoadLastProfile();
     }
-    const int MaxAttempts = 5;
-    static readonly TimeSpan BaseLockDuration = TimeSpan.FromSeconds(10);
 
-    void RegisterLoginFailure(UserProfile profile)
+    // =====================
+    // VALIDATION
+    // =====================
+
+    /// <summary>
+    /// Le nom sert de nom de dossier : il doit rester un segment de chemin simple,
+    /// sinon un profil nommé ".." pointerait vers le dossier de l'application
+    /// et sa suppression l'effacerait entièrement.
+    /// </summary>
+    public static bool TryValidateUsername(string? username, out string error)
     {
-        profile.FailedLoginAttempts++;
+        error = string.Empty;
+        string value = (username ?? string.Empty).Trim();
 
-        if (profile.FailedLoginAttempts >= MaxAttempts)
+        if (value.Length == 0)
         {
-            var backoff = TimeSpan.FromSeconds(
-                BaseLockDuration.TotalSeconds * Math.Pow(2, profile.FailedLoginAttempts - MaxAttempts)
-            );
-
-            profile.LoginLockUntilUtc = DateTime.UtcNow.Add(backoff);
+            error = "Le nom du profil est obligatoire.";
+            return false;
         }
 
-        SaveProfiles();
-    }
+        if (value.Length > MaxUsernameLength)
+        {
+            error = $"Le nom du profil ne doit pas dépasser {MaxUsernameLength} caractères.";
+            return false;
+        }
 
-    void ResetLoginProtection(UserProfile profile)
-    {
-        profile.FailedLoginAttempts = 0;
-        profile.LoginLockUntilUtc = null;
-    }
+        foreach (char c in value)
+        {
+            if (!(char.IsLetterOrDigit(c) || c is ' ' or '-' or '_' or '.'))
+            {
+                error = "Le nom du profil ne peut contenir que des lettres, des chiffres, des espaces et - _ .";
+                return false;
+            }
+        }
 
+        if (value.StartsWith('.') || value.EndsWith('.'))
+        {
+            error = "Le nom du profil ne peut pas commencer ni finir par un point.";
+            return false;
+        }
+
+        if (ReservedWindowsNames.Contains(value) ||
+            value.Equals("default", StringComparison.OrdinalIgnoreCase))
+        {
+            error = "Ce nom est réservé. Choisissez-en un autre.";
+            return false;
+        }
+
+        return true;
+    }
 
     // =====================
     // PROFILS
     // =====================
 
     public IEnumerable<UserProfile> GetAllProfiles()
-        => _profiles.Values.OrderBy(p => p.Username);
+        => _profiles.Values.OrderBy(p => p.Username, StringComparer.CurrentCultureIgnoreCase);
 
     public bool ProfileExists(string username)
     {
@@ -79,16 +118,23 @@ public class ProfileService
         return _profiles.ContainsKey(username.ToLowerInvariant());
     }
 
+    public UserProfile? FindProfile(string username)
+    {
+        username = (username ?? "").Trim();
+        return username.Length > 0 && _profiles.TryGetValue(username.ToLowerInvariant(), out var profile)
+            ? profile
+            : null;
+    }
 
     public void CreateProfile(string username, string password)
     {
-        username = username.Trim();
-        if (username.Length == 0)
-            throw new Exception("Nom de profil invalide.");
+        username = (username ?? string.Empty).Trim();
+        if (!TryValidateUsername(username, out string error))
+            throw new InvalidOperationException(error);
 
         var key = username.ToLowerInvariant();
         if (_profiles.ContainsKey(key))
-            throw new Exception("Ce profil existe déjà.");
+            throw new InvalidOperationException("Ce profil existe déjà.");
 
         var (hash, salt) = PasswordHasher.Hash(password);
 
@@ -96,7 +142,8 @@ public class ProfileService
         {
             Username = username,
             PasswordHash = hash,
-            Salt = salt
+            Salt = salt,
+            HashIterations = PasswordHasher.CurrentIterations
         };
 
         _profiles[key] = profile;
@@ -105,125 +152,39 @@ public class ProfileService
         SaveProfiles();
     }
 
+    /// <summary>
+    /// Vérifie le mot de passe d'un profil en appliquant la même protection contre
+    /// les essais répétés que Login : sans cela, le menu « Changer de profil »
+    /// permettait de tester des mots de passe sans limite.
+    /// </summary>
     public bool VerifyPassword(UserProfile profile, string password)
     {
-        
-        return PasswordHasher.Verify(
-            password,
-            profile.PasswordHash,
-            profile.Salt
-        );
-    }
-    public void SetVaultPassword(string vaultPassword)
-    {
-        if (Current == null)
-            throw new Exception("Aucun profil connecté.");
-
-        var (hash, salt) = PasswordHasher.Hash(vaultPassword);
-
-        Current.VaultPasswordHash = hash;
-        Current.VaultSalt = salt;
-
-        SaveProfiles();
-    }
-    public bool VerifyVaultPassword(string vaultPassword)
-    {
-        if (Current == null)
+        if (profile == null)
             return false;
 
-        if (Current.VaultLockUntilUtc.HasValue &&
-            Current.VaultLockUntilUtc > DateTime.UtcNow)
+        if (IsLoginLocked(profile))
             return false;
 
-        if (Current.VaultPasswordHash == null ||
-            Current.VaultSalt == null)
-            return false;
-
-        if (!PasswordHasher.Verify(
-                vaultPassword,
-                Current.VaultPasswordHash,
-                Current.VaultSalt))
+        if (!PasswordHasher.Verify(password, profile.PasswordHash, profile.Salt, profile.HashIterations))
         {
-            RegisterVaultFailure(Current);
+            RegisterLoginFailure(profile);
             return false;
         }
 
-        ResetVaultProtection(Current);
+        OnSuccessfulVerification(profile, password);
         return true;
     }
 
-    void RegisterVaultFailure(UserProfile profile)
-    {
-        profile.FailedVaultAttempts++;
-
-        if (profile.FailedVaultAttempts >= MaxAttempts)
-        {
-            var backoff = TimeSpan.FromSeconds(
-                BaseLockDuration.TotalSeconds * Math.Pow(2, profile.FailedVaultAttempts - MaxAttempts)
-            );
-
-            profile.VaultLockUntilUtc = DateTime.UtcNow.Add(backoff);
-        }
-
-        SaveProfiles();
-    }
-
-    void ResetVaultProtection(UserProfile profile)
-    {
-        profile.FailedVaultAttempts = 0;
-        profile.VaultLockUntilUtc = null;
-    }
+    public static bool IsLoginLocked(UserProfile profile)
+        => profile.LoginLockUntilUtc.HasValue && profile.LoginLockUntilUtc > DateTime.UtcNow;
 
     public bool Login(string username, string password)
     {
-        username = (username ?? "").Trim();
-        if (username.Length == 0)
+        var profile = FindProfile(username);
+        if (profile == null || !VerifyPassword(profile, password))
             return false;
 
-        var key = username.ToLowerInvariant();
-
-        if (!_profiles.TryGetValue(key, out var profile))
-            return false;
-
-        // sécurité hash invalide
-        if (profile.PasswordHash == null || profile.PasswordHash.Length == 0 ||
-            profile.Salt == null || profile.Salt.Length == 0)
-            return false;
-
-        // 🔒 Vérifier lock temporaire
-        if (profile.LoginLockUntilUtc.HasValue &&
-            profile.LoginLockUntilUtc > DateTime.UtcNow)
-        {
-            return false;
-        }
-
-        // 🔐 Vérification mot de passe
-        if (!PasswordHasher.Verify(password, profile.PasswordHash, profile.Salt))
-        {
-            // 🔴 Échec → incrément tentative
-            profile.FailedLoginAttempts++;
-
-            const int MaxAttempts = 5;
-            const int BaseDelaySeconds = 10;
-
-            if (profile.FailedLoginAttempts >= MaxAttempts)
-            {
-                var exponent = profile.FailedLoginAttempts - MaxAttempts;
-                var delay = TimeSpan.FromSeconds(
-                    BaseDelaySeconds * Math.Pow(2, exponent)
-                );
-
-                profile.LoginLockUntilUtc = DateTime.UtcNow.Add(delay);
-            }
-
-            SaveProfiles();
-            return false;
-        }
-
-        // 🟢 Succès → reset protection
-        profile.FailedLoginAttempts = 0;
-        profile.LoginLockUntilUtc = null;
-
+        ProfileChanging?.Invoke();
         Current = profile;
         IsLocked = false;
 
@@ -234,63 +195,19 @@ public class ProfileService
         return true;
     }
 
-    public bool TryUnlockVault(string vaultPassword)
-    {
-        if (Current == null)
-            return false;
-
-        if (Current.VaultLockUntilUtc.HasValue &&
-            Current.VaultLockUntilUtc > DateTime.UtcNow)
-            return false;
-
-        if (Current.VaultPasswordHash == null ||
-            Current.VaultSalt == null)
-            return false;
-
-        if (!PasswordHasher.Verify(
-                vaultPassword,
-                Current.VaultPasswordHash,
-                Current.VaultSalt))
-        {
-            Current.FailedVaultAttempts++;
-
-            const int MaxAttempts = 5;
-            const int BaseDelaySeconds = 10;
-
-            if (Current.FailedVaultAttempts >= MaxAttempts)
-            {
-                var exponent = Current.FailedVaultAttempts - MaxAttempts;
-                var delay = TimeSpan.FromSeconds(
-                    BaseDelaySeconds * Math.Pow(2, exponent)
-                );
-
-                Current.VaultLockUntilUtc = DateTime.UtcNow.Add(delay);
-            }
-
-            SaveProfiles();
-            return false;
-        }
-
-        // Succès
-        Current.FailedVaultAttempts = 0;
-        Current.VaultLockUntilUtc = null;
-        SaveProfiles();
-
-        return true;
-    }
-
-
     public void LoginSilent(UserProfile profile)
     {
+        ProfileChanging?.Invoke();
         Current = profile;
+        IsLocked = false;
         AppDataContext.UseProfile(profile.Username);
-        SaveLastProfile();             
+        SaveLastProfile();
         ProfileChanged?.Invoke(profile);
     }
 
-
     public void Logout()
     {
+        ProfileChanging?.Invoke();
         Current = null;
         IsLocked = false;
 
@@ -298,7 +215,6 @@ public class ProfileService
         SaveLastProfile();
         ProfileChanged?.Invoke(null);
     }
-
 
     public void Lock()
     {
@@ -311,14 +227,7 @@ public class ProfileService
 
     public bool Unlock(string password)
     {
-        if (Current == null)
-            return false;
-
-        if (Current.PasswordHash == null || Current.PasswordHash.Length == 0 ||
-            Current.Salt == null || Current.Salt.Length == 0)
-            return false;
-
-        if (!PasswordHasher.Verify(password, Current.PasswordHash, Current.Salt))
+        if (Current == null || !VerifyPassword(Current, password))
             return false;
 
         IsLocked = false;
@@ -326,11 +235,12 @@ public class ProfileService
         return true;
     }
 
-
     public void DeleteCurrentProfile()
     {
         if (Current == null)
             return;
+
+        ProfileChanging?.Invoke();
 
         var key = Current.Username.ToLowerInvariant();
         var dir = GetProfileDir(Current.Username);
@@ -349,29 +259,45 @@ public class ProfileService
 
         SaveProfiles();
         AppDataContext.UseGlobal();
+        SaveLastProfile();
         ProfileChanged?.Invoke(null);
     }
 
     public void UpdateProfile(string newUsername, string? newPassword)
     {
         if (Current == null)
-            throw new Exception("Aucun profil connecté.");
+            throw new InvalidOperationException("Aucun profil connecté.");
 
-        newUsername = newUsername.Trim();
-        if (newUsername.Length == 0)
-            throw new Exception("Nom de profil invalide.");
+        newUsername = (newUsername ?? string.Empty).Trim();
 
         var oldKey = Current.Username.ToLowerInvariant();
         var newKey = newUsername.ToLowerInvariant();
 
+        // Un ancien profil au nom non conforme peut toujours changer de mot de passe ;
+        // la validation ne s'applique qu'à un nouveau nom.
+        if (newKey != oldKey && !TryValidateUsername(newUsername, out string error))
+            throw new InvalidOperationException(error);
+
         if (newKey != oldKey)
         {
             if (_profiles.ContainsKey(newKey))
-                throw new Exception("Un profil avec ce nom existe déjà.");
+                throw new InvalidOperationException("Un profil avec ce nom existe déjà.");
+
+            ProfileChanging?.Invoke();
+
+            // Les données du profil (coffre, historique, favoris, paramètres) sont
+            // rangées dans un dossier nommé d'après le profil : on le déplace,
+            // sinon le profil renommé repartait de zéro.
+            MoveProfileDirectory(Current.Username, newUsername);
 
             _profiles.Remove(oldKey);
             Current.Username = newUsername;
             _profiles[newKey] = Current;
+        }
+        else
+        {
+            // Changement de casse uniquement : le dossier reste le même.
+            Current.Username = newUsername;
         }
 
         if (!string.IsNullOrWhiteSpace(newPassword))
@@ -379,16 +305,69 @@ public class ProfileService
             var (hash, salt) = PasswordHasher.Hash(newPassword);
             Current.PasswordHash = hash;
             Current.Salt = salt;
+            Current.HashIterations = PasswordHasher.CurrentIterations;
         }
 
         SaveProfiles();
         AppDataContext.UseProfile(Current.Username);
+        SaveLastProfile();
         ProfileChanged?.Invoke(Current);
     }
 
+    void MoveProfileDirectory(string oldUsername, string newUsername)
+    {
+        string source = GetProfileDir(oldUsername);
+        string destination = GetProfileDir(newUsername);
 
+        if (!Directory.Exists(source))
+            return;
 
+        if (Directory.Exists(destination))
+        {
+            // Dossier résiduel d'un ancien profil supprimé : on ne fusionne jamais.
+            if (Directory.EnumerateFileSystemEntries(destination).Any())
+                throw new InvalidOperationException(
+                    "Un dossier de données existe déjà pour ce nom. Choisissez un autre nom.");
 
+            Directory.Delete(destination);
+        }
+
+        Directory.Move(source, destination);
+    }
+
+    void RegisterLoginFailure(UserProfile profile)
+    {
+        profile.FailedLoginAttempts++;
+
+        if (profile.FailedLoginAttempts >= MaxAttempts)
+        {
+            int exponent = Math.Min(profile.FailedLoginAttempts - MaxAttempts, 10);
+            double seconds = Math.Min(MaxLockSeconds, BaseLockSeconds * Math.Pow(2, exponent));
+            profile.LoginLockUntilUtc = DateTime.UtcNow.AddSeconds(seconds);
+        }
+
+        TrySaveProfiles();
+    }
+
+    void OnSuccessfulVerification(UserProfile profile, string password)
+    {
+        bool changed = profile.FailedLoginAttempts != 0 || profile.LoginLockUntilUtc != null;
+        profile.FailedLoginAttempts = 0;
+        profile.LoginLockUntilUtc = null;
+
+        // Migration transparente vers le nombre d'itérations actuel.
+        if (profile.HashIterations < PasswordHasher.CurrentIterations)
+        {
+            var (hash, salt) = PasswordHasher.Hash(password);
+            profile.PasswordHash = hash;
+            profile.Salt = salt;
+            profile.HashIterations = PasswordHasher.CurrentIterations;
+            changed = true;
+        }
+
+        if (changed)
+            TrySaveProfiles();
+    }
 
     // =====================
     // PERSISTENCE
@@ -399,51 +378,80 @@ public class ProfileService
         if (!File.Exists(_profilesIndexPath))
             return;
 
-        var json = File.ReadAllText(_profilesIndexPath);
-        var list = JsonSerializer.Deserialize<List<UserProfile>>(json);
+        try
+        {
+            var json = File.ReadAllText(_profilesIndexPath);
+            var list = JsonSerializer.Deserialize<List<UserProfile>>(json);
 
-        if (list == null)
-            return;
+            if (list == null)
+                return;
 
-        _profiles = list.ToDictionary(
-            p => p.Username.ToLowerInvariant(),
-            p => p
-        );
+            _profiles = list
+                .Where(p => !string.IsNullOrWhiteSpace(p.Username))
+                .GroupBy(p => p.Username.ToLowerInvariant())
+                .ToDictionary(g => g.Key, g => g.First());
+        }
+        catch
+        {
+            // Un index illisible ne doit pas empêcher le navigateur de démarrer.
+            // Il est mis de côté pour pouvoir être récupéré manuellement.
+            try
+            {
+                string backup = _profilesIndexPath + ".invalid-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                File.Move(_profilesIndexPath, backup, overwrite: false);
+            }
+            catch { }
+
+            _profiles = new Dictionary<string, UserProfile>();
+        }
     }
 
     void SaveProfiles()
     {
         var list = _profiles.Values.ToList();
         var json = JsonSerializer.Serialize(list, JsonOpts);
-        File.WriteAllText(_profilesIndexPath, json);
+        AtomicFile.WriteAllText(_profilesIndexPath, json);
+    }
+
+    void TrySaveProfiles()
+    {
+        try { SaveProfiles(); }
+        catch { }
     }
 
     void LoadLastProfile()
     {
-        if (!File.Exists(_lastProfilePath))
-            return;
-
-        var username = File.ReadAllText(_lastProfilePath).Trim();
-        if (string.IsNullOrEmpty(username))
-            return;
-
-        if (_profiles.TryGetValue(username.ToLowerInvariant(), out var profile))
+        try
         {
-            Current = profile;
-            IsLocked = false;
-            AppDataContext.UseProfile(profile.Username);
-            ProfileChanged?.Invoke(Current);
+            if (!File.Exists(_lastProfilePath))
+                return;
+
+            var username = File.ReadAllText(_lastProfilePath).Trim();
+            if (string.IsNullOrEmpty(username))
+                return;
+
+            if (_profiles.TryGetValue(username.ToLowerInvariant(), out var profile))
+            {
+                Current = profile;
+                IsLocked = false;
+                AppDataContext.UseProfile(profile.Username);
+                ProfileChanged?.Invoke(Current);
+            }
+        }
+        catch
+        {
+            // Démarrage sans profil si le fichier est illisible.
         }
     }
 
-
     void SaveLastProfile()
     {
-        File.WriteAllText(_lastProfilePath, Current?.Username ?? "");
+        try { AtomicFile.WriteAllText(_lastProfilePath, Current?.Username ?? ""); }
+        catch { }
     }
 
     public string GetProfileDir(string username)
     {
-        return Path.Combine(_rootDir, username.ToLowerInvariant());
+        return Path.Combine(_rootDir, username.Trim().ToLowerInvariant());
     }
 }

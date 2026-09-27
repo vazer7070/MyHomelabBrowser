@@ -319,7 +319,7 @@ namespace MyHomelabBrowser.controles
         // ==========================
         private sealed class Win32Host : HwndHost
         {
-            public IntPtr Handle { get; private set; }
+            public new IntPtr Handle { get; private set; }
 
             protected override HandleRef BuildWindowCore(HandleRef hwndParent)
             {

@@ -1,7 +1,5 @@
 ﻿using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.AdBlock.Services;
-using MyHomelabBrowser.classes.CloudTorrent.Models;
-using MyHomelabBrowser.classes.CloudTorrent.Services;
 using MyHomelabBrowser.classes.Support;
 using MyHomelabBrowser.classes.Support.Models;
 using System;
@@ -285,25 +283,6 @@ Aucun log console n’a été généré pour cette session.
                     break;
                 }
 
-                case ReportModule.CloudTorrent:
-                {
-                    CloudTorrentModuleSnapshot snapshot = CloudTorrentModuleHost.Current.Snapshot;
-                    extra.AppendLine($"- État CloudTorrent : {GetCloudTorrentStatusLabel(snapshot.Status)}");
-                    extra.AppendLine($"- Module actif : {YesNo(snapshot.IsActive)}");
-                    extra.AppendLine($"- Serveur : {GetServerHost(snapshot.ServerUrl)}");
-                    extra.AppendLine($"- Utilisateur : {SafeValue(snapshot.Username)}");
-                    extra.AppendLine($"- Version API : {SafeValue(snapshot.ApiVersion)}");
-                    extra.AppendLine($"- Analyse automatique : {YesNo(snapshot.AutoAnalyzePages)}");
-                    extra.AppendLine($"- Clé enregistrée : {YesNo(snapshot.HasStoredApiKey)}");
-                    extra.AppendLine($"- Dernière validation : {FormatDate(snapshot.LastValidatedAt)}");
-
-                    string permissions = snapshot.Permissions.Count == 0
-                        ? "aucune"
-                        : string.Join(", ", snapshot.Permissions.OrderBy(item => item, StringComparer.Ordinal));
-                    extra.AppendLine($"- Permissions : {Limit(permissions, 500)}");
-                    break;
-                }
-
                 default:
                     extra.AppendLine("- Composant : cœur du navigateur");
                     break;
@@ -336,11 +315,6 @@ Aucun log console n’a été généré pour cette session.
                 case ReportModule.AdBlock:
                     ModuleHint.Text = "Pour une publicité non bloquée, un site cassé, une liste qui ne se met pas à jour ou un problème de filtrage.";
                     DiagnosticNotice.Text = "Le rapport ajoutera l’état du bloqueur, le nombre de règles, les statistiques de session et la date de mise à jour des listes.";
-                    break;
-
-                case ReportModule.CloudTorrent:
-                    ModuleHint.Text = "Pour la détection des pages, les téléchargements, les liens 1fichier, l’analyse des médias ou la connexion à l’API.";
-                    DiagnosticNotice.Text = "Le rapport ajoutera l’état de CloudTorrent, la version API et les permissions. La clé API n’est jamais envoyée.";
                     break;
 
                 default:
@@ -399,14 +373,12 @@ Aucun log console n’a été généré pour cette session.
         private static string GetModuleLabel(ReportModule module) => module switch
         {
             ReportModule.AdBlock => "Bloqueur de publicités",
-            ReportModule.CloudTorrent => "CloudTorrent",
             _ => "PommeBrowser"
         };
 
         private static string GetModuleKey(ReportModule module) => module switch
         {
             ReportModule.AdBlock => "adblock",
-            ReportModule.CloudTorrent => "cloudtorrent",
             _ => "browser"
         };
 
@@ -430,26 +402,6 @@ Aucun log console n’a été généré pour cette session.
             _ => "other"
         };
 
-        private static string GetCloudTorrentStatusLabel(CloudTorrentConnectionStatus status) => status switch
-        {
-            CloudTorrentConnectionStatus.Active => "actif",
-            CloudTorrentConnectionStatus.Validating => "vérification en cours",
-            CloudTorrentConnectionStatus.InvalidApiKey => "clé API refusée",
-            CloudTorrentConnectionStatus.Forbidden => "permissions insuffisantes",
-            CloudTorrentConnectionStatus.ServerUnavailable => "serveur inaccessible",
-            CloudTorrentConnectionStatus.InvalidConfiguration => "configuration invalide",
-            CloudTorrentConnectionStatus.Error => "erreur",
-            _ => "non configuré"
-        };
-
-        private static string GetServerHost(string serverUrl)
-        {
-            if (Uri.TryCreate(serverUrl, UriKind.Absolute, out Uri? uri))
-                return uri.Host;
-
-            return string.IsNullOrWhiteSpace(serverUrl) ? "non configuré" : "adresse invalide";
-        }
-
         private static string SanitizeUrl(string value)
         {
             if (!Uri.TryCreate(value, UriKind.Absolute, out Uri? uri))
@@ -468,9 +420,6 @@ Aucun log console n’a été généré pour cette session.
 
         private static string FormatDate(DateTimeOffset? value)
             => value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "inconnue";
-
-        private static string SafeValue(string? value)
-            => string.IsNullOrWhiteSpace(value) ? "inconnu" : Limit(value.Trim(), 180);
 
         private static string Limit(string? value, int maxLength)
         {

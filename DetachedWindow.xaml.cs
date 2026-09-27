@@ -82,18 +82,16 @@ namespace MyHomelabBrowser
 
                 _main.Dispatcher.BeginInvoke(() =>
                 {
-                    // ✅ redock du state complet (Basilisk inclus)
-                    if (RequestRedock != null)
-                        RequestRedock(_state);
-                    else
-                        _main.RedockWebView(_web); // fallback (au cas où)
+                    // Redock du state complet : le moteur reste vivant.
+                    RequestRedock?.Invoke(_state);
                 });
+                return;
             }
-            else
-            {
-                Host.Content = null;
-                _ = _main.ShutdownDetachedWebTabAsync(_state);
-            }
+
+            // Une fenêtre détachée fermée sans redock doit détruire son WebView2,
+            // son moniteur Ruffle et son éventuel processus Basilisk.
+            Host.Content = null;
+            _ = _main.ShutdownDetachedTabAsync(_state);
         }
 
 

@@ -1,4 +1,4 @@
-﻿using MyHomelabBrowser.classes;
+using MyHomelabBrowser.classes;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -35,13 +35,6 @@ namespace MyHomelabBrowser
             return File.Exists(s.BasiliskPath);
         }
 
-        public static void KillAllBasiliskProcesses()
-        {
-            foreach (var p in Process.GetProcessesByName("basilisk"))
-            {
-                try { p.Kill(true); } catch { }
-            }
-        }
         // =====================
         // EnumWindows
         // =====================

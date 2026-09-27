@@ -47,7 +47,7 @@
 
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#2E2E2E"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SurfaceHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.45"/>
@@ -94,7 +94,7 @@
         </Style>
 
         <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource ChipButton}">
-            <Setter Property="Background" Value="#3A2A2A"/>
+            <Setter Property="Background" Value="{StaticResource DangerSoftBrush}"/>
             <Setter Property="Margin" Value="0"/>
         </Style>
 
@@ -141,8 +141,8 @@
                         <ControlTemplate.Triggers>
                             <!-- ✅ Hover Fluent -->
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="RowBorder" Property="Background" Value="#262626"/>
-                                <Setter TargetName="RowBorder" Property="BorderBrush" Value="#3A3A3A"/>
+                                <Setter TargetName="RowBorder" Property="Background" Value="{StaticResource SurfaceRaisedBrush}"/>
+                                <Setter TargetName="RowBorder" Property="BorderBrush" Value="{StaticResource BorderStrongBrush}"/>
                             </Trigger>
 
                             <!-- ✅ sélection neutralisée -->
@@ -273,6 +273,7 @@
                   SelectionChanged="HistoryList_SelectionChanged"
                   ScrollViewer.CanContentScroll="True"
                   VirtualizingPanel.IsVirtualizing="True"
+                  VirtualizingPanel.IsVirtualizingWhenGrouping="True"
                   VirtualizingPanel.VirtualizationMode="Recycling"
                   VirtualizingPanel.ScrollUnit="Pixel">
 

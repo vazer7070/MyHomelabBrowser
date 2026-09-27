@@ -24,6 +24,37 @@ namespace MyHomelabBrowser.classes
 
         public bool IsInProgress => State == DownloadUiState.InProgress;
 
+        bool _isPaused;
+
+        // WebView2 garde l'état InProgress pendant une pause : on le suit à part
+        // pour afficher « Reprendre » au lieu de « Pause ».
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool IsPaused
+        {
+            get => _isPaused;
+            set
+            {
+                if (_isPaused == value)
+                    return;
+
+                _isPaused = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsRunning));
+                OnPropertyChanged(nameof(SpeedText));
+            }
+        }
+
+        public bool IsRunning => IsInProgress && !IsPaused;
+
+        // Posé par Annuler pour distinguer l'annulation d'une pause : WebView2
+        // signale les deux comme une interruption.
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool CancelRequested { get; set; }
+
+        public bool IsCancelled => State == DownloadUiState.Cancelled;
+
+        public bool IsFinished => State != DownloadUiState.InProgress;
+
         public bool IsCompleted => State == DownloadUiState.Completed;
 
         // Interrupted = ÉCHEC côté UI
@@ -75,11 +106,20 @@ namespace MyHomelabBrowser.classes
 
 
                 _state = value;
+                if (value != DownloadUiState.InProgress)
+                    _isPaused = false;
+
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsInProgress));
+                OnPropertyChanged(nameof(IsPaused));
+                OnPropertyChanged(nameof(IsRunning));
+                OnPropertyChanged(nameof(StatusText));
                 OnPropertyChanged(nameof(IsCompleted));
                 OnPropertyChanged(nameof(IsFailed));
+                OnPropertyChanged(nameof(IsCancelled));
+                OnPropertyChanged(nameof(IsFinished));
                 OnPropertyChanged(nameof(IsActionable));
+                OnPropertyChanged(nameof(SizeText));
             }
         }
         void UpdateSpeed()
@@ -126,10 +166,21 @@ namespace MyHomelabBrowser.classes
         }
 
 
+        public string StatusText => State switch
+        {
+            DownloadUiState.Completed => "Terminé",
+            DownloadUiState.Interrupted => "Échec",
+            DownloadUiState.Cancelled => "Annulé",
+            _ => IsPaused ? "En pause" : "En cours"
+        };
+
         public string SpeedText
         {
             get
             {
+                if (IsPaused)
+                    return "En pause";
+
                 if (State != DownloadUiState.InProgress || SpeedBytesPerSec <= 0)
                     return "";
 
@@ -154,6 +205,7 @@ namespace MyHomelabBrowser.classes
         public bool IsActionable => State == DownloadUiState.Completed && System.IO.File.Exists(ResultFilePath);
 
         // Référence runtime (non persistée)
+        [System.Text.Json.Serialization.JsonIgnore]
         public CoreWebView2DownloadOperation? Operation { get; set; }
 
         public event PropertyChangedEventHandler? PropertyChanged;

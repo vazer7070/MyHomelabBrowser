@@ -1,45 +1,109 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Color x:Key="BgMain">#0E1014</Color>
-    <Color x:Key="BgSecondary">#15181E</Color>
-    <Color x:Key="BgTertiary">#1B1F27</Color>
-    <Color x:Key="BgHover">#242A34</Color>
-    <Color x:Key="BgPressed">#2D3541</Color>
-    <Color x:Key="PanelColor">#171A20</Color>
-    <Color x:Key="SurfaceRaisedColor">#1D2129</Color>
-    <Color x:Key="Accent">#58A6FF</Color>
-    <Color x:Key="AccentStrong">#2F81F7</Color>
-    <Color x:Key="AccentSoft">#1E3A5F</Color>
-    <Color x:Key="Success">#3CCB7F</Color>
-    <Color x:Key="Warning">#E6A84A</Color>
-    <Color x:Key="Danger">#F06A78</Color>
-    <Color x:Key="TextMain">#F4F7FB</Color>
-    <Color x:Key="TextMuted">#AAB3C2</Color>
-    <Color x:Key="TextTertiary">#778193</Color>
-    <Color x:Key="BorderColor">#2A303A</Color>
-    <Color x:Key="BorderStrongColor">#39424F</Color>
 
+    <!--
+        Palette PommeBrowser : sombre neutre, légèrement froide.
+        Hiérarchie des surfaces, de la plus profonde à la plus haute :
+        Chrome (barre d'onglets) < Main (fond) < Surface < Toolbar/Panel < Raised < Hover < Pressed.
+        Les noms historiques sont conservés : d'autres vues les référencent.
+    -->
+
+    <!-- ===== Couleurs de base ===== -->
+    <Color x:Key="ChromeColor">#0E1014</Color>
+    <Color x:Key="BgMain">#111317</Color>
+    <Color x:Key="BgSecondary">#16191E</Color>
+    <Color x:Key="BgTertiary">#1C2026</Color>
+    <Color x:Key="BgHover">#2A2F37</Color>
+    <Color x:Key="BgPressed">#343A44</Color>
+    <Color x:Key="ToolbarColor">#1A1D23</Color>
+    <Color x:Key="PanelColor">#1B1E24</Color>
+    <Color x:Key="SurfaceRaisedColor">#22262D</Color>
+    <Color x:Key="AddressBarColor">#101216</Color>
+    <Color x:Key="TabHoverColor">#171A1F</Color>
+
+    <Color x:Key="Accent">#6AA5FF</Color>
+    <Color x:Key="AccentStrong">#3B7BF6</Color>
+    <Color x:Key="AccentHover">#8AB9FF</Color>
+    <Color x:Key="AccentSoft">#1B2B46</Color>
+
+    <Color x:Key="Success">#3DD68C</Color>
+    <Color x:Key="SuccessSoft">#15342A</Color>
+    <Color x:Key="Warning">#F2B84B</Color>
+    <Color x:Key="WarningSoft">#3A2E14</Color>
+    <Color x:Key="Danger">#F2677A</Color>
+    <Color x:Key="DangerSoft">#3A1D24</Color>
+
+    <Color x:Key="TextMain">#EEF1F6</Color>
+    <Color x:Key="TextMuted">#A9B1BF</Color>
+    <Color x:Key="TextTertiary">#737D8C</Color>
+
+    <Color x:Key="BorderColor">#2A2F37</Color>
+    <Color x:Key="BorderStrongColor">#3A414C</Color>
+
+    <!-- Navigation privée : violet -->
+    <Color x:Key="PrivateColor">#B794FF</Color>
+    <Color x:Key="PrivateSoftColor">#2B2142</Color>
+    <Color x:Key="PrivateToolbarColor">#1D1928</Color>
+    <Color x:Key="PrivateAddressColor">#120F1B</Color>
+
+    <Color x:Key="ShadowColor">#000000</Color>
+
+    <!-- ===== Pinceaux ===== -->
+    <SolidColorBrush x:Key="ChromeBrush" Color="{StaticResource ChromeColor}"/>
     <SolidColorBrush x:Key="BgMainBrush" Color="{StaticResource BgMain}"/>
     <SolidColorBrush x:Key="BgSecondaryBrush" Color="{StaticResource BgSecondary}"/>
     <SolidColorBrush x:Key="BgHoverBrush" Color="{StaticResource BgHover}"/>
-    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource Accent}"/>
-    <SolidColorBrush x:Key="TextMainBrush" Color="{StaticResource TextMain}"/>
-    <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMuted}"/>
     <SolidColorBrush x:Key="WindowBackgroundBrush" Color="{StaticResource BgMain}"/>
-    <SolidColorBrush x:Key="ToolbarBrush" Color="#13161B"/>
+    <SolidColorBrush x:Key="ToolbarBrush" Color="{StaticResource ToolbarColor}"/>
     <SolidColorBrush x:Key="PanelBrush" Color="{StaticResource PanelColor}"/>
     <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource BgSecondary}"/>
     <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="{StaticResource SurfaceRaisedColor}"/>
     <SolidColorBrush x:Key="SurfaceHoverBrush" Color="{StaticResource BgHover}"/>
     <SolidColorBrush x:Key="SurfacePressedBrush" Color="{StaticResource BgPressed}"/>
+    <SolidColorBrush x:Key="AddressBarBrush" Color="{StaticResource AddressBarColor}"/>
+    <SolidColorBrush x:Key="TabHoverBrush" Color="{StaticResource TabHoverColor}"/>
+
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource Accent}"/>
     <SolidColorBrush x:Key="AccentStrongBrush" Color="{StaticResource AccentStrong}"/>
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHover}"/>
     <SolidColorBrush x:Key="AccentSoftBrush" Color="{StaticResource AccentSoft}"/>
+
     <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource Success}"/>
+    <SolidColorBrush x:Key="SuccessSoftBrush" Color="{StaticResource SuccessSoft}"/>
     <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource Warning}"/>
+    <SolidColorBrush x:Key="WarningSoftBrush" Color="{StaticResource WarningSoft}"/>
     <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource Danger}"/>
+    <SolidColorBrush x:Key="DangerSoftBrush" Color="{StaticResource DangerSoft}"/>
+
+    <SolidColorBrush x:Key="TextMainBrush" Color="{StaticResource TextMain}"/>
+    <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMuted}"/>
     <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextMain}"/>
     <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextMuted}"/>
     <SolidColorBrush x:Key="TextTertiaryBrush" Color="{StaticResource TextTertiary}"/>
+
     <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}"/>
     <SolidColorBrush x:Key="BorderStrongBrush" Color="{StaticResource BorderStrongColor}"/>
+
+    <SolidColorBrush x:Key="PrivateBrush" Color="{StaticResource PrivateColor}"/>
+    <SolidColorBrush x:Key="PrivateSoftBrush" Color="{StaticResource PrivateSoftColor}"/>
+    <SolidColorBrush x:Key="PrivateToolbarBrush" Color="{StaticResource PrivateToolbarColor}"/>
+    <SolidColorBrush x:Key="PrivateAddressBrush" Color="{StaticResource PrivateAddressColor}"/>
+    <SolidColorBrush x:Key="PrivateSurfaceBrush" Color="{StaticResource PrivateToolbarColor}"/>
+    <SolidColorBrush x:Key="NormalSurfaceBrush" Color="{StaticResource ToolbarColor}"/>
+
+    <!-- Surcharges dynamiques (la fenêtre principale les remplace en navigation privée). -->
+    <SolidColorBrush x:Key="SelectedTabBrush" Color="{StaticResource ToolbarColor}"/>
+    <SolidColorBrush x:Key="AddressFieldBrush" Color="{StaticResource AddressBarColor}"/>
+
+    <SolidColorBrush x:Key="OverlayBrush" Color="#99000000"/>
+
+    <!-- Police d'icônes : Segoe Fluent Icons (Windows 11), repli MDL2 (Windows 10). -->
+    <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+
+    <DropShadowEffect x:Key="PopupShadow"
+                      BlurRadius="28"
+                      ShadowDepth="6"
+                      Direction="270"
+                      Opacity="0.5"
+                      Color="{StaticResource ShadowColor}"/>
 </ResourceDictionary>

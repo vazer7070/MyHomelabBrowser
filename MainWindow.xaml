@@ -1,1027 +1,874 @@
-﻿<Window x:Class="MyHomelabBrowser.MainWindow"
+<Window x:Class="MyHomelabBrowser.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:classes="clr-namespace:MyHomelabBrowser.classes"
+        xmlns:controles="clr-namespace:MyHomelabBrowser.controles"
         Title="PommeBrowser"
         Icon="/Assets/PommeBrowser_desktop.ico"
-        Height="850"
+        Height="860"
         Width="1400"
-        Background="{StaticResource FluentBg}">
+        MinWidth="720"
+        MinHeight="460"
+        Background="{StaticResource WindowBackgroundBrush}"
+        Foreground="{StaticResource TextPrimaryBrush}"
+        FontFamily="Segoe UI Variable Text, Segoe UI"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+
     <Window.Resources>
-        <Style x:Key="FluentContextMenuStyle" TargetType="ContextMenu">
-            <Setter Property="Background" Value="#FF1E1E1E"/>
-            <Setter Property="BorderBrush" Value="#FF3A3A3A"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="6"/>
-            <Setter Property="OverridesDefaultStyle" Value="True"/>
-            <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ContextMenu">
-                        <Border
-                    Background="{TemplateBinding Background}"
-                    BorderBrush="{TemplateBinding BorderBrush}"
-                    BorderThickness="{TemplateBinding BorderThickness}"
-                    CornerRadius="10"
-                    Padding="{TemplateBinding Padding}">
+        <!-- Surcharges dynamiques : la barre active devient violette en navigation privée. -->
+        <SolidColorBrush x:Key="SelectedTabBrush" Color="{StaticResource ToolbarColor}"/>
+        <SolidColorBrush x:Key="AddressFieldBrush" Color="{StaticResource AddressBarColor}"/>
 
-                            <!-- 🔥 OBLIGATOIRE -->
-                            <ItemsPresenter/>
-
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+        <!-- Glyphe d'icône standard (police Segoe Fluent / MDL2). -->
+        <Style x:Key="IconGlyph" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"/>
         </Style>
 
-
-        <Style x:Key="FluentMenuSeparatorStyle" TargetType="Separator">
-            <Setter Property="Margin" Value="8,6"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Separator">
-                        <Border Height="1"
-                        Background="#33FFFFFF"
-                        CornerRadius="1"/>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+        <!-- Pastille de compteur (téléchargements, blocages). -->
+        <Style x:Key="BadgeStyle" TargetType="Border">
+            <Setter Property="MinWidth" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="Padding" Value="4,0"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SelectedTabBrush}"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+            <Setter Property="Margin" Value="0,1,-1,0"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
         </Style>
 
-        <Style x:Key="FluentMenuItemStyle" TargetType="MenuItem">
+        <Style x:Key="BadgeTextStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="9"/>
+            <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Padding" Value="10,6"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="MenuItem">
-                        <Grid>
-                            <!-- ITEM PRINCIPAL -->
-                            <Border x:Name="Bd"
-                            Background="{TemplateBinding Background}"
-                            CornerRadius="6"
-                            Padding="{TemplateBinding Padding}">
-                                <Grid>
-                                    <ContentPresenter
-                                ContentSource="Header"
-                                VerticalAlignment="Center"/>
-
-                                    <!-- flèche sous-menu -->
-                                    <TextBlock x:Name="Arrow"
-                                       Text="▶"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                       FontSize="10"
-                                       HorizontalAlignment="Right"
-                                       VerticalAlignment="Center"
-                                       Margin="12,0,0,0"
-                                       Visibility="Collapsed"/>
-                                </Grid>
-                            </Border>
-
-                            <!-- 🔥 SOUS-MENU -->
-                            <Popup x:Name="SubMenuPopup"
-                           Placement="Right"
-                           IsOpen="{TemplateBinding IsSubmenuOpen}"
-                           AllowsTransparency="True"
-                           Focusable="False"
-                           PopupAnimation="Fade">
-                                <Border Background="{StaticResource PanelBrush}"
-                                BorderBrush="{StaticResource BorderStrongBrush}"
-                                BorderThickness="1"
-                                CornerRadius="10"
-                                Padding="6">
-                                    <ItemsPresenter/>
-                                </Border>
-                            </Popup>
-                        </Grid>
-
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="Bd"
-                                Property="Background"
-                                Value="#2A2A2A"/>
-                            </Trigger>
-
-                            <Trigger Property="HasItems" Value="True">
-                                <Setter TargetName="Arrow"
-                                Property="Visibility"
-                                Value="Visible"/>
-                            </Trigger>
-
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Foreground" Value="{StaticResource TextTertiaryBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
-
-
-
-        <Style x:Key="NavIconButtonStyle" TargetType="Button">
+        <!-- Bouton de la barre d'onglets (+ et onglet privé). -->
+        <Style x:Key="TabStripButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarIconButtonStyle}">
             <Setter Property="Width" Value="30"/>
             <Setter Property="Height" Value="30"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd"
-                                Background="{StaticResource SurfaceRaisedBrush}"
-                                CornerRadius="10"
-                                Padding="6">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SurfaceHoverBrush}"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#404040"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="Margin" Value="2,0,0,0"/>
         </Style>
+
+        <!-- Petit bouton d'action d'un téléchargement. -->
+        <Style x:Key="DownloadActionButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarIconButtonStyle}">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="2,0,0,0"/>
+        </Style>
+
         <ContextMenu x:Key="ProfileContextMenu_LoggedOut">
-            <MenuItem Header="🔑 Se connecter"
-              Click="Profile_Login_Click"/>
-            <MenuItem Header="➕ Créer un profil"
-              Click="Profile_Create_Click"/>
+            <MenuItem Header="Se connecter" Click="Profile_Login_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE77B;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Créer un profil" Click="Profile_Create_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE8FA;"/>
+                </MenuItem.Icon>
+            </MenuItem>
         </ContextMenu>
 
         <ContextMenu x:Key="ProfileContextMenu_LoggedIn">
-
-            <MenuItem Header="👤 Profil"
-              IsEnabled="False"/>
-
+            <MenuItem x:Name="ProfileHeaderItem" IsEnabled="False"/>
             <Separator/>
-
-            <!-- 🔁 CHANGER DE PROFIL -->
-            <MenuItem Header="🔁 Changer de profil"
-              x:Name="SwitchProfileMenu"/>
-
-            <Separator/>
-
-            <MenuItem Header="⚙ Paramètres du profil"
-              Click="Profile_Settings_Click"/>
-
-            <MenuItem Style="{StaticResource FluentMenuItemStyle}"
-                      Click="Profile_Logout_Click">
-                <MenuItem.Header>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="⏻" Margin="0,0,8,0"/>
-                        <TextBlock Text="Se déconnecter"/>
-                    </StackPanel>
-                </MenuItem.Header>
+            <MenuItem Header="Changer de profil" x:Name="SwitchProfileMenu">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE8AB;"/>
+                </MenuItem.Icon>
             </MenuItem>
-
-            
-
+            <MenuItem Header="Paramètres du profil et coffre" Click="Profile_Settings_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE8D7;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <Separator/>
+            <MenuItem Header="Se déconnecter" Click="Profile_Logout_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE7E8;"/>
+                </MenuItem.Icon>
+            </MenuItem>
         </ContextMenu>
 
-
+        <ContextMenu x:Key="MainMenu">
+            <MenuItem Header="Nouvel onglet" InputGestureText="Ctrl+T" Click="MainMenu_NewTab_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE710;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Nouvel onglet privé" InputGestureText="Ctrl+Maj+N" Click="NewPrivateTab_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE727;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem x:Name="ReopenClosedMenuItem" Header="Rouvrir l’onglet fermé" InputGestureText="Ctrl+Maj+T" Click="MainMenu_ReopenClosed_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE7A7;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <Separator/>
+            <MenuItem Header="Historique" InputGestureText="Ctrl+H" Click="MainMenu_History_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE81C;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Téléchargements" InputGestureText="Ctrl+J" Click="MainMenu_Downloads_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE896;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Coffre des mots de passe" Click="Profile_Settings_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE72E;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <Separator/>
+            <MenuItem Header="Plein écran" InputGestureText="F11" Click="MainMenu_Fullscreen_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE740;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Paramètres" InputGestureText="Ctrl+," Click="OpenSettings_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE713;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Signaler un problème" Click="MainMenu_ReportIssue_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xEBE8;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <Separator/>
+            <MenuItem x:Name="VersionMenuItem" IsEnabled="False"/>
+        </ContextMenu>
     </Window.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="46"/>
-            <RowDefinition Height="52"/>
-            <RowDefinition Height="32"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
-        </Grid.ColumnDefinitions>
+        <!-- =====================================================
+             CHROME : onglets, navigation, favoris
+             ===================================================== -->
+        <StackPanel x:Name="BrowserChrome" Grid.Row="0">
 
-        <!-- =========================
-             TAB BAR
-             ========================= -->
-        <Grid Grid.Row="0"
-              Grid.ColumnSpan="2"
-              Height="46"
-              Background="{StaticResource ToolbarBrush}"
-              Panel.ZIndex="100">
-
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-
-            <TabControl x:Name="Tabs"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        SelectionChanged="Tabs_SelectionChanged">
-
-                <TabControl.Template>
-                    <ControlTemplate TargetType="TabControl">
-                        <ScrollViewer HorizontalScrollBarVisibility="Hidden"
-                                      VerticalScrollBarVisibility="Disabled">
-                            <TabPanel IsItemsHost="True"
-                                      Margin="6,6,0,6"/>
-                        </ScrollViewer>
-                    </ControlTemplate>
-                </TabControl.Template>
-
-                <TabControl.ItemContainerStyle>
-                    <Style TargetType="TabItem">
-                        <Setter Property="MinWidth" Value="160"/>
-                        <Setter Property="MaxWidth" Value="260"/>
-                        <Setter Property="Height" Value="32"/>
-                        <Setter Property="BorderThickness" Value="0"/>
-
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="TabItem">
-                                    <Border x:Name="Bd"
-                                            Height="32"
-                                            Background="{StaticResource SurfaceRaisedBrush}"
-                                            BorderBrush="{StaticResource BorderBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="10"
-                                            Margin="4,0"
-                                            RenderTransformOrigin="0.5,0.5">
-                                        <Border.RenderTransform>
-                                            <ScaleTransform x:Name="Scale"/>
-                                        </Border.RenderTransform>
-
-                                        <ContentPresenter ContentSource="Header"
-                                                          VerticalAlignment="Center"/>
-                                    </Border>
-
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsSelected" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
-                                            <Setter TargetName="Bd" Property="BorderBrush" Value="#31577D"/>
-                                            <Trigger.EnterActions>
-                                                <BeginStoryboard>
-                                                    <Storyboard>
-                                                        <DoubleAnimation Storyboard.TargetName="Scale"
-                                                                         Storyboard.TargetProperty="ScaleX"
-                                                                         To="1.05"
-                                                                         Duration="0:0:0.15"/>
-                                                        <DoubleAnimation Storyboard.TargetName="Scale"
-                                                                         Storyboard.TargetProperty="ScaleY"
-                                                                         To="1.05"
-                                                                         Duration="0:0:0.15"/>
-                                                    </Storyboard>
-                                                </BeginStoryboard>
-                                            </Trigger.EnterActions>
-                                            <Trigger.ExitActions>
-                                                <BeginStoryboard>
-                                                    <Storyboard>
-                                                        <DoubleAnimation Storyboard.TargetName="Scale"
-                                                                         Storyboard.TargetProperty="ScaleX"
-                                                                         To="1"
-                                                                         Duration="0:0:0.15"/>
-                                                        <DoubleAnimation Storyboard.TargetName="Scale"
-                                                                         Storyboard.TargetProperty="ScaleY"
-                                                                         To="1"
-                                                                         Duration="0:0:0.15"/>
-                                                    </Storyboard>
-                                                </BeginStoryboard>
-                                            </Trigger.ExitActions>
-                                        </Trigger>
-
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="Bd"
-                                                    Property="Background"
-                                                    Value="{StaticResource SurfaceHoverBrush}"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </TabControl.ItemContainerStyle>
-            </TabControl>
-
-            <!-- BOUTONS + INDICATEUR PRIVÉ -->
-            <Grid Grid.Column="1"
-                  Margin="6"
-                  VerticalAlignment="Center">
-
-                <StackPanel Orientation="Horizontal"
-                            VerticalAlignment="Center">
-
-                    <Button Style="{StaticResource ToolbarIconButtonStyle}"
-                            Width="34" Height="32"
-                            Margin="0,0,4,0"
-                            ToolTip="Nouvel onglet"
-                            Click="NewTab_Click">
-                        <Viewbox Width="16" Height="16">
-                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
-                                  Data="M11,2 L13,2 L13,11 L22,11 L22,13 L13,13 L13,22 L11,22 L11,13 L2,13 L2,11 L11,11 Z"/>
-                        </Viewbox>
-                    </Button>
-
-                    <Button Style="{StaticResource ToolbarIconButtonStyle}"
-                            Width="34" Height="32"
-                            Margin="0,0,4,0"
-                            ToolTip="Nouvel onglet privé"
-                            Click="NewPrivateTab_Click">
-                        <Viewbox Width="18" Height="18">
-                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
-                                  Data="M4,4 L20,4 L18,9 L15.5,9 C14.2,9 13.1,9.7 12.5,10.8 C11.9,9.7 10.8,9 9.5,9 L7,9 Z M5,11 L9.5,11 C11.4,11 12,12.5 12,14 C12,16.2 10.2,18 8,18 C5.8,18 4,16.2 4,14 C4,12.8 4.4,11.8 5,11 Z M15.5,11 L20,11 C20.6,11.8 21,12.8 21,14 C21,16.2 19.2,18 17,18 C14.8,18 13,16.2 13,14 C13,12.5 13.6,11 15.5,11 Z"/>
-                        </Viewbox>
-                    </Button>
-
-                    <!-- DOWNLOADS -->
-                    <Button x:Name="DownloadsBtn"
-                            Style="{StaticResource ToolbarIconButtonStyle}"
-                            Width="34"
-                            Height="32"
-                            ToolTip="Téléchargements"
-                            Click="DownloadsBtn_Click"
-                            Cursor="Hand">
-                        <Grid>
-                            <Viewbox Width="17" Height="17" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
-                                      Data="M11,2 L13,2 L13,13 L17,9 L18.5,10.5 L12,17 L5.5,10.5 L7,9 L11,13 Z M4,19 L20,19 L20,21 L4,21 Z"/>
-                            </Viewbox>
-
-                            <!-- BADGE -->
-                            <Border x:Name="DownloadsBadge"
-                                    Background="{StaticResource SuccessBrush}"
-                                    CornerRadius="8"
-                                    MinWidth="16"
-                                    Height="16"
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Top"
-                                    Margin="0,-4,-4,0"
-                                    Visibility="Collapsed">
-                                <TextBlock x:Name="DownloadsBadgeText"
-                                           FontSize="10"
-                                           Foreground="White"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                            </Border>
-                        </Grid>
-                    </Button>
-
-                </StackPanel>
-
-                <!-- INDICATEUR PRIVÉ -->
-                <Border x:Name="PrivateIndicator"
-                        HorizontalAlignment="Left"
-                        VerticalAlignment="Center"
-                        Margin="-150,0,0,0"
-                        Height="28"
-                        Padding="10,2"
-                        Background="#32233F"
-                        CornerRadius="14"
-                        Visibility="Collapsed"
-                        IsHitTestVisible="False">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="🕶️"
-                                   Margin="0,0,6,0"
-                                   Foreground="#C9A7FF"/>
-                        <TextBlock Text="Navigation privée"
-                                   Foreground="#C9A7FF"
-                                   FontWeight="SemiBold"
-                                   FontSize="12"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- POPUP DOWNLOADS -->
-                <Popup x:Name="DownloadsPopup"
-                       PlacementTarget="{Binding ElementName=DownloadsBtn}"
-                       Placement="Bottom"
-                       StaysOpen="False"
-                       AllowsTransparency="True"
-                       PopupAnimation="Fade">
-
-                    <Border Width="420"
-                            Margin="0,6,0,0"
-                            Padding="10"
-                            Background="{StaticResource PanelBrush}"
-                            BorderBrush="{StaticResource BorderStrongBrush}"
-                            BorderThickness="1"
-                            CornerRadius="12">
-
-                        <StackPanel>
-                            <TextBlock Text="Téléchargements"
-                                       FontSize="14"
-                                       FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimaryBrush}"
-                                       Margin="0,0,0,8"/>
-                            <Button Content="Effacer les terminés"
-                                    Margin="10,0,0,0"
-                                    Padding="6,2"
-                                    FontSize="12"
-                                    HorizontalAlignment="Right"
-                                    Click="ClearCompletedDownloads"/>
-
-                            <ListBox ItemsSource="{Binding Source={x:Static classes:DownloadManager.Instance}, Path=Items}"
-                                     BorderThickness="0"
-                                     Background="Transparent"
-                                     Foreground="White"
-                                     MaxHeight="360">
-
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Padding="10"
-                                                Margin="0,0,0,8"
-                                                Background="{StaticResource SurfaceRaisedBrush}"
-                                                BorderBrush="{StaticResource BorderBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="10">
-
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-
-                                                <!-- ================= LEFT ================= -->
-                                                <StackPanel>
-
-                                                    <!-- FICHIER -->
-                                                    <TextBlock Text="{Binding FileName}"
-                                                               FontWeight="SemiBold"
-                                                               FontSize="13"
-                                                               Foreground="White"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               Cursor="Hand"
-                                                               MouseLeftButtonUp="DownloadItem_Open"/>
-
-                                                    <!-- TAILLE / VITESSE -->
-                                                    <TextBlock Text="{Binding SizeText}"
-                                                               FontSize="12"
-                                                               Foreground="{StaticResource TextSecondaryBrush}"
-                                                               Margin="0,4,0,0"/>
-
-                                                    <TextBlock Text="{Binding SpeedText}"
-                                                               FontSize="12"
-                                                               Foreground="{StaticResource TextTertiaryBrush}"
-                                                               Visibility="{Binding IsInProgress,
-                                                                            Converter={StaticResource BoolToVisibility}}"/>
-
-                                                    <!-- PROGRESS -->
-                                                    <ProgressBar Height="6"
-                                                                 Margin="0,6,0,0"
-                                                                 Minimum="0"
-                                                                 Maximum="1"
-                                                                 Value="{Binding Progress01, Mode=OneWay}"
-                                                                 Visibility="{Binding IsInProgress,
-                                                                              Converter={StaticResource BoolToVisibility}}"/>
-
-                                                    <!-- STATUS -->
-                                                    <TextBlock Text="✔ Terminé"
-                                                               Foreground="{StaticResource SuccessBrush}"
-                                                               FontSize="12"
-                                                               FontWeight="SemiBold"
-                                                               Margin="0,6,0,0"
-                                                               Visibility="{Binding IsCompleted,
-                                                                            Converter={StaticResource BoolToVisibility}}"/>
-
-                                                    <TextBlock Text="✖ Échec"
-                                                               Foreground="{StaticResource DangerBrush}"
-                                                               FontSize="12"
-                                                               FontWeight="SemiBold"
-                                                               Margin="0,6,0,0"
-                                                               Visibility="{Binding IsFailed,
-                                                                            Converter={StaticResource BoolToVisibility}}"/>
-                                                </StackPanel>
-
-                                                <!-- ================= RIGHT ================= -->
-                                                <StackPanel Grid.Column="1"
-                                                            Orientation="Horizontal"
-                                                            VerticalAlignment="Top">
-
-                                                    <!-- PAUSE -->
-                                                    <Button Content="⏸"
-                                                            Margin="0,0,6,0"
-                                                            Visibility="{Binding IsInProgress,
-                                                                         Converter={StaticResource BoolToVisibility}}"
-                                                            Click="DownloadItem_Pause"/>
-
-                                                    <!-- RETRY -->
-                                                    <Button Content="🔁"
-                                                            Margin="0,0,6,0"
-                                                            ToolTip="Réessayer"
-                                                            Visibility="{Binding IsFailed,
-                                                                         Converter={StaticResource BoolToVisibility}}"
-                                                            Click="DownloadItem_ResumeOrRetry"/>
-
-                                                    <!-- ANNULER -->
-                                                    <Button Content="✖"
-                                                            Margin="0,0,6,0"
-                                                            Visibility="{Binding IsInProgress,
-                                                                         Converter={StaticResource BoolToVisibility}}"
-                                                            Click="DownloadItem_Cancel"/>
-
-                                                    <!-- OUVRIR DOSSIER -->
-                                                    <Button Content="📁"
-                                                            Margin="0,0,6,0"
-                                                            Visibility="{Binding IsCompleted,
-                                                                         Converter={StaticResource BoolToVisibility}}"
-                                                            Click="DownloadItem_OpenFolder"/>
-
-                                                    <!-- SUPPRIMER DE LA LISTE -->
-                                                    <Button Content="🗑"
-                                                            ToolTip="Retirer de la liste"
-                                                            Visibility="{Binding IsCompleted,
-                                                                         Converter={StaticResource BoolToVisibility}}"
-                                                            Click="DownloadItem_Remove"/>
-
-                                                    <Button Content="🗑"
-                                                            ToolTip="Retirer de la liste"
-                                                            Visibility="{Binding IsFailed,
-                                                                         Converter={StaticResource BoolToVisibility}}"
-                                                            Click="DownloadItem_Remove"/>
-                                                </StackPanel>
-                                            </Grid>
-                                        </Border>
-
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </StackPanel>
-                    </Border>
-                </Popup>
-            </Grid>
-        </Grid>
-
-        <!-- =========================
-             DOCK INDICATOR
-             ========================= -->
-        <Border x:Name="DockIndicator"
-                Grid.Row="0"
-                Grid.ColumnSpan="2"
-                Height="44"
-                Margin="10,4"
-                Background="#3058A6FF"
-                BorderBrush="{StaticResource AccentBrush}"
-                BorderThickness="2"
-                CornerRadius="8"
-                Visibility="Collapsed"
-                Panel.ZIndex="200"/>
-
-        <!-- =========================
-             BARRE DE NAVIGATION
-             ========================= -->
-        <Border Grid.Row="1"
-                Grid.ColumnSpan="2"
-                Height="52"
-                Background="{StaticResource ToolbarBrush}"
-                BorderBrush="{StaticResource BorderBrush}"
-                BorderThickness="0,0,0,1"
-                Panel.ZIndex="90">
-            <Grid Margin="10,7">
+            <!-- BARRE D'ONGLETS -->
+            <Grid Height="40" Background="{StaticResource ChromeBrush}">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,9,0">
-                    <Button x:Name="BackBtn"
-                            Style="{StaticResource ToolbarIconButtonStyle}"
-                            Margin="0,0,4,0"
-                            ToolTip="Précédent"
-                            Click="BackBtn_Click"
-                            PreviewMouseLeftButtonDown="BackBtn_PreviewMouseLeftButtonDown"
-                            PreviewMouseLeftButtonUp="BackBtn_PreviewMouseLeftButtonUp">
-                        <Viewbox Width="16" Height="16">
-                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
-                                  Data="M15,3 L9,8 L15,13 L13,15 L5,8 L13,1 Z"/>
-                        </Viewbox>
-                    </Button>
-
-                    <Button x:Name="RefreshBtn"
-                            Style="{StaticResource ToolbarIconButtonStyle}"
-                            ToolTip="Actualiser"
-                            Click="RefreshBtn_Click">
-                        <Viewbox Width="17" Height="17">
-                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
-                                  Data="M12,4 A5,5 0 1 0 14,8 H12 A3,3 0 1 1 10,5.2 V3 L14,5.5 L10,8 V6.2 A4,4 0 1 0 12,4 Z"/>
-                        </Viewbox>
-                    </Button>
-                </StackPanel>
-
-                <Border x:Name="AddressBarBorder"
-                        Grid.Column="1"
-                        Height="38"
-                        VerticalAlignment="Center"
-                        Background="{StaticResource SurfaceRaisedBrush}"
-                        BorderBrush="{StaticResource BorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="12"
-                        SnapsToDevicePixels="True">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="35"/>
-                            <ColumnDefinition Width="34"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <Image x:Name="SslIcon"
-                               Grid.Column="0"
-                               Width="17"
-                               Height="17"
-                               Margin="11,0,0,0"
-                               HorizontalAlignment="Left"
-                               VerticalAlignment="Center"/>
-
-                        <Button x:Name="FillCredentialButton"
-                                Grid.Column="1"
-                                Style="{StaticResource IconButtonStyle}"
-                                Content="🔑"
-                                Width="28"
-                                Height="28"
-                                Margin="0,0,4,0"
-                                VerticalAlignment="Center"
-                                Click="FillCredential_Click"
-                                ToolTip="Remplir les identifiants enregistrés"
-                                IsEnabled="False"
-                                Opacity="0.35"/>
-
-                        <TextBox x:Name="AddressBar"
-                                 Grid.Column="2"
-                                 Style="{StaticResource AddressBarTextBoxStyle}"
-                                 KeyDown="AddressBar_KeyDown"
-                                 TextChanged="AddressBar_TextChanged"
-                                 PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown"
-                                 GotKeyboardFocus="AddressBar_GotKeyboardFocus"
-                                 GotFocus="AddressBar_GotFocus"
-                                 LostFocus="AddressBar_LostFocus"/>
-                    </Grid>
-                </Border>
-
-                <StackPanel Grid.Column="2"
-                            Orientation="Horizontal"
-                            VerticalAlignment="Center"
-                            HorizontalAlignment="Right"
-                            Margin="9,0,0,0">
-
-                    <Button x:Name="AdBlockButton"
-                            Style="{StaticResource ToolbarModuleButtonStyle}"
-                            Margin="0,0,5,0"
-                            ToolTip="Protection web"
-                            Click="AdBlockButton_Click">
-                        <Grid Width="24" Height="24">
-                            <Path x:Name="AdBlockShieldPath"
-                                  Width="19" Height="19"
-                                  Stretch="Uniform"
-                                  HorizontalAlignment="Center"
-                                  VerticalAlignment="Center"
-                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
-                                  Data="M12,2 L20,5 V11 C20,16.1 16.8,20.2 12,22 C7.2,20.2 4,16.1 4,11 V5 Z M12,5.1 L7,7 V11 C7,14.5 9,17.3 12,18.8 C15,17.3 17,14.5 17,11 V7 Z"/>
-                            <Border x:Name="AdBlockBadge"
-                                    MinWidth="15" Height="15"
-                                    Padding="3,0"
-                                    Background="{StaticResource AccentStrongBrush}"
-                                    BorderBrush="{StaticResource ToolbarBrush}"
-                                    BorderThickness="2"
-                                    CornerRadius="8"
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Top"
-                                    Margin="0,-5,-6,0"
-                                    Visibility="Collapsed">
-                                <TextBlock x:Name="AdBlockBadgeText"
-                                           FontSize="9"
-                                           FontWeight="Bold"
-                                           Foreground="White"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                            </Border>
-                        </Grid>
-                    </Button>
-
-                    <Button x:Name="CloudTorrentButton"
-                            Style="{StaticResource ToolbarModuleButtonStyle}"
-                            Margin="0,0,5,0"
-                            ToolTip="CloudTorrent"
-                            Visibility="Collapsed"
-                            Click="CloudTorrentButton_Click">
-                        <Grid Width="24" Height="24">
-                            <Path Width="19" Height="19" Stretch="Uniform"
-                                  HorizontalAlignment="Center" VerticalAlignment="Center"
-                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
-                                  Data="M4,3 L15,3 C17.8,3 20,5.2 20,8 C20,10.8 17.8,13 15,13 L13,13 L13,17 L16,14 L18,16 L12,22 L6,16 L8,14 L11,17 L11,13 L9,13 C6.2,13 4,10.8 4,8 Z M9,6 C7.9,6 7,6.9 7,8 C7,9.1 7.9,10 9,10 L15,10 C16.1,10 17,9.1 17,8 C17,6.9 16.1,6 15,6 Z"/>
-                            <Border x:Name="CloudTorrentBadge"
-                                    MinWidth="15" Height="15"
-                                    Padding="3,0"
-                                    Background="{StaticResource AccentStrongBrush}"
-                                    BorderBrush="{StaticResource ToolbarBrush}"
-                                    BorderThickness="2"
-                                    CornerRadius="8"
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Top"
-                                    Margin="0,-5,-6,0"
-                                    Visibility="Collapsed">
-                                <TextBlock x:Name="CloudTorrentBadgeText"
-                                           FontSize="9"
-                                           FontWeight="Bold"
-                                           Foreground="White"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                            </Border>
-                        </Grid>
-                    </Button>
-
-                    <Button x:Name="FavoriteButton"
-                            Style="{StaticResource ToolbarFeatureButtonStyle}"
-                            Margin="0,0,5,0"
-                            Click="ToggleFavoriteSafe_Click"
-                            Foreground="{StaticResource TextTertiaryBrush}"
-                            ToolTip="Ajouter ou retirer des favoris">
-                        <Viewbox Width="18" Height="18">
-                            <Path Stretch="Uniform"
-                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
-                                  Data="M12,2.7 L14.83,8.43 L21.15,9.35 L16.58,13.8 L17.66,20.08 L12,17.1 L6.34,20.08 L7.42,13.8 L2.85,9.35 L9.17,8.43 Z"/>
-                        </Viewbox>
-                    </Button>
-
-                    <Button x:Name="ManualLegacyButton"
-                            Style="{StaticResource ToolbarAmberButtonStyle}"
-                            Margin="0,0,5,0"
-                            Click="ManualLegacyButton_Click"
-                            ToolTip="Ouvrir ce site avec Flash Legacy dans Basilisk">
-                        <Viewbox Width="18" Height="18">
-                            <!-- Jaune fixe volontaire : ce module doit rester distinct des modules bleus. -->
-                            <Path Stretch="Uniform"
-                                  Fill="#FBBF24"
-                                  Data="M13.15,1.8 L4.7,13.2 L10.55,13.2 L8.95,22.2 L19.3,9.75 L13.35,9.75 Z"/>
-                        </Viewbox>
-                    </Button>
-
-                    <Button x:Name="FlashModeBtn"
-                            Style="{StaticResource ToolbarAmberPillButtonStyle}"
-                            Visibility="Collapsed"
-                            Margin="0,0,5,0"
-                            Click="FlashModeBtn_Click"
-                            ToolTip="Forcer ou libérer le mode Flash pour ce site">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Viewbox Width="15" Height="15" Margin="0,0,6,0">
-                                <Path Stretch="Uniform"
-                                      Fill="#FBBF24"
-                                      Data="M13.15,1.8 L4.7,13.2 L10.55,13.2 L8.95,22.2 L19.3,9.75 L13.35,9.75 Z"/>
-                            </Viewbox>
-                            <TextBlock Text="Auto"
-                                       Foreground="#FDE68A"
-                                       VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-
-                    <Button x:Name="ProfileButton"
-                            Width="34"
-                            Height="34"
-                            MinHeight="0"
+                <TabControl x:Name="Tabs"
+                            Grid.Column="0"
+                            Background="Transparent"
+                            BorderThickness="0"
                             Padding="0"
-                            Margin="2,0,0,0"
-                            Cursor="Hand"
-                            Click="ProfileButton_Click"
-                            ToolTip="Profil utilisateur"
-                            BorderBrush="{StaticResource BorderStrongBrush}"
-                            BorderThickness="1"
-                            Background="{StaticResource SurfaceRaisedBrush}"
-                            FontWeight="SemiBold"/>
-                </StackPanel>
+                            Margin="8,0,0,0"
+                            SelectionChanged="Tabs_SelectionChanged">
 
-                <Popup x:Name="AdBlockPopup"
-                       PlacementTarget="{Binding ElementName=AdBlockButton}"
-                       Placement="Bottom"
-                       HorizontalOffset="-320"
-                       VerticalOffset="7"
-                       StaysOpen="False"
-                       AllowsTransparency="True"
-                       PopupAnimation="Fade">
-                    <Border Margin="8" Background="Transparent">
-                        <Border.Effect>
-                            <DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.45" Color="#000000"/>
-                        </Border.Effect>
-                        <ContentControl x:Name="AdBlockPanelHost"/>
-                    </Border>
-                </Popup>
+                    <TabControl.Template>
+                        <ControlTemplate TargetType="TabControl">
+                            <DockPanel LastChildFill="True">
+                                <StackPanel DockPanel.Dock="Right"
+                                            Orientation="Horizontal"
+                                            VerticalAlignment="Center"
+                                            Margin="4,0,0,0">
+                                    <Button Style="{StaticResource TabStripButtonStyle}"
+                                            ToolTip="Nouvel onglet (Ctrl+T)"
+                                            Click="NewTab_Click">
+                                        <TextBlock Text="&#xE710;" Style="{StaticResource IconGlyph}" FontSize="13"/>
+                                    </Button>
+                                    <Button Style="{StaticResource TabStripButtonStyle}"
+                                            ToolTip="Nouvel onglet privé (Ctrl+Maj+N)"
+                                            Click="NewPrivateTab_Click">
+                                        <Viewbox Width="16" Height="16">
+                                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                                                  Data="M4,4 L20,4 L18,9 L15.5,9 C14.2,9 13.1,9.7 12.5,10.8 C11.9,9.7 10.8,9 9.5,9 L7,9 Z M5,11 L9.5,11 C11.4,11 12,12.5 12,14 C12,16.2 10.2,18 8,18 C5.8,18 4,16.2 4,14 C4,12.8 4.4,11.8 5,11 Z M15.5,11 L20,11 C20.6,11.8 21,12.8 21,14 C21,16.2 19.2,18 17,18 C14.8,18 13,16.2 13,14 C13,12.5 13.6,11 15.5,11 Z"/>
+                                        </Viewbox>
+                                    </Button>
+                                </StackPanel>
+                                <controles:TabStripPanel IsItemsHost="True"
+                                                         Margin="0,6,0,0"
+                                                         ClipToBounds="True"/>
+                            </DockPanel>
+                        </ControlTemplate>
+                    </TabControl.Template>
 
-                <Popup x:Name="CloudTorrentPopup"
-                       PlacementTarget="{Binding ElementName=CloudTorrentButton}"
-                       Placement="Bottom"
-                       HorizontalOffset="-390"
-                       VerticalOffset="7"
-                       StaysOpen="False"
-                       AllowsTransparency="True"
-                       PopupAnimation="Fade">
-                    <Border Margin="8" Background="Transparent">
-                        <Border.Effect>
-                            <DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.45" Color="#000000"/>
-                        </Border.Effect>
-                        <ContentControl x:Name="CloudTorrentPanelHost"/>
-                    </Border>
-                </Popup>
+                    <TabControl.ItemContainerStyle>
+                        <Style TargetType="TabItem">
+                            <Setter Property="MinWidth" Value="0"/>
+                            <Setter Property="MaxWidth" Value="240"/>
+                            <Setter Property="Height" Value="34"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0"/>
+                            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="TabItem">
+                                        <Grid>
+                                            <Border x:Name="Bd"
+                                                    Background="Transparent"
+                                                    CornerRadius="10,10,0,0"
+                                                    Margin="1,0,1,0"
+                                                    SnapsToDevicePixels="True">
+                                                <ContentPresenter ContentSource="Header"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                            <!-- Fine séparation entre onglets inactifs -->
+                                            <Border x:Name="Divider"
+                                                    Width="1"
+                                                    Height="16"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Center"
+                                                    Background="{StaticResource BorderBrush}"/>
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource TabHoverBrush}"/>
+                                                <Setter TargetName="Divider" Property="Visibility" Value="Hidden"/>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SelectedTabBrush}"/>
+                                                <Setter TargetName="Divider" Property="Visibility" Value="Hidden"/>
+                                                <Setter Property="Panel.ZIndex" Value="1"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </TabControl.ItemContainerStyle>
+                </TabControl>
 
-                <Popup x:Name="CommandSuggestionsPopup"
-                       PlacementTarget="{Binding ElementName=AddressBar}"
-                       Placement="Bottom"
-                       StaysOpen="True"
-                       AllowsTransparency="True"
-                       Focusable="False"
-                       PopupAnimation="Fade">
-                    <Border Margin="0,7,0,0"
-                            MinWidth="520"
-                            Background="{StaticResource PanelBrush}"
-                            BorderBrush="{StaticResource BorderStrongBrush}"
-                            BorderThickness="1"
-                            CornerRadius="12">
-                        <ListBox x:Name="CommandList"
-                                 Padding="5"
-                                 Background="Transparent"
-                                 BorderThickness="0"
-                                 Foreground="{StaticResource TextPrimaryBrush}"
-                                 FontSize="13"
-                                 MaxHeight="300"
-                                 SelectionChanged="CommandSuggestions_SelectionChanged"
-                                 KeyDown="CommandSuggestions_KeyDown">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Margin="9,6">
-                                        <TextBlock Text="{Binding Primary}" FontWeight="SemiBold"/>
-                                        <TextBlock Text="{Binding Secondary}" Margin="0,2,0,0" FontSize="11"
-                                                   Foreground="{StaticResource TextTertiaryBrush}" TextTrimming="CharacterEllipsis"/>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </Border>
-                </Popup>
+                <!-- Indicateur de réancrage d'une fenêtre détachée -->
+                <Border x:Name="DockIndicator"
+                        Grid.ColumnSpan="2"
+                        Margin="8,4"
+                        Background="#3058A6FF"
+                        BorderBrush="{StaticResource AccentBrush}"
+                        BorderThickness="2"
+                        CornerRadius="8"
+                        Visibility="Collapsed"
+                        IsHitTestVisible="False"
+                        Panel.ZIndex="200"/>
             </Grid>
-        </Border>
 
-        <!-- FAVORITES BAR -->
-        <Border Grid.Row="2"
-                Grid.ColumnSpan="2"
-                Background="{StaticResource ToolbarBrush}"
-                BorderBrush="{StaticResource BorderBrush}"
-                BorderThickness="0,1,0,1">
-            <StackPanel x:Name="FavoritesBar"
-                        Orientation="Horizontal"
-                        Height="32"
-                        VerticalAlignment="Center"
-                        Margin="6,0"/>
-        </Border>
-
-        <!-- WEB -->
-        <Grid Grid.Row="3" Grid.Column="0">
-
-            <!-- NAVIGATION WEB -->
-            <ContentControl x:Name="WebHost"
-                    Background="{StaticResource FluentBg}"/>
-
-            <!-- PARAMÈTRES -->
-            <ContentControl x:Name="SettingsHost"
-                    Visibility="Collapsed"/>
-        </Grid>
-
-        <!-- BARRE LATÉRALE -->
-        <Grid Grid.Row="3" Grid.Column="1" Panel.ZIndex="20">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="22"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-
-            <Button x:Name="ToggleSidebarBtn"
-                    Grid.Column="0"
-                    Width="22" Height="54"
-                    MinHeight="0" Padding="0"
-                    Margin="0,12,0,0"
-                    Content="❮"
-                    Foreground="{StaticResource TextTertiaryBrush}"
-                    Background="{StaticResource PanelBrush}"
+            <!-- BARRE DE NAVIGATION -->
+            <Border x:Name="NavBar"
+                    Height="46"
+                    Background="{DynamicResource SelectedTabBrush}"
                     BorderBrush="{StaticResource BorderBrush}"
-                    BorderThickness="1,1,0,1"
-                    Click="ToggleSidebar_Click"
-                    ToolTip="Afficher ou masquer la barre latérale"/>
+                    BorderThickness="0,0,0,1">
+                <Grid Margin="8,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-            <Border x:Name="Sidebar"
-                    Grid.Column="1"
-                    Width="56"
-                    Background="{StaticResource PanelBrush}"
-                    BorderBrush="{StaticResource BorderBrush}"
-                    BorderThickness="1,0,0,0">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <Button x:Name="SidebarProfileButton"
-                            Grid.Row="0"
-                            Style="{StaticResource ToolbarIconButtonStyle}"
-                            Width="36" Height="36"
-                            Margin="10,12,10,8"
-                            FontWeight="SemiBold"
-                            Click="SidebarProfileButton_Click"
-                            ToolTip="Profil utilisateur"/>
-
-                    <StackPanel Grid.Row="1" Margin="0,4,0,0">
-                        <Button Style="{StaticResource ToolbarIconButtonStyle}"
-                                Width="36" Height="36" Margin="10,4"
-                                Click="OpenSettings_Click" ToolTip="Paramètres">
-                            <Viewbox Width="17" Height="17">
-                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
-                                      Data="M12,2 L13.2,4.4 L15.8,4.8 L17.7,3 L20,5.3 L18.2,7.2 L18.6,9.8 L21,11 L21,14 L18.6,15.2 L18.2,17.8 L20,19.7 L17.7,22 L15.8,20.2 L13.2,20.6 L12,23 L9,23 L7.8,20.6 L5.2,20.2 L3.3,22 L1,19.7 L2.8,17.8 L2.4,15.2 L0,14 L0,11 L2.4,9.8 L2.8,7.2 L1,5.3 L3.3,3 L5.2,4.8 L7.8,4.4 L9,2 Z M10.5,8 C8,8 6,10 6,12.5 C6,15 8,17 10.5,17 C13,17 15,15 15,12.5 C15,10 13,8 10.5,8 Z"/>
-                            </Viewbox>
+                    <!-- Précédent / Suivant / Actualiser -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="BackBtn"
+                                Style="{StaticResource ToolbarIconButtonStyle}"
+                                ToolTip="Précédent (Alt+←) — maintenir ou clic droit pour l’historique de l’onglet"
+                                Click="BackBtn_Click"
+                                PreviewMouseLeftButtonDown="BackBtn_PreviewMouseLeftButtonDown"
+                                PreviewMouseLeftButtonUp="BackBtn_PreviewMouseLeftButtonUp"
+                                MouseRightButtonUp="BackBtn_MouseRightButtonUp">
+                            <TextBlock Text="&#xE72B;" Style="{StaticResource IconGlyph}"/>
                         </Button>
-
-                        <Button Style="{StaticResource ToolbarIconButtonStyle}"
-                                Width="36" Height="36" Margin="10,4"
-                                ToolTip="Historique" Click="OpenHistory_Click">
-                            <Viewbox Width="17" Height="17">
-                                <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
-                                      Data="M12,3 A9,9 0 1 1 4.8,6.6 L2,4 L2,11 L9,11 L6.5,8.5 A6,6 0 1 0 12,6 Z M11,7 L13,7 L13,12 L17,14 L16,16 L11,13 Z"/>
-                            </Viewbox>
+                        <Button x:Name="ForwardBtn"
+                                Style="{StaticResource ToolbarIconButtonStyle}"
+                                Margin="2,0,0,0"
+                                ToolTip="Suivant (Alt+→)"
+                                Click="ForwardBtn_Click">
+                            <TextBlock Text="&#xE72A;" Style="{StaticResource IconGlyph}"/>
+                        </Button>
+                        <Button x:Name="RefreshBtn"
+                                Style="{StaticResource ToolbarIconButtonStyle}"
+                                Margin="2,0,0,0"
+                                ToolTip="Actualiser (F5)"
+                                Click="RefreshBtn_Click">
+                            <Grid>
+                                <TextBlock x:Name="RefreshIcon" Text="&#xE72C;" Style="{StaticResource IconGlyph}"/>
+                                <TextBlock x:Name="StopIcon" Text="&#xE711;" Style="{StaticResource IconGlyph}" Visibility="Collapsed"/>
+                            </Grid>
                         </Button>
                     </StackPanel>
 
-                    <Border Grid.Row="2" Margin="10,8,10,12" Height="1" Background="{StaticResource BorderBrush}"/>
+                    <!-- BARRE D'ADRESSE -->
+                    <Border x:Name="AddressBarBorder"
+                            Grid.Column="1"
+                            Height="34"
+                            Margin="8,0"
+                            VerticalAlignment="Center"
+                            Background="{DynamicResource AddressFieldBrush}"
+                            BorderThickness="1"
+                            CornerRadius="17"
+                            SnapsToDevicePixels="True">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="BorderBrush" Value="{StaticResource BorderStrongBrush}"/>
+                                    </Trigger>
+                                    <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Indicateur de sécurité de la connexion -->
+                            <Border x:Name="SecurityIndicator"
+                                    Grid.Column="0"
+                                    Width="30" Height="26"
+                                    Margin="4,0,0,0"
+                                    Background="Transparent"
+                                    CornerRadius="13">
+                                <Grid>
+                                    <TextBlock x:Name="SecurityIconSecure" Text="&#xE72E;" FontFamily="{StaticResource IconFont}" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Visibility="Collapsed"/>
+                                    <TextBlock x:Name="SecurityIconInsecure" Text="&#xE7BA;" FontFamily="{StaticResource IconFont}" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource DangerBrush}" Visibility="Collapsed"/>
+                                    <TextBlock x:Name="SecurityIconLocal" Text="&#xE839;" FontFamily="{StaticResource IconFont}" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource WarningBrush}" Visibility="Collapsed"/>
+                                    <TextBlock x:Name="SecurityIconNeutral" Text="&#xE721;" FontFamily="{StaticResource IconFont}" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource TextTertiaryBrush}"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- Pastille « Navigation privée » -->
+                            <Border x:Name="PrivatePill"
+                                    Grid.Column="1"
+                                    Visibility="Collapsed"
+                                    Background="{StaticResource PrivateSoftBrush}"
+                                    CornerRadius="9"
+                                    Padding="8,1"
+                                    Margin="2,0,6,0"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="Navigation privée"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource PrivateBrush}"/>
+                            </Border>
+
+                            <TextBox x:Name="AddressBar"
+                                     Grid.Column="2"
+                                     Style="{StaticResource AddressBarTextBoxStyle}"
+                                     PreviewKeyDown="AddressBar_PreviewKeyDown"
+                                     TextChanged="AddressBar_TextChanged"
+                                     PreviewMouseLeftButtonDown="AddressBar_PreviewMouseLeftButtonDown"
+                                     GotKeyboardFocus="AddressBar_GotKeyboardFocus"
+                                     LostKeyboardFocus="AddressBar_LostKeyboardFocus"/>
+
+                            <TextBlock Grid.Column="2"
+                                       Text="Rechercher ou saisir une adresse"
+                                       Margin="4,0,0,0"
+                                       VerticalAlignment="Center"
+                                       FontSize="13.5"
+                                       Foreground="{StaticResource TextTertiaryBrush}"
+                                       IsHitTestVisible="False">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=AddressBar}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <Button x:Name="FillCredentialButton"
+                                    Grid.Column="3"
+                                    Style="{StaticResource InlineIconButtonStyle}"
+                                    Foreground="{StaticResource TextSecondaryBrush}"
+                                    Click="FillCredential_Click"
+                                    ToolTip="Remplir les identifiants enregistrés"
+                                    IsEnabled="False">
+                                <TextBlock Text="&#xE8D7;" Style="{StaticResource IconGlyph}" FontSize="13"/>
+                            </Button>
+
+                            <Button x:Name="FavoriteButton"
+                                    Grid.Column="4"
+                                    Style="{StaticResource InlineIconButtonStyle}"
+                                    Margin="0,0,3,0"
+                                    Foreground="{StaticResource TextSecondaryBrush}"
+                                    Click="ToggleFavoriteSafe_Click"
+                                    ToolTip="Ajouter aux favoris (Ctrl+D)">
+                                <Grid>
+                                    <TextBlock x:Name="FavoriteIconEmpty" Text="&#xE734;" Style="{StaticResource IconGlyph}" FontSize="14"/>
+                                    <TextBlock x:Name="FavoriteIconFilled" Text="&#xE735;" Style="{StaticResource IconGlyph}" FontSize="14" Foreground="{StaticResource WarningBrush}" Visibility="Collapsed"/>
+                                </Grid>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <!-- Modules et menus -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+
+                        <Button x:Name="AdBlockButton"
+                                Style="{StaticResource ToolbarModuleButtonStyle}"
+                                ToolTip="Protection web"
+                                Click="AdBlockButton_Click">
+                            <Grid Width="34" Height="34">
+                                <Path x:Name="AdBlockShieldPath"
+                                      Width="16" Height="16"
+                                      Stretch="Uniform"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                                      Data="M12,2 L20,5 V11 C20,16.1 16.8,20.2 12,22 C7.2,20.2 4,16.1 4,11 V5 Z M12,5.1 L7,7 V11 C7,14.5 9,17.3 12,18.8 C15,17.3 17,14.5 17,11 V7 Z"/>
+                                <Border x:Name="AdBlockBadge"
+                                        Style="{StaticResource BadgeStyle}"
+                                        Background="{StaticResource AccentStrongBrush}"
+                                        Visibility="Collapsed">
+                                    <TextBlock x:Name="AdBlockBadgeText" Style="{StaticResource BadgeTextStyle}"/>
+                                </Border>
+                            </Grid>
+                        </Button>
+
+                        <Button x:Name="ManualLegacyButton"
+                                Style="{StaticResource ToolbarAmberButtonStyle}"
+                                Margin="2,0,0,0"
+                                Click="ManualLegacyButton_Click"
+                                ToolTip="Ouvrir ce site avec Flash Legacy (Basilisk)">
+                            <TextBlock Text="&#xE945;" Style="{StaticResource IconGlyph}"/>
+                        </Button>
+
+                        <Button x:Name="DownloadsBtn"
+                                Style="{StaticResource ToolbarIconButtonStyle}"
+                                Margin="2,0,0,0"
+                                ToolTip="Téléchargements (Ctrl+J)"
+                                Click="DownloadsBtn_Click">
+                            <Grid Width="34" Height="34">
+                                <TextBlock Text="&#xE896;" Style="{StaticResource IconGlyph}"/>
+                                <Border x:Name="DownloadsBadge"
+                                        Style="{StaticResource BadgeStyle}"
+                                        Background="{StaticResource SuccessBrush}"
+                                        Visibility="Collapsed">
+                                    <TextBlock x:Name="DownloadsBadgeText" Style="{StaticResource BadgeTextStyle}" Foreground="#0B2A1B"/>
+                                </Border>
+                            </Grid>
+                        </Button>
+
+                        <Border Width="1" Height="20" Margin="8,0" Background="{StaticResource BorderBrush}"/>
+
+                        <Button x:Name="ProfileButton"
+                                Width="30" Height="30"
+                                MinHeight="0"
+                                Padding="0"
+                                Cursor="Hand"
+                                Focusable="False"
+                                Click="ProfileButton_Click"
+                                ToolTip="Profil utilisateur"
+                                Background="{StaticResource SurfaceRaisedBrush}"
+                                Foreground="White"
+                                FontWeight="SemiBold"
+                                FontSize="13">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Grid>
+                                        <Ellipse Fill="{TemplateBinding Background}"/>
+                                        <Ellipse x:Name="Ring" Stroke="{StaticResource BorderStrongBrush}" StrokeThickness="1"/>
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Grid>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Ring" Property="Stroke" Value="{StaticResource AccentBrush}"/>
+                                            <Setter TargetName="Ring" Property="StrokeThickness" Value="2"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+
+                        <Button x:Name="MainMenuButton"
+                                Style="{StaticResource ToolbarIconButtonStyle}"
+                                Margin="4,0,0,0"
+                                ToolTip="Menu"
+                                Click="MainMenuButton_Click">
+                            <TextBlock Text="&#xE712;" Style="{StaticResource IconGlyph}"/>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- POPUP : protection web -->
+                    <Popup x:Name="AdBlockPopup"
+                           PlacementTarget="{Binding ElementName=AdBlockButton}"
+                           Placement="Bottom"
+                           HorizontalOffset="-330"
+                           VerticalOffset="6"
+                           StaysOpen="False"
+                           AllowsTransparency="True"
+                           PopupAnimation="Fade">
+                        <Border Margin="10" Background="Transparent" Effect="{StaticResource PopupShadow}">
+                            <ContentControl x:Name="AdBlockPanelHost"/>
+                        </Border>
+                    </Popup>
+
+                    <!-- POPUP : téléchargements -->
+                    <Popup x:Name="DownloadsPopup"
+                           PlacementTarget="{Binding ElementName=DownloadsBtn}"
+                           Placement="Bottom"
+                           HorizontalOffset="-340"
+                           VerticalOffset="6"
+                           StaysOpen="False"
+                           AllowsTransparency="True"
+                           PopupAnimation="Fade">
+                        <Border Width="400"
+                                Margin="10"
+                                Padding="14,12"
+                                Background="{StaticResource PanelBrush}"
+                                BorderBrush="{StaticResource BorderStrongBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Effect="{StaticResource PopupShadow}">
+                            <StackPanel>
+                                <DockPanel Margin="0,0,0,10">
+                                    <Button DockPanel.Dock="Right"
+                                            Style="{StaticResource TextButtonStyle}"
+                                            Content="Effacer la liste"
+                                            FontSize="12"
+                                            Click="ClearCompletedDownloads"/>
+                                    <Button DockPanel.Dock="Right"
+                                            Style="{StaticResource TextButtonStyle}"
+                                            Content="Ouvrir le dossier"
+                                            FontSize="12"
+                                            Click="OpenDownloadsFolder_Click"/>
+                                    <TextBlock Text="Téléchargements"
+                                               FontSize="15"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                                </DockPanel>
+
+                                <TextBlock x:Name="DownloadsEmptyText"
+                                           Text="Aucun téléchargement pour le moment."
+                                           Margin="0,6,0,10"
+                                           FontSize="12.5"
+                                           Foreground="{StaticResource TextTertiaryBrush}"/>
+
+                                <ListBox x:Name="DownloadsList"
+                                         ItemsSource="{Binding Source={x:Static classes:DownloadManager.Instance}, Path=Items}"
+                                         MaxHeight="380"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                         VirtualizingPanel.IsVirtualizing="True">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                            <Setter Property="Padding" Value="0"/>
+                                            <Setter Property="Margin" Value="0,0,0,6"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ListBoxItem">
+                                                        <ContentPresenter/>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Padding="12,10"
+                                                    Background="{StaticResource SurfaceRaisedBrush}"
+                                                    BorderBrush="{StaticResource BorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="10">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <Border Width="32" Height="32"
+                                                            CornerRadius="8"
+                                                            Background="{StaticResource AccentSoftBrush}"
+                                                            VerticalAlignment="Top"
+                                                            Margin="0,0,10,0">
+                                                        <TextBlock Text="&#xE8A5;"
+                                                                   FontFamily="{StaticResource IconFont}"
+                                                                   FontSize="15"
+                                                                   Foreground="{StaticResource AccentBrush}"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
+                                                    </Border>
+
+                                                    <StackPanel Grid.Column="1">
+                                                        <TextBlock Text="{Binding FileName}"
+                                                                   FontWeight="SemiBold"
+                                                                   FontSize="13"
+                                                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   ToolTip="{Binding ResultFilePath}"
+                                                                   Cursor="Hand"
+                                                                   MouseLeftButtonUp="DownloadItem_Open"/>
+
+                                                        <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                                            <TextBlock Text="{Binding SizeText}"
+                                                                       FontSize="11.5"
+                                                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                            <TextBlock Text=" · " FontSize="11.5" Foreground="{StaticResource TextTertiaryBrush}"/>
+                                                            <TextBlock FontSize="11.5">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Text" Value="{Binding StatusText}"/>
+                                                                        <Setter Property="Foreground" Value="{StaticResource TextTertiaryBrush}"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                                                <Setter Property="Text" Value="{Binding SpeedText}"/>
+                                                                                <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding IsCompleted}" Value="True">
+                                                                                <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding IsFailed}" Value="True">
+                                                                                <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </StackPanel>
+
+                                                        <ProgressBar Margin="0,7,0,0"
+                                                                     Minimum="0"
+                                                                     Maximum="1"
+                                                                     Value="{Binding Progress01, Mode=OneWay}"
+                                                                     Visibility="{Binding IsInProgress, Converter={StaticResource BoolToVisibility}}"/>
+                                                    </StackPanel>
+
+                                                    <StackPanel Grid.Column="2"
+                                                                Orientation="Horizontal"
+                                                                VerticalAlignment="Top"
+                                                                Margin="8,0,0,0">
+                                                        <Button Style="{StaticResource DownloadActionButtonStyle}"
+                                                                ToolTip="Pause"
+                                                                Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}"
+                                                                Click="DownloadItem_Pause">
+                                                            <TextBlock Text="&#xE769;" Style="{StaticResource IconGlyph}" FontSize="12"/>
+                                                        </Button>
+                                                        <Button Style="{StaticResource DownloadActionButtonStyle}"
+                                                                ToolTip="Reprendre"
+                                                                Visibility="{Binding IsPaused, Converter={StaticResource BoolToVisibility}}"
+                                                                Click="DownloadItem_ResumeOrRetry">
+                                                            <TextBlock Text="&#xE768;" Style="{StaticResource IconGlyph}" FontSize="12"/>
+                                                        </Button>
+                                                        <Button Style="{StaticResource DownloadActionButtonStyle}"
+                                                                ToolTip="Réessayer"
+                                                                Visibility="{Binding IsFailed, Converter={StaticResource BoolToVisibility}}"
+                                                                Click="DownloadItem_ResumeOrRetry">
+                                                            <TextBlock Text="&#xE72C;" Style="{StaticResource IconGlyph}" FontSize="12"/>
+                                                        </Button>
+                                                        <Button Style="{StaticResource DownloadActionButtonStyle}"
+                                                                ToolTip="Annuler"
+                                                                Visibility="{Binding IsInProgress, Converter={StaticResource BoolToVisibility}}"
+                                                                Click="DownloadItem_Cancel">
+                                                            <TextBlock Text="&#xE711;" Style="{StaticResource IconGlyph}" FontSize="12"/>
+                                                        </Button>
+                                                        <Button Style="{StaticResource DownloadActionButtonStyle}"
+                                                                ToolTip="Afficher dans le dossier"
+                                                                Visibility="{Binding IsCompleted, Converter={StaticResource BoolToVisibility}}"
+                                                                Click="DownloadItem_OpenFolder">
+                                                            <TextBlock Text="&#xE838;" Style="{StaticResource IconGlyph}" FontSize="12"/>
+                                                        </Button>
+                                                        <Button Style="{StaticResource DownloadActionButtonStyle}"
+                                                                ToolTip="Retirer de la liste"
+                                                                Visibility="{Binding IsFinished, Converter={StaticResource BoolToVisibility}}"
+                                                                Click="DownloadItem_Remove">
+                                                            <TextBlock Text="&#xE74D;" Style="{StaticResource IconGlyph}" FontSize="12"/>
+                                                        </Button>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+
+                    <!-- POPUP : suggestions de l'omnibox -->
+                    <Popup x:Name="CommandSuggestionsPopup"
+                           PlacementTarget="{Binding ElementName=AddressBarBorder}"
+                           Placement="Bottom"
+                           VerticalOffset="4"
+                           StaysOpen="True"
+                           AllowsTransparency="True"
+                           Focusable="False"
+                           PopupAnimation="None">
+                        <Border Width="{Binding ActualWidth, ElementName=AddressBarBorder}"
+                                Margin="0,0,10,10"
+                                Padding="5"
+                                Background="{StaticResource PanelBrush}"
+                                BorderBrush="{StaticResource BorderStrongBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Effect="{StaticResource PopupShadow}">
+                            <ListBox x:Name="CommandList"
+                                     Focusable="False"
+                                     MaxHeight="360"
+                                     FontSize="13"
+                                     PreviewMouseLeftButtonUp="CommandList_PreviewMouseLeftButtonUp">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="4,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="28"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Icon}"
+                                                       FontFamily="{StaticResource IconFont}"
+                                                       FontSize="13"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding Primary}"
+                                                           FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding Secondary}"
+                                                           Margin="0,1,0,0"
+                                                           FontSize="11.5"
+                                                           Foreground="{StaticResource TextTertiaryBrush}"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Border>
+                    </Popup>
                 </Grid>
             </Border>
-        </Grid>
 
-        <Border x:Name="InternalToast"
-                Width="320"
-                Padding="12"
-                Background="{StaticResource SurfaceRaisedBrush}"
-                CornerRadius="12"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Bottom"
-                Margin="0,0,20,20"
-                Visibility="Collapsed"
-                Panel.ZIndex="500">
+            <!-- BARRE DE FAVORIS (masquée s'il n'y a aucun favori) -->
+            <Border x:Name="FavoritesBarHost"
+                    Height="32"
+                    Background="{DynamicResource SelectedTabBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    Visibility="Collapsed">
+                <StackPanel x:Name="FavoritesBar"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            ClipToBounds="True"
+                            Margin="8,0"/>
+            </Border>
+        </StackPanel>
 
-            <StackPanel>
-                <TextBlock x:Name="ToastTitle"
-                           FontWeight="Bold"
-                           Foreground="White"/>
+        <!-- =====================================================
+             CONTENU
+             ===================================================== -->
+        <ContentControl x:Name="WebHost"
+                        Grid.Row="1"
+                        Focusable="False"
+                        Background="{StaticResource WindowBackgroundBrush}"/>
 
-                <TextBlock x:Name="ToastMessage"
-                           Foreground="{StaticResource TextSecondaryBrush}"
-                           Margin="0,4,0,0"/>
+        <!-- Notifications : Popup pour rester visibles au-dessus du WebView2 (fenêtre native). -->
+        <Popup x:Name="ToastPopup"
+               Grid.Row="1"
+               PlacementTarget="{Binding ElementName=WebHost}"
+               Placement="Custom"
+               AllowsTransparency="True"
+               Focusable="False"
+               StaysOpen="True"
+               PopupAnimation="None">
+            <ItemsControl x:Name="ToastHost" Width="360" Margin="0,0,8,8">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type classes:ToastItem}">
+                        <Border Margin="0,8,0,0"
+                                Padding="14,12,10,12"
+                                Background="{StaticResource PanelBrush}"
+                                BorderBrush="{StaticResource BorderStrongBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Effect="{StaticResource PopupShadow}"
+                                Loaded="ToastCard_Loaded">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
 
-                <Button Content="Ouvrir le fichier"
-                        Margin="0,8,0,0"
-                        Click="Toast_OpenFile"/>
-            </StackPanel>
-        </Border>
+                                <TextBlock x:Name="KindIcon"
+                                           Text="&#xE946;"
+                                           FontFamily="{StaticResource IconFont}"
+                                           FontSize="16"
+                                           Margin="0,1,12,0"
+                                           VerticalAlignment="Top"
+                                           Foreground="{StaticResource AccentBrush}"/>
 
-        <ItemsControl x:Name="ToastHost"
-                      HorizontalAlignment="Right"
-                      VerticalAlignment="Bottom"
-                      Margin="0,0,20,20"
-                      Panel.ZIndex="500">
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding Title}"
+                                               FontWeight="SemiBold"
+                                               FontSize="13"
+                                               TextWrapping="Wrap"
+                                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="{Binding Message}"
+                                               Margin="0,3,0,0"
+                                               FontSize="12"
+                                               TextTrimming="CharacterEllipsis"
+                                               MaxHeight="34"
+                                               TextWrapping="Wrap"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Visibility="{Binding HasMessage, Converter={StaticResource BoolToVisibility}}"/>
+                                    <Button Content="{Binding ActionLabel}"
+                                            Style="{StaticResource PrimaryButtonStyle}"
+                                            HorizontalAlignment="Left"
+                                            MinHeight="28"
+                                            Padding="12,4"
+                                            FontSize="12"
+                                            Margin="0,10,0,0"
+                                            Visibility="{Binding HasAction, Converter={StaticResource BoolToVisibility}}"
+                                            Click="ToastAction_Click"/>
+                                </StackPanel>
 
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <StackPanel Orientation="Vertical"/>
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <Border Background="{StaticResource SurfaceRaisedBrush}"
-                            CornerRadius="12"
-                            Padding="12"
-                            Margin="0,0,0,10"
-                            Width="320"
-                            Opacity="0"
-                            RenderTransformOrigin="1,0.5">
-
-                        <Border.RenderTransform>
-                            <TranslateTransform X="40"/>
-                        </Border.RenderTransform>
-
-                        <StackPanel>
-                            <TextBlock Text="{Binding Title}"
-                                       FontWeight="Bold"
-                                       Foreground="White"/>
-
-                            <TextBlock Text="{Binding Message}"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                       Margin="0,4,0,0"/>
-
-                            <Button Content="Ouvrir le fichier"
-                                    Margin="0,8,0,0"
-                                    HorizontalAlignment="Left"
-                                    Click="Toast_OpenFile"
-                                    Tag="{Binding}"/>
-                        </StackPanel>
-                    </Border>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
+                                <Button Grid.Column="2"
+                                        Style="{StaticResource InlineIconButtonStyle}"
+                                        Width="24" Height="24"
+                                        VerticalAlignment="Top"
+                                        Margin="6,-4,0,0"
+                                        ToolTip="Fermer"
+                                        Click="ToastClose_Click">
+                                    <TextBlock Text="&#xE711;" Style="{StaticResource IconGlyph}" FontSize="10"/>
+                                </Button>
+                            </Grid>
+                        </Border>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding Kind}" Value="{x:Static classes:ToastKind.Success}">
+                                <Setter TargetName="KindIcon" Property="Text" Value="&#xE73E;"/>
+                                <Setter TargetName="KindIcon" Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="{x:Static classes:ToastKind.Warning}">
+                                <Setter TargetName="KindIcon" Property="Text" Value="&#xE7BA;"/>
+                                <Setter TargetName="KindIcon" Property="Foreground" Value="{StaticResource WarningBrush}"/>
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Popup>
     </Grid>
 </Window>

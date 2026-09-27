@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace MyHomelabBrowser.classes.Support
 {
@@ -19,7 +19,7 @@ namespace MyHomelabBrowser.classes.Support
         // Pendant la transition, le support historique reste disponible.
         // À passer à false après validation du backend et suppression des webhooks
         // du code distribué.
-        public const bool AllowLegacyDiscordFallback = true;
+        public static bool AllowLegacyDiscordFallback { get; } = true;
 
         public static TimeSpan RequestTimeout => TimeSpan.FromSeconds(35);
 

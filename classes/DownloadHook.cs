@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
@@ -55,7 +55,16 @@ namespace MyHomelabBrowser.classes
                 var op = e.DownloadOperation;
 
                 var folder = DownloadManager.Instance.DownloadFolder;
-                Directory.CreateDirectory(folder);
+                try
+                {
+                    Directory.CreateDirectory(folder);
+                }
+                catch
+                {
+                    // Dossier configuré introuvable (disque retiré, partage réseau absent…).
+                    folder = DownloadManager.DefaultDownloadFolder;
+                    Directory.CreateDirectory(folder);
+                }
 
                 // ✅ SEULE SOURCE FIABLE DU NOM
                 string fileName = "download.bin";
@@ -113,6 +122,7 @@ namespace MyHomelabBrowser.classes
                         {
                             case CoreWebView2DownloadState.InProgress:
                                 item.State = DownloadUiState.InProgress;
+                                item.IsPaused = false;
                                 break;
 
                             case CoreWebView2DownloadState.Completed:
@@ -134,8 +144,24 @@ namespace MyHomelabBrowser.classes
                                 break;
 
                             case CoreWebView2DownloadState.Interrupted:
-                                item.State = DownloadUiState.Interrupted;
                                 item.InterruptReason = op.InterruptReason;
+                                item.CanResume = op.CanResume;
+
+                                // WebView2 signale une pause comme une interruption :
+                                // l'élément reste « en cours » et propose Reprendre.
+                                bool paused = !item.CancelRequested &&
+                                    (item.IsPaused || op.InterruptReason == CoreWebView2DownloadInterruptReason.UserPaused);
+
+                                if (paused)
+                                {
+                                    item.IsPaused = true;
+                                    break;
+                                }
+
+                                item.State = item.CancelRequested ||
+                                             op.InterruptReason == CoreWebView2DownloadInterruptReason.UserCanceled
+                                    ? DownloadUiState.Cancelled
+                                    : DownloadUiState.Interrupted;
 
                                 if (!item.IsPrivate)
                                     DownloadManager.Instance.SaveHistory();

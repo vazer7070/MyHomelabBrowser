@@ -1,17 +1,19 @@
-﻿using MyHomelabBrowser.classes;
+using MyHomelabBrowser.classes;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
-using System.Windows.Media.Animation;
 
 namespace MyHomelabBrowser.controles
 {
     public partial class EmptyStartPage : UserControl
     {
+        private const int MaxFavoriteTiles = 10;
+
         readonly DispatcherTimer _debounce;
         bool _mouseDownInSuggestions;
         public event Action<string>? NavigateRequested;
@@ -19,13 +21,15 @@ namespace MyHomelabBrowser.controles
         IReadOnlyList<HistoryEntry> _history = Array.Empty<HistoryEntry>();
         List<OmniboxSuggestion> _currentSuggestions = new();
 
+        public BrowserSettings.SearchEngine SearchEngine { get; set; } = BrowserSettings.SearchEngine.Google;
+
         public EmptyStartPage()
         {
             InitializeComponent();
 
             _debounce = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(250)
+                Interval = TimeSpan.FromMilliseconds(120)
             };
             _debounce.Tick += (_, _) =>
             {
@@ -34,37 +38,54 @@ namespace MyHomelabBrowser.controles
             };
         }
 
-        // =========================
-        // 🎬 LOGO SPLASH LOOP
-        // =========================
-        void LogoHost_Loaded(object sender, RoutedEventArgs e)
+        private void StartPage_Loaded(object sender, RoutedEventArgs e)
         {
-            if (Resources["SparkleLoop"] is Storyboard sb)
-                sb.Begin();
+            int hour = DateTime.Now.Hour;
+            GreetingText.Text = hour switch
+            {
+                < 5 => "Bonne nuit",
+                < 12 => "Bonjour",
+                < 18 => "Bon après-midi",
+                _ => "Bonsoir"
+            };
+
+            // Focus direct dans le champ, comme la page de nouvel onglet des autres navigateurs.
+            Dispatcher.BeginInvoke(() => SearchBox.Focus(), DispatcherPriority.Input);
         }
 
         // =========================
-        // 🔗 INJECTION HISTORIQUE
+        // Données
         // =========================
         public void SetHistory(IReadOnlyList<HistoryEntry> history)
         {
             _history = history ?? Array.Empty<HistoryEntry>();
         }
 
-        void SuggestionsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        public void SetFavorites(IEnumerable<FavoriteItem> favorites)
         {
-            if (SuggestionsList.SelectedItem is OmniboxSuggestion s)
-                Navigate(s.Url);
+            var tiles = (favorites ?? Enumerable.Empty<FavoriteItem>())
+                .Where(f => !string.IsNullOrWhiteSpace(f.Url))
+                .Take(MaxFavoriteTiles)
+                .Select(f => new FavoriteTile(f))
+                .ToList();
+
+            FavoritesTiles.ItemsSource = tiles;
+            FavoritesSection.Visibility = tiles.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        private void FavoriteTile_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is string url && !string.IsNullOrWhiteSpace(url))
+                Navigate(url);
+        }
+
+        // =========================
+        // Suggestions
+        // =========================
         void Navigate(string url)
         {
             HideSuggestions();
-
-            if (NavigateRequested != null)
-                NavigateRequested(url);
-            else
-                System.Diagnostics.Debug.WriteLine("[EmptyStartPage] NavigateRequested non branché: " + url);
+            NavigateRequested?.Invoke(url);
         }
 
         void SearchBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
@@ -80,21 +101,18 @@ namespace MyHomelabBrowser.controles
             _mouseDownInSuggestions = true;
         }
 
-        void SuggestionsList_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
-        {
-            _mouseDownInSuggestions = false;
-            HideSuggestions();
-        }
-
         void SuggestionsList_MouseUp(object sender, MouseButtonEventArgs e)
         {
-            if (SuggestionsList.SelectedItem is OmniboxSuggestion s)
+            _mouseDownInSuggestions = false;
+
+            if (e.OriginalSource is DependencyObject source &&
+                ItemsControl.ContainerFromElement(SuggestionsList, source) is ListBoxItem { DataContext: OmniboxSuggestion s })
+            {
+                e.Handled = true;
                 Navigate(s.Url);
+            }
         }
 
-        // =========================
-        // UI EVENTS
-        // =========================
         void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             _debounce.Stop();
@@ -122,19 +140,23 @@ namespace MyHomelabBrowser.controles
             if (SuggestionsBorder.Visibility != Visibility.Visible)
                 return;
 
+            // La sélection au clavier ne navigue plus immédiatement :
+            // auparavant, la première flèche ouvrait déjà la suggestion.
             if (e.Key == Key.Down)
             {
                 SuggestionsList.SelectedIndex =
                     Math.Min(SuggestionsList.SelectedIndex + 1,
                              SuggestionsList.Items.Count - 1);
-                SuggestionsList.ScrollIntoView(SuggestionsList.SelectedItem);
+                if (SuggestionsList.SelectedItem != null)
+                    SuggestionsList.ScrollIntoView(SuggestionsList.SelectedItem);
                 e.Handled = true;
             }
             else if (e.Key == Key.Up)
             {
                 SuggestionsList.SelectedIndex =
-                    Math.Max(SuggestionsList.SelectedIndex - 1, 0);
-                SuggestionsList.ScrollIntoView(SuggestionsList.SelectedItem);
+                    Math.Max(SuggestionsList.SelectedIndex - 1, -1);
+                if (SuggestionsList.SelectedItem != null)
+                    SuggestionsList.ScrollIntoView(SuggestionsList.SelectedItem);
                 e.Handled = true;
             }
             else if (e.Key == Key.Escape)
@@ -151,9 +173,6 @@ namespace MyHomelabBrowser.controles
             SearchBox.Focus();
         }
 
-        // =========================
-        // OMNIBOX CORE
-        // =========================
         void UpdateSuggestions()
         {
             var input = SearchBox.Text?.Trim();
@@ -166,6 +185,7 @@ namespace MyHomelabBrowser.controles
 
             _currentSuggestions = BuildSuggestions(input);
             SuggestionsList.ItemsSource = _currentSuggestions;
+            SuggestionsList.SelectedIndex = -1;
 
             SuggestionsBorder.Visibility =
                 _currentSuggestions.Count > 0
@@ -176,40 +196,54 @@ namespace MyHomelabBrowser.controles
         List<OmniboxSuggestion> BuildSuggestions(string input)
         {
             var list = new List<OmniboxSuggestion>();
+            var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            // 1️⃣ HISTORIQUE
-            var historyMatches =
-                _history
-                .Where(h =>
-                    !string.IsNullOrEmpty(h.Title) &&
-                    h.Title.Contains(input, StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(h => h.VisitedAt)
-                .Take(8);
-
-            foreach (var h in historyMatches)
+            // Adresse directe (nas:5000, 192.168.1.10, exemple.fr…)
+            string? directUrl = UrlResolver.TryResolveUrl(input);
+            if (directUrl != null && seenUrls.Add(directUrl))
             {
-                var idx = h.Title.IndexOf(input, StringComparison.OrdinalIgnoreCase);
-                if (idx < 0)
-                    continue;
-
                 list.Add(new OmniboxSuggestion
                 {
-                    Icon = "🕘",
-                    Prefix = h.Title[..idx],
-                    Match = h.Title.Substring(idx, input.Length),
-                    Suffix = h.Title[(idx + input.Length)..],
-                    Url = h.Url
+                    Icon = "",
+                    Prefix = "Ouvrir ",
+                    Match = directUrl,
+                    Url = directUrl
                 });
             }
 
-            // 2️⃣ GOOGLE
+            // Historique : parcours chronologique inverse, sans tri complet à chaque frappe.
+            for (int i = _history.Count - 1; i >= 0 && list.Count < 8; i--)
+            {
+                HistoryEntry h = _history[i];
+                string title = string.IsNullOrWhiteSpace(h.Title) ? h.Url : h.Title;
+
+                bool matches =
+                    title.Contains(input, StringComparison.OrdinalIgnoreCase) ||
+                    h.Url.Contains(input, StringComparison.OrdinalIgnoreCase);
+
+                if (!matches || !seenUrls.Add(h.Url))
+                    continue;
+
+                int idx = title.IndexOf(input, StringComparison.OrdinalIgnoreCase);
+                list.Add(idx < 0
+                    ? new OmniboxSuggestion { Icon = "", Prefix = title, Suffix = "  —  " + h.Url, Url = h.Url }
+                    : new OmniboxSuggestion
+                    {
+                        Icon = "",
+                        Prefix = title[..idx],
+                        Match = title.Substring(idx, input.Length),
+                        Suffix = title[(idx + input.Length)..],
+                        Url = h.Url
+                    });
+            }
+
             list.Add(new OmniboxSuggestion
             {
-                Icon = "🔍",
+                Icon = "",
                 Prefix = "Rechercher ",
-                Match = $"\"{input}\"",
-                Suffix = " sur Google",
-                Url = $"https://www.google.com/search?q={Uri.EscapeDataString(input)}"
+                Match = $"« {input} »",
+                Suffix = " sur " + UrlResolver.GetSearchEngineName(SearchEngine),
+                Url = UrlResolver.BuildSearchUrl(input, SearchEngine)
             });
 
             return list;
@@ -217,30 +251,35 @@ namespace MyHomelabBrowser.controles
 
         void NavigateFromInput(string input)
         {
-            if (LooksLikeUrl(input))
-                Navigate(NormalizeUrl(input));
-            else
-                Navigate($"https://www.google.com/search?q={Uri.EscapeDataString(input)}");
-        }
+            if (string.IsNullOrWhiteSpace(input))
+                return;
 
-        static bool LooksLikeUrl(string input)
-        {
-            return Uri.TryCreate(input, UriKind.Absolute, out _)
-                   || input.Contains(".");
-        }
-
-        static string NormalizeUrl(string input)
-        {
-            if (Uri.TryCreate(input, UriKind.Absolute, out var uri))
-                return uri.AbsoluteUri;
-
-            return "https://" + input;
+            Navigate(UrlResolver.ResolveOrSearch(input, SearchEngine));
         }
 
         void HideSuggestions()
         {
+            _mouseDownInSuggestions = false;
             SuggestionsBorder.Visibility = Visibility.Collapsed;
             SuggestionsList.ItemsSource = null;
+        }
+
+        sealed class FavoriteTile
+        {
+            public FavoriteTile(FavoriteItem favorite)
+            {
+                Url = favorite.Url;
+                Title = string.IsNullOrWhiteSpace(favorite.Title) ? FaviconStore.HostFromUrl(favorite.Url) : favorite.Title;
+                Icon = FaviconStore.TryGet(favorite.Url);
+                string source = FaviconStore.HostFromUrl(favorite.Url);
+                Initial = source.Length > 0 ? source[..1].ToUpperInvariant() : "?";
+            }
+
+            public string Url { get; }
+            public string Title { get; }
+            public ImageSource? Icon { get; }
+            public string Initial { get; }
+            public bool HasNoIcon => Icon == null;
         }
     }
 

@@ -1,4 +1,4 @@
-﻿using Microsoft.Web.WebView2.Wpf;
+using Microsoft.Web.WebView2.Wpf;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 

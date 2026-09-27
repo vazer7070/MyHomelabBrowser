@@ -15,6 +15,8 @@ namespace MyHomelabBrowser.classes.Profiles
 
         public static string Root => _currentRoot;
 
+        public static string GlobalRoot => DefaultRoot;
+
         public static void UseProfile(string profileName)
         {
             _currentRoot = Path.Combine(

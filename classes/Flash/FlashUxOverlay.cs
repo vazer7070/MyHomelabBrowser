@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -8,6 +8,10 @@ using System.Windows.Threading;
 
 namespace MyHomelabBrowser.classes.Flash
 {
+    /// <summary>
+    /// Bandeau d'information Flash affiché au-dessus de la page. C'est un Popup :
+    /// un élément WPF classique serait masqué par la fenêtre native du WebView2.
+    /// </summary>
     public sealed class FlashUxOverlay
     {
         private readonly Window _owner;
@@ -24,19 +28,24 @@ namespace MyHomelabBrowser.classes.Flash
         private UIElement? _placementTarget;
         private bool _isVisible;
 
-        public event Action? OpenSettingsRequested;
-
         public FlashUxOverlay(Window owner)
         {
             _owner = owner;
 
-            // Reposition si la fenêtre bouge / resize (quand overlay visible)
+            // Repositionnement si la fenêtre bouge ou change de taille.
             _owner.LocationChanged += (_, _) => { if (_isVisible) InvalidateLayout(); };
             _owner.SizeChanged += (_, _) => { if (_isVisible) InvalidateLayout(); };
+
+            // Un Popup reste au premier plan : on le masque quand la fenêtre est réduite.
+            _owner.StateChanged += (_, _) =>
+            {
+                if (_popup != null && _isVisible)
+                    _popup.IsOpen = _owner.WindowState != WindowState.Minimized;
+            };
         }
 
         /// <summary>
-        /// Cible visuelle à couvrir (conseillé : WebHost, stable).
+        /// Cible visuelle à couvrir (l'hôte de l'onglet).
         /// </summary>
         public void BindHost(UIElement placementTarget)
         {
@@ -45,7 +54,7 @@ namespace MyHomelabBrowser.classes.Flash
             _placementTarget = placementTarget;
 
             if (_popup != null)
-                _popup.PlacementTarget = _owner; // on place en AbsolutePoint (écran), target = owner
+                _popup.PlacementTarget = _owner;
 
             if (_isVisible)
                 InvalidateLayout();
@@ -58,26 +67,25 @@ namespace MyHomelabBrowser.classes.Flash
 
             _message = new TextBlock
             {
-                Foreground = Brushes.White,
-                FontSize = 14,
+                FontSize = 13.5,
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 12),
-                MaxWidth = 720
+                MaxWidth = 640
             };
+            _message.SetResourceReference(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
             _primaryBtn = new Button
             {
-                Content = "OK",
-                Padding = new Thickness(12, 6, 12, 6),
+                Content = "Fermer",
                 Margin = new Thickness(0, 0, 8, 0),
                 HorizontalAlignment = HorizontalAlignment.Left
             };
-            _primaryBtn.Click += (_, _) => _primaryAction?.Invoke();
+            _primaryBtn.SetResourceReference(FrameworkElement.StyleProperty, "PrimaryButtonStyle");
+            _primaryBtn.Click += (_, _) => (_primaryAction ?? Hide).Invoke();
 
             _secondaryBtn = new Button
             {
                 Content = "Paramètres",
-                Padding = new Thickness(12, 6, 12, 6),
                 HorizontalAlignment = HorizontalAlignment.Left,
                 Visibility = Visibility.Collapsed
             };
@@ -87,27 +95,44 @@ namespace MyHomelabBrowser.classes.Flash
             btnRow.Children.Add(_primaryBtn);
             btnRow.Children.Add(_secondaryBtn);
 
-            var stack = new StackPanel();
-            stack.Children.Add(_message);
-            stack.Children.Add(btnRow);
+            var icon = new TextBlock
+            {
+                Text = "",
+                FontSize = 18,
+                Margin = new Thickness(0, 1, 14, 0),
+                VerticalAlignment = VerticalAlignment.Top
+            };
+            icon.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
+            icon.SetResourceReference(TextBlock.ForegroundProperty, "WarningBrush");
+
+            var content = new StackPanel();
+            content.Children.Add(_message);
+            content.Children.Add(btnRow);
+
+            var layout = new DockPanel();
+            DockPanel.SetDock(icon, Dock.Left);
+            layout.Children.Add(icon);
+            layout.Children.Add(content);
 
             _root = new Border
             {
-                Background = new SolidColorBrush(Color.FromArgb(230, 20, 20, 20)),
                 CornerRadius = new CornerRadius(12),
-                Padding = new Thickness(16),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(18, 16, 18, 16),
+                Margin = new Thickness(12),
                 Opacity = 0,
-                Child = stack,
+                Child = layout,
                 IsHitTestVisible = true
             };
+            _root.SetResourceReference(Border.BackgroundProperty, "PanelBrush");
+            _root.SetResourceReference(Border.BorderBrushProperty, "BorderStrongBrush");
+            _root.SetResourceReference(UIElement.EffectProperty, "PopupShadow");
 
-            // Popup en coord écran
+            // Coordonnées écran calculées par TryUpdatePlacement.
             _popup = new Popup
             {
                 AllowsTransparency = true,
                 StaysOpen = true,
-
-                // on calcule nous-mêmes les offsets
                 Placement = PlacementMode.AbsolutePoint,
                 PlacementTarget = _owner,
                 Child = _root
@@ -120,27 +145,35 @@ namespace MyHomelabBrowser.classes.Flash
             string? secondaryText = null,
             Action? secondaryAction = null)
         {
+            EnsureCreated();
+
             _primaryAction = primaryAction;
             _secondaryAction = secondaryAction;
 
-            if (_primaryBtn != null)
+            _primaryBtn!.Content = primaryText;
+            _primaryBtn.Visibility = Visibility.Visible;
+
+            if (!string.IsNullOrWhiteSpace(secondaryText))
             {
-                _primaryBtn.Content = primaryText;
-                _primaryBtn.Visibility = Visibility.Visible;
+                _secondaryBtn!.Content = secondaryText!;
+                _secondaryBtn.Visibility = Visibility.Visible;
             }
+            else
+            {
+                _secondaryBtn!.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void ResetActions()
+        {
+            _primaryAction = null;
+            _secondaryAction = null;
+
+            if (_primaryBtn != null)
+                _primaryBtn.Content = "Fermer";
 
             if (_secondaryBtn != null)
-            {
-                if (!string.IsNullOrWhiteSpace(secondaryText))
-                {
-                    _secondaryBtn.Content = secondaryText!;
-                    _secondaryBtn.Visibility = Visibility.Visible;
-                }
-                else
-                {
-                    _secondaryBtn.Visibility = Visibility.Collapsed;
-                }
-            }
+                _secondaryBtn.Visibility = Visibility.Collapsed;
         }
 
         private bool TryUpdatePlacement()
@@ -148,33 +181,23 @@ namespace MyHomelabBrowser.classes.Flash
             if (_popup == null || _root == null || _placementTarget == null)
                 return false;
 
-            if (_placementTarget is not FrameworkElement fe)
+            if (_placementTarget is not FrameworkElement fe || !fe.IsVisible)
                 return false;
 
-            if (!fe.IsVisible)
-                return false;
-
-            // Mesure du contenu du popup pour connaitre sa largeur/hauteur
             _root.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             var popupSize = _root.DesiredSize;
 
-            // Coord écran (device px) du target
             var topLeftPx = fe.PointToScreen(new Point(0, 0));
 
-            // Conversion device px -> WPF DIPs
             var src = PresentationSource.FromVisual(_owner);
             if (src?.CompositionTarget == null)
                 return false;
 
-            var fromDevice = src.CompositionTarget.TransformFromDevice;
-            var topLeftDip = fromDevice.Transform(topLeftPx);
+            var topLeftDip = src.CompositionTarget.TransformFromDevice.Transform(topLeftPx);
 
-            // Centrage horizontal au-dessus du target, et y = top + 24
-            var x = topLeftDip.X + (fe.ActualWidth - popupSize.Width) / 2.0;
-            var y = topLeftDip.Y + 24;
-
-            _popup.HorizontalOffset = x;
-            _popup.VerticalOffset = y;
+            // Centré horizontalement, en haut de la zone de la page.
+            _popup.HorizontalOffset = topLeftDip.X + (fe.ActualWidth - popupSize.Width) / 2.0;
+            _popup.VerticalOffset = topLeftDip.Y + 12;
 
             return true;
         }
@@ -182,20 +205,16 @@ namespace MyHomelabBrowser.classes.Flash
         public void InvalidateLayout()
         {
             if (_owner.Dispatcher.CheckAccess())
-            {
                 TryUpdatePlacement();
-            }
             else
-            {
                 _owner.Dispatcher.Invoke(() => TryUpdatePlacement(), DispatcherPriority.Render);
-            }
         }
 
         public bool ShowBlocked(string message)
         {
             try
             {
-                Action show = () =>
+                void Show()
                 {
                     if (_placementTarget == null)
                         return;
@@ -204,34 +223,29 @@ namespace MyHomelabBrowser.classes.Flash
                     if (_popup == null || _root == null || _message == null)
                         return;
 
+                    // Les actions sont redéfinies par l'appelant (SetActions) après l'affichage.
+                    ResetActions();
                     _message.Text = message;
 
-                    // Important : ouvrir d'abord, puis placer
-                    _popup.IsOpen = true;
-
-                    // recalcul placement maintenant que layout existe
+                    _popup.IsOpen = _owner.WindowState != WindowState.Minimized;
                     TryUpdatePlacement();
-
-                    if (_isVisible)
-                        return;
 
                     _isVisible = true;
 
-                    var fadeIn = new DoubleAnimation
+                    // Toujours relancer le fondu : un Hide encore en cours ne doit pas
+                    // refermer l'overlay qu'on vient d'afficher.
+                    _root.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation
                     {
-                        From = 0,
                         To = 1,
                         Duration = TimeSpan.FromMilliseconds(160),
                         EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-                    };
-
-                    _root.BeginAnimation(UIElement.OpacityProperty, fadeIn);
-                };
+                    });
+                }
 
                 if (_owner.Dispatcher.CheckAccess())
-                    show();
+                    Show();
                 else
-                    _owner.Dispatcher.Invoke(show, DispatcherPriority.Send);
+                    _owner.Dispatcher.Invoke(Show, DispatcherPriority.Send);
 
                 return true;
             }
@@ -248,8 +262,13 @@ namespace MyHomelabBrowser.classes.Flash
             if (_popup == null || _root == null)
                 return;
 
-            Action hide = () =>
+            void DoHide()
             {
+                if (!_isVisible)
+                    return;
+
+                _isVisible = false;
+
                 var fadeOut = new DoubleAnimation
                 {
                     To = 0,
@@ -259,27 +278,21 @@ namespace MyHomelabBrowser.classes.Flash
 
                 fadeOut.Completed += (_, _) =>
                 {
-                    _isVisible = false;
-                    _popup.IsOpen = false;
+                    // Réaffiché pendant le fondu : on ne ferme pas.
+                    if (!_isVisible)
+                        _popup.IsOpen = false;
                 };
 
                 _root.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-            };
+            }
 
             if (_owner.Dispatcher.CheckAccess())
-                hide();
+                DoHide();
             else
-                _owner.Dispatcher.Invoke(hide, DispatcherPriority.Send);
+                _owner.Dispatcher.Invoke(DoHide, DispatcherPriority.Send);
         }
 
         public void DeactivateTabVisuals() => Hide();
         public void DetachVisualOnly() => Hide();
-
-        // Optionnel si tu veux garder la sémantique “settings”
-        public void SetOpenSettingsAction(Action action)
-        {
-            OpenSettingsRequested = null;
-            OpenSettingsRequested += action;
-        }
     }
 }

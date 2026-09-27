@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="MyHomelabBrowser.SettingsView"
+<UserControl x:Class="MyHomelabBrowser.SettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="{StaticResource WindowBackgroundBrush}"
@@ -46,7 +46,7 @@
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
-                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="#31577D"/>
+                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{StaticResource AccentStrongBrush}"/>
                                 <Setter TargetName="SelectionMark" Property="Visibility" Value="Visible"/>
                                 <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
                                 <Setter Property="FontWeight" Value="SemiBold"/>
@@ -252,22 +252,6 @@
                                            Text="Bloqueur de publicités"/>
                             </Grid>
                         </ListBoxItem>
-                        <ListBoxItem Tag="CloudTorrent">
-                            <Grid Height="24" VerticalAlignment="Center">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="18"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0"
-                                           Style="{StaticResource SettingsNavIconStyle}"
-                                           Text="&#xE753;"
-                                           ToolTip="CloudTorrent"/>
-                                <TextBlock Grid.Column="1"
-                                           Style="{StaticResource SettingsNavLabelStyle}"
-                                           Text="CloudTorrent"/>
-                            </Grid>
-                        </ListBoxItem>
-
                         <ListBoxItem IsEnabled="False" Height="17" Tag="Séparateur">
                             <Border Height="1" Background="{StaticResource BorderBrush}" VerticalAlignment="Center"/>
                         </ListBoxItem>

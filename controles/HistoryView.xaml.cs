@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -19,17 +18,31 @@ namespace MyHomelabBrowser.controles
         readonly List<HistoryItemVM> _allVm;
         readonly Action<string, bool> _navigate;
         readonly Action<HistoryEntry> _delete;
+        readonly Action<IReadOnlyCollection<HistoryEntry>> _deleteMany;
+        readonly System.Windows.Threading.DispatcherTimer _searchDebounce;
         bool _onlyToday = false;
 
         public HistoryView(
-     List<HistoryEntry> history,
-     Action<string, bool> navigate,
-     Action<HistoryEntry> delete)
+            List<HistoryEntry> history,
+            Action<string, bool> navigate,
+            Action<HistoryEntry> delete,
+            Action<IReadOnlyCollection<HistoryEntry>> deleteMany)
         {
             InitializeComponent();
 
             _navigate = navigate;
             _delete = delete;
+            _deleteMany = deleteMany;
+
+            _searchDebounce = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(180)
+            };
+            _searchDebounce.Tick += (_, _) =>
+            {
+                _searchDebounce.Stop();
+                Refresh(SearchBox.Text);
+            };
 
             _allVm = history
                 .OrderByDescending(h => h.VisitedAt)
@@ -58,7 +71,7 @@ namespace MyHomelabBrowser.controles
                 return;
 
 
-            if (FindParent<Button>(e.OriginalSource as DependencyObject) != null)
+            if (e.OriginalSource is DependencyObject source && FindParent<Button>(source) != null)
                 return;
 
             if (sender is not ListViewItem item)
@@ -71,30 +84,42 @@ namespace MyHomelabBrowser.controles
             e.Handled = true;
         }
 
-        static T? FindParent<T>(DependencyObject child) where T : DependencyObject
+        static T? FindParent<T>(DependencyObject? child) where T : DependencyObject
         {
             while (child != null)
             {
                 if (child is T t)
                     return t;
 
-                child = VisualTreeHelper.GetParent(child);
+                // Un Run (texte) n'est pas un Visual : VisualTreeHelper lèverait une exception.
+                child = child is Visual or System.Windows.Media.Media3D.Visual3D
+                    ? VisualTreeHelper.GetParent(child)
+                    : LogicalTreeHelper.GetParent(child);
             }
             return null;
         }
-        private async void ClearAll_Click(object sender, RoutedEventArgs e)
+
+        private void ClearAll_Click(object sender, RoutedEventArgs e)
         {
-            // ✅ UI instant
+            if (_allVm.Count == 0)
+                return;
+
+            var answer = MessageBox.Show(
+                Window.GetWindow(this),
+                "Effacer tout l’historique de navigation de ce profil ?",
+                "Historique",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (answer != MessageBoxResult.Yes)
+                return;
+
+            // Suppression groupée sur le thread UI : l'historique est une List<>
+            // partagée avec la navigation, elle ne doit pas être modifiée ailleurs.
             var toDelete = _allVm.Select(vm => vm.Entry).ToList();
             _allVm.Clear();
+            _deleteMany(toDelete);
             Refresh();
-
-            // ✅ delete en arrière-plan
-            await Task.Run(() =>
-            {
-                foreach (var entry in toDelete)
-                    _delete(entry);
-            });
         }
 
         private void ClearSearch_Click(object sender, RoutedEventArgs e)
@@ -143,8 +168,8 @@ namespace MyHomelabBrowser.controles
 
         void Refresh(string? filter = null)
         {
-            IEnumerable<HistoryItemVM> list = _allVm
-                .OrderByDescending(vm => vm.Entry.VisitedAt);
+            // _allVm est trié une seule fois à la construction.
+            IEnumerable<HistoryItemVM> list = _allVm;
 
             if (_onlyToday)
             {
@@ -154,10 +179,10 @@ namespace MyHomelabBrowser.controles
 
             if (!string.IsNullOrWhiteSpace(filter))
             {
-                filter = filter.ToLowerInvariant();
+                string query = filter.Trim();
                 list = list.Where(vm =>
-                    (vm.Title ?? "").ToLowerInvariant().Contains(filter) ||
-                    (vm.Url ?? "").ToLowerInvariant().Contains(filter));
+                    (vm.Title ?? "").Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    (vm.Url ?? "").Contains(query, StringComparison.OrdinalIgnoreCase));
             }
 
             var vms = list.ToList();
@@ -177,14 +202,6 @@ namespace MyHomelabBrowser.controles
                 ClearSearchBtn.Visibility = string.IsNullOrWhiteSpace(SearchBox.Text)
                     ? Visibility.Collapsed
                     : Visibility.Visible;
-
-            
-
-            _ = Task.Run(async () =>
-            {
-                foreach (var vm in vms)
-                    await vm.LoadFaviconAsync();
-            });
 
         }
 
@@ -221,7 +238,10 @@ namespace MyHomelabBrowser.controles
 
 
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
-            => Refresh(SearchBox.Text);
+        {
+            _searchDebounce.Stop();
+            _searchDebounce.Start();
+        }
 
         
 
@@ -235,22 +255,16 @@ namespace MyHomelabBrowser.controles
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
         public HistoryEntry Entry { get; }
-        static readonly HttpClient _http = new HttpClient();
 
-        public string Title => Entry.Title;
+        public string Title => string.IsNullOrWhiteSpace(Entry.Title) ? Entry.Url : Entry.Title;
         public string Url => Entry.Url;
 
+        // Icône issue du cache local (aucune requête vers un service tiers).
+        // Évaluée à l'affichage : avec la virtualisation, seules les lignes visibles la chargent.
+        public ImageSource? Favicon => _favicon ??= FaviconStore.TryGet(Entry.Url);
         ImageSource? _favicon;
-        public ImageSource? Favicon
-        {
-            get => _favicon;
-            private set
-            {
-                if (_favicon == value) return;
-                _favicon = value;
-                OnPropertyChanged(nameof(Favicon));
-            }
-        }
+
+        public bool HasFavicon => Favicon != null;
 
         public string RelativeDate
         {
@@ -277,73 +291,6 @@ namespace MyHomelabBrowser.controles
                 return "Plus ancien";
             }
         }
-
-        static readonly Dictionary<string, ImageSource> FaviconCache =
-            new(StringComparer.OrdinalIgnoreCase);
-
-        static readonly HashSet<string> FaviconLoading =
-            new(StringComparer.OrdinalIgnoreCase);
-
-        public async Task LoadFaviconAsync()
-        {
-            string host = "";
-
-            try
-            {
-                host = new Uri(Entry.Url).Host;
-
-                if (FaviconCache.TryGetValue(host, out var cached))
-                {
-                    Favicon = cached;
-                    return;
-                }
-
-                lock (FaviconLoading)
-                {
-                    if (FaviconLoading.Contains(host))
-                        return;
-
-                    FaviconLoading.Add(host);
-                }
-
-                var faviconUrl = $"https://www.google.com/s2/favicons?sz=64&domain={host}";
-
-                // ✅ téléchargement bytes (async, pas UI thread)
-                var bytes = await _http.GetByteArrayAsync(faviconUrl);
-
-                // ✅ decode image depuis stream => Freeze OK 100%
-                var img = await Task.Run(() =>
-                {
-                    using var ms = new MemoryStream(bytes);
-
-                    var bmp = new BitmapImage();
-                    bmp.BeginInit();
-                    bmp.CacheOption = BitmapCacheOption.OnLoad;
-                    bmp.StreamSource = ms;
-                    bmp.EndInit();
-                    bmp.Freeze();
-
-                    return (ImageSource)bmp;
-                });
-
-                FaviconCache[host] = img;
-                Favicon = img;
-            }
-            catch
-            {
-                // ignore
-            }
-            finally
-            {
-                if (!string.IsNullOrWhiteSpace(host))
-                {
-                    lock (FaviconLoading)
-                        FaviconLoading.Remove(host);
-                }
-            }
-        }
-
-
 
         public HistoryItemVM(HistoryEntry entry)
         {

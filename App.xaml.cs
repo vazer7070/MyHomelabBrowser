@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using MyHomelabBrowser.classes;
+using System.Windows;
 using Velopack;
 
 namespace MyHomelabBrowser
@@ -8,6 +9,7 @@ namespace MyHomelabBrowser
         protected override void OnStartup(StartupEventArgs e)
         {
             VelopackApp.Build().Run();
+            DarkTitleBar.RegisterForAllWindows();
             base.OnStartup(e);
         }
     }

@@ -1,4 +1,4 @@
-using Microsoft.Web.WebView2.Wpf;
+﻿using Microsoft.Web.WebView2.Wpf;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -10,7 +10,6 @@ namespace MyHomelabBrowser
     public partial class MainWindow
     {
         private readonly HashSet<TabItem> _tabsBeingClosed = new();
-        private readonly HashSet<WebView2> _disposedClosedWebViews = new();
 
         /// <summary>
         /// Arrête réellement le moteur WebView2 d'un onglet.
@@ -21,9 +20,18 @@ namespace MyHomelabBrowser
             if (content == null)
                 return;
 
+            content.IsClosed = true;
+
             WebView2? web = content.Web;
-            if (web == null || !_disposedClosedWebViews.Add(web))
+            if (web == null || content.IsShutDown)
+            {
+                await StopLegacyProcessAsync(content);
                 return;
+            }
+
+            // Marqueur porté par l'onglet : l'ancien HashSet gardait chaque WebView2
+            // fermé en mémoire jusqu'à la fin de la session.
+            content.IsShutDown = true;
 
             // Coupure immédiate côté WPF.
             try
@@ -34,8 +42,6 @@ namespace MyHomelabBrowser
             catch { }
 
             // Détacher les modules avant la destruction du CoreWebView2.
-            try { _cloudTorrentBrowser?.Detach(web); } catch { }
-
             try
             {
                 if (_adBlockUiInitialized && _adBlockBrowser != null)
@@ -45,7 +51,15 @@ namespace MyHomelabBrowser
 
             try
             {
-                content.RuffleMonitor?.Stop();
+                content.FlashNavigationCts?.Cancel();
+                content.FlashNavigationCts?.Dispose();
+                content.FlashNavigationCts = null;
+            }
+            catch { }
+
+            try
+            {
+                content.RuffleMonitor?.Dispose();
                 content.RuffleMonitor = null;
             }
             catch { }
@@ -107,6 +121,9 @@ namespace MyHomelabBrowser
                 try { core.IsMuted = true; } catch { }
             }
 
+            // Basilisk est arrêté après la coupure du son de la page.
+            await StopLegacyProcessAsync(content);
+
             // Enlever toutes les références visuelles avant Dispose().
             try
             {
@@ -125,7 +142,41 @@ namespace MyHomelabBrowser
             try { web.Dispose(); } catch { }
         }
 
-        internal Task ShutdownDetachedWebTabAsync(WebTabContent content)
-            => ShutdownWebTabAsync(content);
+        /// <summary>
+        /// Ferme uniquement le Basilisk de cet onglet, sans bloquer l'interface.
+        /// </summary>
+        private static async Task StopLegacyProcessAsync(WebTabContent content)
+        {
+            var process = content.LegacyProc;
+            content.LegacyProc = null;
+
+            try
+            {
+                if (process is { HasExited: false })
+                {
+                    process.CloseMainWindow();
+
+                    using var timeout = new System.Threading.CancellationTokenSource(TimeSpan.FromMilliseconds(800));
+                    try
+                    {
+                        await process.WaitForExitAsync(timeout.Token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                }
+            }
+            catch
+            {
+                try { process?.Kill(entireProcessTree: true); } catch { }
+            }
+            finally
+            {
+                try { process?.Dispose(); } catch { }
+                content.LegacyProfileLease?.Dispose();
+                content.LegacyProfileLease = null;
+            }
+        }
     }
 }

@@ -108,12 +108,12 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                 if (primaryLoaded)
                 {
                     CompleteUnlock(
-     primaryPayload!,
-     primaryEnvelope!,
-     primaryBytes!,
-     primaryKey!,
-     fromBackup: false,
-     needsMigration: primaryNeedsMigration);
+                        primaryPayload!,
+                        primaryEnvelope!,
+                        primaryBytes!,
+                        primaryKey!,
+                        fromBackup: false,
+                        needsMigration: primaryNeedsMigration);
                     return true;
                 }
 
@@ -138,12 +138,12 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                     out _))
             {
                 CompleteUnlock(
-     backupPayload!,
-     backupEnvelope!,
-     backupBytes!,
-     backupKey!,
-     fromBackup: true,
-     needsMigration: backupNeedsMigration);
+                    backupPayload!,
+                    backupEnvelope!,
+                    backupBytes!,
+                    backupKey!,
+                    fromBackup: true,
+                    needsMigration: backupNeedsMigration);
                 return true;
             }
 

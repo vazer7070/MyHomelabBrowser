@@ -672,6 +672,21 @@ try {
     $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
     Set-Location $scriptDir
 
+    $ruffleMainScript = Join-Path $scriptDir "Assets\Ruffle\ruffle.js"
+    if (-not (Test-Path -LiteralPath $ruffleMainScript)) {
+        $ruffleInstaller = Join-Path $scriptDir "install-ruffle-assets.ps1"
+        if (-not (Test-Path -LiteralPath $ruffleInstaller)) {
+            throw "Ruffle local est absent et install-ruffle-assets.ps1 est introuvable."
+        }
+
+        Write-Host "==> Installation du moteur Ruffle intégré..." -ForegroundColor Cyan
+        & $ruffleInstaller
+
+        if (-not (Test-Path -LiteralPath $ruffleMainScript)) {
+            throw "L'installation de Ruffle n'a pas produit Assets\Ruffle\ruffle.js."
+        }
+    }
+
     Require-Command 'dotnet'
     Require-Command 'gh'
 

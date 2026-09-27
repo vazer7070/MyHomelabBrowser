@@ -12,6 +12,7 @@ namespace MyHomelabBrowser.classes
         // --------------------
         public string StartPage { get; set; } = "https://google.com";
         public string NewTabPage { get; set; } = "https://duckduckgo.com";
+        public SearchEngine Search { get; set; } = SearchEngine.Google;
 
         // DNS sécurisé WebView2. Le changement est appliqué au prochain démarrage.
         public SecureDnsMode DnsMode { get; set; } = SecureDnsMode.System;
@@ -50,9 +51,9 @@ namespace MyHomelabBrowser.classes
         // ====================
         // 🔥 FLASH / LEGACY
         // ====================
-        public bool EnableFlashSupport { get; set; } = false;
+        public bool EnableFlashSupport { get; set; } = true;
 
-        // Si true → tenter Ruffle avant Basilisk
+        // Ruffle intégré est le moteur principal. Basilisk reste un secours manuel.
         public bool PreferRuffle { get; set; } = true;
 
         // Chemin vers basilisk.exe
@@ -70,6 +71,7 @@ namespace MyHomelabBrowser.classes
             {
                 StartPage = StartPage,
                 NewTabPage = NewTabPage,
+                Search = Search,
                 CustomStartupPage = CustomStartupPage,
                 Startup = Startup,
 
@@ -119,6 +121,16 @@ namespace MyHomelabBrowser.classes
             Quad9,
             AdGuard,
             Custom
+        }
+
+        public enum SearchEngine
+        {
+            Google,
+            DuckDuckGo,
+            Bing,
+            Qwant,
+            Startpage,
+            Ecosia
         }
 
         public enum StartupMode

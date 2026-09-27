@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -23,6 +24,11 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
         private readonly AdBlockModuleService _module;
         private readonly object _blockedUrlsLock = new();
         private readonly HashSet<string> _blockedResourceUrls = new(StringComparer.OrdinalIgnoreCase);
+        private readonly List<string> _pendingBlockedUrls = new();
+
+        // Sélecteurs sérialisés, partagés entre onglets : le tableau renvoyé par le moteur
+        // est mis en cache par hôte, sa sérialisation JSON (souvent plusieurs centaines de Ko) aussi.
+        private static readonly ConditionalWeakTable<object, string> SelectorJsonCache = new();
 
         private string _documentHost = string.Empty;
         private int _blockedCount;
@@ -31,6 +37,10 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
         private DispatcherTimer? _cosmeticRefreshTimer;
         private bool _attached;
         private bool _disposed;
+
+        // Script complet présent dans le document courant (et s'il était actif).
+        private bool _cosmeticInjected;
+        private bool _cosmeticInjectedEnabled;
 
         public event Action<AdBlockTabSession>? Updated;
 
@@ -81,8 +91,12 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
             Interlocked.Exchange(ref _blockedCount, 0);
 
             lock (_blockedUrlsLock)
+            {
                 _blockedResourceUrls.Clear();
+                _pendingBlockedUrls.Clear();
+            }
 
+            _cosmeticInjected = false;
             _cosmeticRefreshTimer?.Stop();
             Updated?.Invoke(this);
         }
@@ -161,7 +175,9 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
                         _blockedResourceUrls.Remove(oldest);
                 }
 
-                _blockedResourceUrls.Add(RemoveFragment(absoluteUrl));
+                string url = RemoveFragment(absoluteUrl);
+                if (_blockedResourceUrls.Add(url) && _pendingBlockedUrls.Count < MaximumRememberedBlockedUrls)
+                    _pendingBlockedUrls.Add(url);
             }
         }
 
@@ -198,7 +214,7 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
 
                 try
                 {
-                    await ApplyCosmeticFilteringAsync().ConfigureAwait(true);
+                    await ApplyCosmeticFilteringAsync(incremental: true).ConfigureAwait(true);
                 }
                 catch
                 {
@@ -209,10 +225,45 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
             return timer;
         }
 
-        private async Task ApplyCosmeticFilteringAsync()
+        /// <param name="incremental">
+        /// Vrai pour un simple ajout de ressources bloquées : si le script est déjà en place
+        /// dans le document, seules les nouvelles URL lui sont transmises, au lieu de tout
+        /// réinjecter (sélecteurs compris) à chaque requête bloquée.
+        /// </param>
+        private async Task ApplyCosmeticFilteringAsync(bool incremental = false)
         {
             if (_webView.CoreWebView2 == null)
                 return;
+
+            if (incremental && _cosmeticInjected)
+            {
+                string[] pending;
+                lock (_blockedUrlsLock)
+                {
+                    pending = _pendingBlockedUrls.ToArray();
+                    _pendingBlockedUrls.Clear();
+                }
+
+                // Filtrage visuel désactivé : il n'y a rien à replier.
+                if (pending.Length == 0 || !_cosmeticInjectedEnabled)
+                    return;
+
+                string update = $$"""
+(() => {
+    const state = window.__pommeBrowserAdBlockCosmetic;
+    if (!state || typeof state.addBlocked !== 'function')
+        return false;
+    state.addBlocked({{JsonSerializer.Serialize(pending)}});
+    return true;
+})();
+""";
+
+                string result = await _webView.CoreWebView2.ExecuteScriptAsync(update).ConfigureAwait(true);
+                if (result == "true")
+                    return;
+
+                // Nouveau document sans le script : réinjection complète ci-dessous.
+            }
 
             bool enabled = _module.Settings.CosmeticFiltering
                 && _module.IsFilteringEnabledForHost(_documentHost);
@@ -226,16 +277,18 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
             // Les sélecteurs génériques d'EasyList peuvent devenir trop agressifs sur
             // le lecteur YouTube, dont la structure change fréquemment. Sur YouTube,
             // on utilise uniquement une liste cosmétique ciblée et sûre dans le script.
-            IReadOnlyList<string> selectorBlocks = isYouTubeDocument
-                ? Array.Empty<string>()
-                : BuildSelectorBlocks(selectors);
+            string jsonSelectorBlocks = isYouTubeDocument || selectors.Count == 0
+                ? "[]"
+                : SelectorJsonCache.GetValue(selectors, static key => JsonSerializer.Serialize(BuildSelectorBlocks((IReadOnlyList<string>)key)));
 
             string[] blockedUrls;
 
             lock (_blockedUrlsLock)
+            {
                 blockedUrls = _blockedResourceUrls.ToArray();
+                _pendingBlockedUrls.Clear();
+            }
 
-            string jsonSelectorBlocks = JsonSerializer.Serialize(selectorBlocks);
             string jsonBlockedUrls = JsonSerializer.Serialize(blockedUrls);
             string enabledJson = enabled ? "true" : "false";
 
@@ -716,7 +769,9 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
             childList: true,
             subtree: true,
             attributes: true,
-            attributeFilter: ['src', 'srcset', 'data-src', 'data-ad', 'data-ad-slot', 'data-ad-unit', 'class', 'id', 'style', 'hidden']
+            // Pas de « style » : les animations le modifient à chaque image et
+            // déclenchaient un nouveau balayage en continu.
+            attributeFilter: ['src', 'srcset', 'data-src', 'data-ad', 'data-ad-slot', 'data-ad-unit', 'class', 'id', 'hidden']
         });
     }
 
@@ -734,6 +789,21 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
     document.addEventListener('error', errorHandler, true);
 
     window[stateKey] = {
+        addBlocked(urls) {
+            let added = false;
+            for (const rawUrl of urls) {
+                const normalized = normalizeUrl(rawUrl);
+                if (normalized && !blocked.has(normalized)) {
+                    blocked.add(normalized);
+                    added = true;
+                }
+            }
+
+            if (added) {
+                scanBlockedResources(document);
+                scanCommonAdSlots(document);
+            }
+        },
         destroy(restoreCollapsed) {
             observer.disconnect();
             document.removeEventListener('error', errorHandler, true);
@@ -754,6 +824,8 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
 """;
 
             await _webView.CoreWebView2.ExecuteScriptAsync(script).ConfigureAwait(true);
+            _cosmeticInjected = true;
+            _cosmeticInjectedEnabled = enabled;
         }
 
         private static IReadOnlyList<string> BuildSelectorBlocks(IReadOnlyList<string> selectors)
