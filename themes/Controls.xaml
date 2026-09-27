@@ -1116,7 +1116,7 @@
         <Setter Property="ResizeMode" Value="NoResize"/>
         <Setter Property="SizeToContent" Value="Height"/>
         <Setter Property="ShowInTaskbar" Value="False"/>
-        <Setter Property="WindowStartupLocation" Value="CenterOwner"/>
+        <!-- WindowStartupLocation n'est pas une propriété de dépendance : fixée par DialogWindow. -->
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
         <Setter Property="FontFamily" Value="{StaticResource TextFont}"/>
         <Setter Property="FontSize" Value="13"/>

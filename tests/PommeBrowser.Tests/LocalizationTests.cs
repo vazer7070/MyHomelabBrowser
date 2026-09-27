@@ -53,8 +53,8 @@ public sealed class LocalizationTests
     public void TranslationKeysAreLiterals()
     {
         // Tr($"…") produirait une clé différente à chaque appel : jamais traduite.
-        var interpolated = SourceFiles("*.cs")
-            .SelectMany(f => Regex.Matches(File.ReadAllText(f), @"\bTr\(\s*\$").Select(_ => Relative(f)))
+        var interpolated = RepositoryFiles.Sources("*.cs")
+            .SelectMany(f => Regex.Matches(File.ReadAllText(f), @"\bTr\(\s*\$").Select(_ => RepositoryFiles.Relative(f)))
             .ToList();
 
         Assert.Empty(interpolated);
@@ -87,7 +87,7 @@ public sealed class LocalizationTests
 
     static IReadOnlyDictionary<string, string> LoadEnglishTable()
     {
-        using FileStream stream = File.OpenRead(Path.Combine(RepositoryRoot, "lang", "en.json"));
+        using FileStream stream = File.OpenRead(Path.Combine(RepositoryFiles.Root, "lang", "en.json"));
         return Loc.LoadTable(stream);
     }
 
@@ -98,7 +98,7 @@ public sealed class LocalizationTests
     {
         var keys = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        foreach (string file in SourceFiles("*.cs"))
+        foreach (string file in RepositoryFiles.Sources("*.cs"))
         {
             // Les exemples des commentaires ne sont pas des textes de l'interface.
             string source = string.Join('\n', File.ReadLines(file).Where(l => !l.TrimStart().StartsWith("//")));
@@ -113,7 +113,7 @@ public sealed class LocalizationTests
             }
         }
 
-        foreach (string file in SourceFiles("*.xaml"))
+        foreach (string file in RepositoryFiles.Sources("*.xaml"))
         {
             foreach (XElement element in XDocument.Load(file).Descendants())
             {
@@ -138,7 +138,7 @@ public sealed class LocalizationTests
     static void Add(Dictionary<string, string> keys, string text, string file)
     {
         if (Letters.IsMatch(text))
-            keys.TryAdd(text, Relative(file));
+            keys.TryAdd(text, RepositoryFiles.Relative(file));
     }
 
     static string Unescape(string literal)
@@ -163,26 +163,5 @@ public sealed class LocalizationTests
             });
         }
         return builder.ToString();
-    }
-
-    static IEnumerable<string> SourceFiles(string pattern)
-    {
-        string[] excluded = { "bin", "obj", "tests", ".git", ".vs" };
-        return Directory.EnumerateFiles(RepositoryRoot, pattern, SearchOption.AllDirectories)
-            .Where(f => !Relative(f).Split('/', '\\').Any(part => excluded.Contains(part, StringComparer.OrdinalIgnoreCase)));
-    }
-
-    static string Relative(string path) => Path.GetRelativePath(RepositoryRoot, path).Replace('\\', '/');
-
-    static readonly string RepositoryRoot = FindRepositoryRoot();
-
-    static string FindRepositoryRoot()
-    {
-        for (DirectoryInfo? dir = new(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, "MyHomelabBrowser.sln")))
-                return dir.FullName;
-        }
-        throw new DirectoryNotFoundException("Racine du dépôt introuvable.");
     }
 }
