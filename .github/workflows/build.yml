@@ -1,0 +1,51 @@
+name: Compilation et tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Windows
+    runs-on: windows-latest
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restauration des paquets
+        run: dotnet restore MyHomelabBrowser.sln
+
+      - name: Compilation de l'application
+        run: dotnet build MyHomelabBrowser.csproj --configuration Release --no-restore
+
+      - name: Tests
+        run: >
+          dotnet test tests/PommeBrowser.Tests/PommeBrowser.Tests.csproj
+          --configuration Release
+          --no-restore
+          --logger "trx;LogFileName=resultats.trx"
+          --results-directory TestResults
+
+      - name: Résultats des tests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultats-tests
+          path: TestResults
+          if-no-files-found: ignore

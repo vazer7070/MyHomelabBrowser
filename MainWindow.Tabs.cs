@@ -5,15 +5,13 @@ using MyHomelabBrowser.classes.Flash;
 using MyHomelabBrowser.classes.Profiles;
 using MyHomelabBrowser.classes.Profiles.Credentials;
 using MyHomelabBrowser.controles;
-using System;
 using System.IO;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -86,18 +84,12 @@ namespace MyHomelabBrowser
 
         async Task<CoreWebView2Environment> GetEnvironmentForCurrentProfileAsync()
         {
-            var profileId = (_profileService.Current?.Username ?? "default").Trim().ToLowerInvariant();
+            var profileId = WebViewProfileData.NormalizeId(_profileService.Current?.Username);
 
             if (_envByProfile.TryGetValue(profileId, out var cached))
                 return cached;
 
-            string userData = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "PommeBrowser",
-                "Profiles",
-                profileId,
-                "WebView2"
-            );
+            string userData = WebViewProfileData.GetUserDataFolder(profileId);
 
             Directory.CreateDirectory(userData);
 
@@ -148,7 +140,7 @@ namespace MyHomelabBrowser
         void CreateEmptyStartTab(int insertIndex = -1)
         {
             var header = new BrowserTabHeader();
-            header.SetTitle("Accueil");
+            header.SetTitle(Tr("Accueil"));
             header.SetIcon(StartTabIcon.Value);
 
             var content = new WebTabContent
@@ -190,6 +182,7 @@ namespace MyHomelabBrowser
                 else
                     _ = CreateTabInternal(url);
             };
+            WireStartPageServices(view, owningTab);
             return view;
         }
 
@@ -240,6 +233,8 @@ namespace MyHomelabBrowser
             };
 
             header.ReorderRequested += dir => ReorderTab(tab, dir);
+
+            AttachTabContextMenu(tab, header, content);
         }
 
         /// <summary>
@@ -261,7 +256,7 @@ namespace MyHomelabBrowser
             var header = new BrowserTabHeader();
             header.SetTitle(!string.IsNullOrWhiteSpace(pendingTitle)
                 ? pendingTitle
-                : isPrivate ? "Onglet privé" : "Nouvel onglet");
+                : isPrivate ? Tr("Onglet privé") : Tr("Nouvel onglet"));
             header.SetPrivate(isPrivate);
             header.SetLoading(!deferNavigation && !string.IsNullOrWhiteSpace(url));
 
@@ -331,7 +326,7 @@ namespace MyHomelabBrowser
                 if (!content.IsClosed)
                 {
                     header.SetLoading(false);
-                    ShowTabError(content, "Impossible de démarrer le moteur web de cet onglet.", ex.Message);
+                    ShowTabError(content, Tr("Impossible de démarrer le moteur web de cet onglet."), ex.Message);
                 }
 
                 FlashDbg("[CreateWebTabAsync] " + ex);
@@ -342,7 +337,17 @@ namespace MyHomelabBrowser
             if (content.IsClosed || core == null)
                 return content;
 
+            try
+            {
+                // Les sites qui proposent un mode sombre suivent le thème du navigateur.
+                core.Profile.PreferredColorScheme = ThemeManager.PreferredColorScheme;
+            }
+            catch
+            {
+            }
+
             InitializeFlashRuntimeForCore(content);
+            AttachSiteZoom(web, content);
 
             core.NavigationStarting += (_, e) =>
             {
@@ -351,7 +356,13 @@ namespace MyHomelabBrowser
                 header.SetLoading(true);
 
                 if (IsActiveTab(content))
+                {
                     UpdateNavButtonsFast();
+
+                    // Nouvelle page : les résultats de recherche ne s'appliquent plus.
+                    if (!e.IsRedirected && _findBarOpen)
+                        CloseFindBar(focusPage: false);
+                }
             };
 
             web.NavigationCompleted += async (_, e) =>
@@ -388,11 +399,14 @@ namespace MyHomelabBrowser
             {
                 string title = core.DocumentTitle;
                 header.SetTitle(string.IsNullOrWhiteSpace(title)
-                    ? isPrivate ? "Onglet privé" : "Nouvel onglet"
+                    ? isPrivate ? Tr("Onglet privé") : Tr("Nouvel onglet")
                     : title);
 
                 if (!isPrivate)
                     UpdateHistoryTitle(content, web.Source?.AbsoluteUri, title);
+
+                if (_splitPartner != null)
+                    UpdateSplitHeaders();
             };
 
             core.FaviconChanged += async (_, _) => await RefreshTabFaviconAsync(content, header);
@@ -745,9 +759,9 @@ namespace MyHomelabBrowser
             content.LastPopupNoticeUtc = DateTime.UtcNow;
 
             ShowToast(
-                "Fenêtre surgissante bloquée",
+                Tr("Fenêtre surgissante bloquée"),
                 uri,
-                actionLabel: "Ouvrir",
+                actionLabel: Tr("Ouvrir"),
                 action: () =>
                 {
                     if (content.IsPrivate)

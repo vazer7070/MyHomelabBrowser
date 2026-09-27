@@ -5,6 +5,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles.settings
 {
@@ -85,16 +86,16 @@ namespace MyHomelabBrowser.controles.settings
         private void RefreshStatusOnly()
         {
             AdBlockModuleSnapshot snapshot = _module.GetSnapshot();
-            RuleCountText.Text = $"{snapshot.NetworkRuleCount:N0} règles réseau et {snapshot.CosmeticRuleCount:N0} règles visuelles sont chargées.";
+            RuleCountText.Text = Tr("{0:N0} règles réseau et {1:N0} règles visuelles sont chargées.", snapshot.NetworkRuleCount, snapshot.CosmeticRuleCount);
             LastUpdateText.Text = snapshot.LastSuccessfulUpdateUtc.HasValue
-                ? "Dernière mise à jour réussie : " + snapshot.LastSuccessfulUpdateUtc.Value.ToLocalTime().ToString("dd/MM/yyyy à HH:mm")
-                : "Les listes distantes n’ont pas encore été téléchargées. Les règles intégrées de secours restent actives.";
+                ? Tr("Dernière mise à jour réussie : ") + snapshot.LastSuccessfulUpdateUtc.Value.ToLocalTime().ToString(Tr("dd/MM/yyyy à HH:mm"))
+                : Tr("Les listes distantes n’ont pas encore été téléchargées. Les règles intégrées de secours restent actives.");
 
             if (string.IsNullOrWhiteSpace(UpdateStatusText.Text))
                 UpdateStatusText.Text = snapshot.StatusMessage;
 
             UpdateNowButton.IsEnabled = !_updating;
-            UpdateNowButton.Content = _updating ? "Mise à jour en cours…" : "Mettre à jour maintenant";
+            UpdateNowButton.Content = _updating ? Tr("Mise à jour en cours…") : Tr("Mettre à jour maintenant");
         }
 
         private void GeneralSetting_Changed(object sender, RoutedEventArgs e)
@@ -127,7 +128,7 @@ namespace MyHomelabBrowser.controles.settings
                 return;
 
             _updating = true;
-            UpdateStatusText.Text = "Téléchargement des listes…";
+            UpdateStatusText.Text = Tr("Téléchargement des listes…");
             RefreshStatusOnly();
             try
             {
@@ -136,7 +137,7 @@ namespace MyHomelabBrowser.controles.settings
             }
             catch (Exception ex)
             {
-                UpdateStatusText.Text = "Échec de la mise à jour : " + ex.Message;
+                UpdateStatusText.Text = Tr("Échec de la mise à jour : ") + ex.Message;
             }
             finally
             {
@@ -162,13 +163,13 @@ namespace MyHomelabBrowser.controles.settings
             string domain = AdBlockDomain.NormalizeHost(AllowlistDomainBox.Text);
             if (domain.Length == 0)
             {
-                UpdateStatusText.Text = "Saisissez un domaine valide.";
+                UpdateStatusText.Text = Tr("Saisissez un domaine valide.");
                 return;
             }
 
             _module.SetSiteAllowed(domain, allowed: true);
             AllowlistDomainBox.Clear();
-            UpdateStatusText.Text = domain + " a été ajouté aux sites autorisés.";
+            UpdateStatusText.Text = domain + Tr(" a été ajouté aux sites autorisés.");
             Refresh();
         }
 
@@ -178,7 +179,7 @@ namespace MyHomelabBrowser.controles.settings
                 return;
 
             _module.SetSiteAllowed(domain, allowed: false);
-            UpdateStatusText.Text = domain + " a été retiré des sites autorisés.";
+            UpdateStatusText.Text = domain + Tr(" a été retiré des sites autorisés.");
             Refresh();
         }
 

@@ -1,144 +1,38 @@
-﻿<Window x:Class="MyHomelabBrowser.controles.CreateProfileDialog"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Créer un profil"
-        WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize"
-        SizeToContent="WidthAndHeight"
-        ShowInTaskbar="False"
-        WindowStyle="None"
-        AllowsTransparency="True"
-        Background="Transparent">
+﻿<controles:DialogWindow x:Class="MyHomelabBrowser.controles.CreateProfileDialog"
+                        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                        xmlns:controles="clr-namespace:MyHomelabBrowser.controles"
+                        Title="Créer un profil"
+                        Width="420">
+    <StackPanel>
+        <TextBlock Text="Nom d’utilisateur" Style="{StaticResource DialogHintStyle}" Margin="0,0,0,6"/>
+        <TextBox x:Name="UsernameBox" TextChanged="Input_Changed"/>
 
-    <Border Padding="30"
-            Width="420"
-            Background="{StaticResource PanelBrush}"
-            CornerRadius="16"
-            BorderBrush="{StaticResource BorderBrush}"
-            BorderThickness="1">
+        <TextBlock Text="Mot de passe" Style="{StaticResource DialogHintStyle}" Margin="0,14,0,6"/>
+        <PasswordBox x:Name="PasswordBox" PasswordChanged="Input_Changed"/>
+        <TextBlock Text="6 caractères minimum."
+                   Style="{StaticResource DialogHintStyle}"
+                   FontSize="11.5"
+                   Margin="0,4,0,0"/>
 
-        <StackPanel>
+        <TextBlock Text="Confirmer le mot de passe" Style="{StaticResource DialogHintStyle}" Margin="0,14,0,6"/>
+        <PasswordBox x:Name="ConfirmBox" PasswordChanged="Input_Changed"/>
 
-            <!-- ===== TITRE ===== -->
-            <TextBlock Text="Créer un profil"
-                       Foreground="White"
-                       FontSize="22"
-                       FontWeight="SemiBold"
-                       Margin="0,0,0,20"/>
+        <TextBlock x:Name="ErrorText"
+                   Foreground="{StaticResource DangerBrush}"
+                   FontSize="12"
+                   TextWrapping="Wrap"
+                   Margin="0,10,0,0"
+                   Visibility="Collapsed"/>
 
-            <!-- ===== USERNAME ===== -->
-            <TextBlock Text="Nom d’utilisateur"
-                       Foreground="{StaticResource TextPrimaryBrush}"
-                       FontSize="13"
-                       Margin="0,0,0,6"/>
-
-            <Border Background="{StaticResource SurfaceRaisedBrush}"
-                    CornerRadius="10"
-                    BorderBrush="{StaticResource BorderStrongBrush}"
-                    BorderThickness="1">
-                <TextBox x:Name="UsernameBox"
-                         Height="42"
-                         Padding="14,0"
-                         Background="Transparent"
-                         Foreground="White"
-                         BorderThickness="0"/>
-            </Border>
-
-            <!-- ===== PASSWORD ===== -->
-            <TextBlock Text="Mot de passe"
-                       Foreground="{StaticResource TextPrimaryBrush}"
-                       FontSize="13"
-                       Margin="0,18,0,6"/>
-
-            <Border Background="{StaticResource SurfaceRaisedBrush}"
-                    CornerRadius="10"
-                    BorderBrush="{StaticResource BorderStrongBrush}"
-                    BorderThickness="1">
-                <PasswordBox x:Name="PasswordBox"
-                             Height="42"
-                             Padding="14,0"
-                             Background="Transparent"
-                             Foreground="White"
-                             BorderThickness="0"/>
-            </Border>
-
-            <!-- ===== CONFIRM ===== -->
-            <TextBlock Text="Confirmer le mot de passe"
-                       Foreground="{StaticResource TextPrimaryBrush}"
-                       FontSize="13"
-                       Margin="0,18,0,6"/>
-
-            <Border Background="{StaticResource SurfaceRaisedBrush}"
-                    CornerRadius="10"
-                    BorderBrush="{StaticResource BorderStrongBrush}"
-                    BorderThickness="1">
-                <PasswordBox x:Name="ConfirmBox"
-                             Height="42"
-                             Padding="14,0"
-                             Background="Transparent"
-                             Foreground="White"
-                             BorderThickness="0"/>
-            </Border>
-
-            <!-- ===== BOUTONS ===== -->
-            <Grid Margin="0,28,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition/>
-                    <ColumnDefinition Width="16"/>
-                    <ColumnDefinition/>
-                </Grid.ColumnDefinitions>
-
-                <!-- Annuler -->
-                <Button Grid.Column="0"
-                        Content="Annuler"
-                        Height="44"
-                        FontSize="14"
-                        FontWeight="SemiBold"
-                        Background="{StaticResource SurfaceRaisedBrush}"
-                        Foreground="{StaticResource TextPrimaryBrush}"
-                        BorderBrush="{StaticResource BorderStrongBrush}"
-                        BorderThickness="1"
-                        Cursor="Hand"
-                        Click="Cancel_Click">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="10">
-                                <ContentPresenter HorizontalAlignment="Center"
-                                                  VerticalAlignment="Center"/>
-                            </Border>
-                        </ControlTemplate>
-                    </Button.Template>
-                </Button>
-
-                <!-- Créer -->
-                <Button Grid.Column="2"
-                        Content="Créer"
-                        Height="44"
-                        FontSize="14"
-                        FontWeight="SemiBold"
-                        Background="{StaticResource AccentStrongBrush}"
-                        Foreground="White"
-                        BorderBrush="{StaticResource AccentBrush}"
-                        BorderThickness="1"
-                        Cursor="Hand"
-                        Click="Create_Click">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="10">
-                                <ContentPresenter HorizontalAlignment="Center"
-                                                  VerticalAlignment="Center"/>
-                            </Border>
-                        </ControlTemplate>
-                    </Button.Template>
-                </Button>
-            </Grid>
-
+        <StackPanel Style="{StaticResource DialogButtonBarStyle}">
+            <Button Content="Annuler" Command="ApplicationCommands.Close" Margin="0,0,8,0"/>
+            <Button x:Name="CreateButton"
+                    Content="Créer"
+                    Style="{StaticResource PrimaryButtonStyle}"
+                    IsDefault="True"
+                    IsEnabled="False"
+                    Click="Create_Click"/>
         </StackPanel>
-    </Border>
-</Window>
+    </StackPanel>
+</controles:DialogWindow>

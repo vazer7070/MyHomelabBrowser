@@ -1,15 +1,13 @@
 using Microsoft.Web.WebView2.Core;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.controles;
-using System;
 using System.ComponentModel;
-using System.Linq;
 using System.Text.Json;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -204,7 +202,7 @@ namespace MyHomelabBrowser
 
             var title = new TextBlock
             {
-                Text = "Onglet en veille",
+                Text = Tr("Onglet en veille"),
                 FontSize = 20,
                 FontWeight = FontWeights.SemiBold,
                 Margin = new Thickness(0, 14, 0, 0),
@@ -214,7 +212,7 @@ namespace MyHomelabBrowser
 
             var hint = new TextBlock
             {
-                Text = "Mis en pause pour libérer de la mémoire. Cliquez pour le réactiver.",
+                Text = Tr("Mis en pause pour libérer de la mémoire. Cliquez pour le réactiver."),
                 FontSize = 13,
                 Margin = new Thickness(0, 8, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Center
@@ -246,7 +244,7 @@ namespace MyHomelabBrowser
                 if (state.IsPinned || state.IsSuspended || state.IsCustomView || state.IsLegacyExternal)
                     continue;
 
-                if (Equals(tab, Tabs.SelectedItem))
+                if (Equals(tab, Tabs.SelectedItem) || Equals(tab, _splitPartner))
                     continue;
 
                 // Onglet jamais affiché (session restaurée) : rien à libérer.
@@ -347,7 +345,7 @@ namespace MyHomelabBrowser
             {
                 state.OwnerTab = tab;
                 var header = (BrowserTabHeader)tab.Header;
-                header.SetTitle(state.Web?.CoreWebView2?.DocumentTitle ?? "Onglet");
+                header.SetTitle(state.Web?.CoreWebView2?.DocumentTitle ?? Tr("Onglet"));
                 header.SetPrivate(state.IsPrivate);
                 WireTabHeader(tab, header, state);
             }
@@ -491,7 +489,9 @@ namespace MyHomelabBrowser
         // ---------------------------
         protected override void OnClosing(CancelEventArgs e)
         {
-            SaveSessionOnExit();
+            // Redémarrage demandé : la session a déjà été enregistrée pour être rouverte.
+            if (!_restartPending)
+                SaveSessionOnExit();
             FlushPersistentState();
 
             foreach (TabItem tab in Tabs.Items.OfType<TabItem>())

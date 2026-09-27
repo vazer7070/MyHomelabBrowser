@@ -11,7 +11,7 @@
         MinHeight="460"
         Background="{StaticResource WindowBackgroundBrush}"
         Foreground="{StaticResource TextPrimaryBrush}"
-        FontFamily="Segoe UI Variable Text, Segoe UI"
+        FontFamily="{StaticResource TextFont}"
         TextOptions.TextFormattingMode="Display"
         UseLayoutRounding="True">
 
@@ -44,6 +44,7 @@
         </Style>
 
         <Style x:Key="BadgeTextStyle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource TextFont}"/>
             <Setter Property="FontSize" Value="9"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Foreground" Value="White"/>
@@ -108,12 +109,42 @@
             </MenuItem>
             <MenuItem Header="Nouvel onglet privé" InputGestureText="Ctrl+Maj+N" Click="NewPrivateTab_Click">
                 <MenuItem.Icon>
-                    <TextBlock Text="&#xE727;"/>
+                    <Path Width="16" Height="16" Stretch="Uniform" Data="{StaticResource PrivateIconGeometry}" Fill="{StaticResource TextSecondaryBrush}"/>
                 </MenuItem.Icon>
             </MenuItem>
             <MenuItem x:Name="ReopenClosedMenuItem" Header="Rouvrir l’onglet fermé" InputGestureText="Ctrl+Maj+T" Click="MainMenu_ReopenClosed_Click">
                 <MenuItem.Icon>
                     <TextBlock Text="&#xE7A7;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <Separator/>
+            <MenuItem x:Name="FindMenuItem" Header="Rechercher dans la page…" InputGestureText="Ctrl+F" Click="MainMenu_Find_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE721;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem x:Name="ZoomMenuItem" Header="Zoom">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE71E;"/>
+                </MenuItem.Icon>
+                <MenuItem Header="Zoom avant" InputGestureText="Ctrl++" Click="MainMenu_ZoomIn_Click"/>
+                <MenuItem Header="Zoom arrière" InputGestureText="Ctrl+-" Click="MainMenu_ZoomOut_Click"/>
+                <MenuItem x:Name="ZoomResetMenuItem" Header="Taille réelle (100 %)" InputGestureText="Ctrl+0" Click="MainMenu_ZoomReset_Click"/>
+            </MenuItem>
+            <MenuItem x:Name="SplitViewMenuItem" Header="Vue côte à côte" Click="MainMenu_SplitView_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE8A9;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem x:Name="WorkspacesMenuItem" Header="Espaces de travail">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE8B7;"/>
+                </MenuItem.Icon>
+                <MenuItem Header="Enregistrer les onglets ouverts…"/>
+            </MenuItem>
+            <MenuItem x:Name="PrintMenuItem" Header="Imprimer…" InputGestureText="Ctrl+P" Click="MainMenu_Print_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE749;"/>
                 </MenuItem.Icon>
             </MenuItem>
             <Separator/>
@@ -132,6 +163,21 @@
                     <TextBlock Text="&#xE72E;"/>
                 </MenuItem.Icon>
             </MenuItem>
+            <MenuItem Header="Ajouter la page aux services…" Click="MainMenu_AddService_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE968;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Importer des favoris…" Click="MainMenu_ImportFavorites_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE8B5;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Effacer les données de navigation…" InputGestureText="Ctrl+Maj+Suppr" Click="MainMenu_ClearData_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE74D;"/>
+                </MenuItem.Icon>
+            </MenuItem>
             <Separator/>
             <MenuItem Header="Plein écran" InputGestureText="F11" Click="MainMenu_Fullscreen_Click">
                 <MenuItem.Icon>
@@ -146,6 +192,11 @@
             <MenuItem Header="Signaler un problème" Click="MainMenu_ReportIssue_Click">
                 <MenuItem.Icon>
                     <TextBlock Text="&#xEBE8;"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Diagnostic" Click="MainMenu_Diagnostics_Click">
+                <MenuItem.Icon>
+                    <TextBlock Text="&#xE9D9;"/>
                 </MenuItem.Icon>
             </MenuItem>
             <Separator/>
@@ -194,10 +245,10 @@
                                     <Button Style="{StaticResource TabStripButtonStyle}"
                                             ToolTip="Nouvel onglet privé (Ctrl+Maj+N)"
                                             Click="NewPrivateTab_Click">
-                                        <Viewbox Width="16" Height="16">
-                                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
-                                                  Data="M4,4 L20,4 L18,9 L15.5,9 C14.2,9 13.1,9.7 12.5,10.8 C11.9,9.7 10.8,9 9.5,9 L7,9 Z M5,11 L9.5,11 C11.4,11 12,12.5 12,14 C12,16.2 10.2,18 8,18 C5.8,18 4,16.2 4,14 C4,12.8 4.4,11.8 5,11 Z M15.5,11 L20,11 C20.6,11.8 21,12.8 21,14 C21,16.2 19.2,18 17,18 C14.8,18 13,16.2 13,14 C13,12.5 13.6,11 15.5,11 Z"/>
-                                        </Viewbox>
+                                        <Path Width="17" Height="17"
+                                              Stretch="Uniform"
+                                              Data="{StaticResource PrivateIconGeometry}"
+                                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"/>
                                     </Button>
                                 </StackPanel>
                                 <controles:TabStripPanel IsItemsHost="True"
@@ -341,6 +392,7 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
                             <!-- Indicateur de sécurité de la connexion -->
@@ -364,13 +416,22 @@
                                     Visibility="Collapsed"
                                     Background="{StaticResource PrivateSoftBrush}"
                                     CornerRadius="9"
-                                    Padding="8,1"
+                                    Padding="7,2,8,2"
                                     Margin="2,0,6,0"
                                     VerticalAlignment="Center">
-                                <TextBlock Text="Navigation privée"
-                                           FontSize="11"
-                                           FontWeight="SemiBold"
-                                           Foreground="{StaticResource PrivateBrush}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Width="13" Height="13"
+                                          Stretch="Uniform"
+                                          Margin="0,0,5,0"
+                                          VerticalAlignment="Center"
+                                          Data="{StaticResource PrivateIconGeometry}"
+                                          Fill="{StaticResource PrivateBrush}"/>
+                                    <TextBlock Text="Navigation privée"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource PrivateBrush}"/>
+                                </StackPanel>
                             </Border>
 
                             <TextBox x:Name="AddressBar"
@@ -401,8 +462,23 @@
                                 </TextBlock.Style>
                             </TextBlock>
 
-                            <Button x:Name="FillCredentialButton"
+                            <!-- Visible seulement quand le zoom de la page n'est pas à 100 % ; un clic le réinitialise. -->
+                            <Button x:Name="ZoomButton"
                                     Grid.Column="3"
+                                    Style="{StaticResource InlineIconButtonStyle}"
+                                    Width="Auto"
+                                    Padding="6,0"
+                                    Foreground="{StaticResource TextSecondaryBrush}"
+                                    Visibility="Collapsed"
+                                    Click="ZoomButton_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE71E;" Style="{StaticResource IconGlyph}" FontSize="12"/>
+                                    <TextBlock x:Name="ZoomButtonText" Margin="4,0,0,0" FontFamily="{StaticResource TextFont}" FontSize="11.5" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+
+                            <Button x:Name="FillCredentialButton"
+                                    Grid.Column="4"
                                     Style="{StaticResource InlineIconButtonStyle}"
                                     Foreground="{StaticResource TextSecondaryBrush}"
                                     Click="FillCredential_Click"
@@ -412,7 +488,7 @@
                             </Button>
 
                             <Button x:Name="FavoriteButton"
-                                    Grid.Column="4"
+                                    Grid.Column="5"
                                     Style="{StaticResource InlineIconButtonStyle}"
                                     Margin="0,0,3,0"
                                     Foreground="{StaticResource TextSecondaryBrush}"
@@ -485,7 +561,7 @@
                                 Click="ProfileButton_Click"
                                 ToolTip="Profil utilisateur"
                                 Background="{StaticResource SurfaceRaisedBrush}"
-                                Foreground="White"
+                                Foreground="{StaticResource TextPrimaryBrush}"
                                 FontWeight="SemiBold"
                                 FontSize="13">
                             <Button.Template>
@@ -784,6 +860,90 @@
                         Grid.Row="1"
                         Focusable="False"
                         Background="{StaticResource WindowBackgroundBrush}"/>
+
+        <!-- Recherche dans la page (Ctrl+F) : Popup, pour rester au-dessus du WebView2. -->
+        <Popup x:Name="FindPopup"
+               Grid.Row="1"
+               PlacementTarget="{Binding ElementName=WebHost}"
+               Placement="Custom"
+               AllowsTransparency="True"
+               StaysOpen="True"
+               PopupAnimation="None">
+            <Border Margin="0,8,16,16"
+                    Padding="10,6,6,6"
+                    CornerRadius="10"
+                    Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource BorderStrongBrush}"
+                    BorderThickness="1"
+                    Effect="{StaticResource PopupShadow}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE721;"
+                               FontFamily="{StaticResource IconFont}"
+                               FontSize="13"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextTertiaryBrush}"
+                               Margin="0,0,8,0"/>
+                    <Grid Width="220" VerticalAlignment="Center">
+                        <TextBox x:Name="FindBox"
+                                 Style="{StaticResource AddressBarTextBoxStyle}"
+                                 FontSize="13"
+                                 Padding="0"
+                                 TextChanged="FindBox_TextChanged"
+                                 PreviewKeyDown="FindBox_PreviewKeyDown"/>
+                        <TextBlock Text="Rechercher dans la page"
+                                   Foreground="{StaticResource TextTertiaryBrush}"
+                                   FontSize="13"
+                                   IsHitTestVisible="False"
+                                   VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=FindBox}" Value="">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+                    <TextBlock x:Name="FindCountText"
+                               MinWidth="64"
+                               Margin="8,0"
+                               FontSize="12"
+                               TextAlignment="Right"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <Border Width="1" Margin="2,4,6,4" Background="{StaticResource BorderBrush}"/>
+                    <CheckBox x:Name="FindCaseToggle"
+                              VerticalAlignment="Center"
+                              Margin="0,0,6,0"
+                              ToolTip="Respecter la casse"
+                              Checked="FindOptions_Changed"
+                              Unchecked="FindOptions_Changed">
+                        <TextBlock Text="Aa" FontSize="12"/>
+                    </CheckBox>
+                    <Button Style="{StaticResource InlineIconButtonStyle}"
+                            Foreground="{StaticResource TextSecondaryBrush}"
+                            ToolTip="Précédent (Maj+Entrée)"
+                            Click="FindPrevious_Click">
+                        <TextBlock Text="&#xE70E;" FontFamily="{StaticResource IconFont}" FontSize="12"/>
+                    </Button>
+                    <Button Style="{StaticResource InlineIconButtonStyle}"
+                            Foreground="{StaticResource TextSecondaryBrush}"
+                            ToolTip="Suivant (Entrée)"
+                            Click="FindNext_Click">
+                        <TextBlock Text="&#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="12"/>
+                    </Button>
+                    <Button Style="{StaticResource InlineIconButtonStyle}"
+                            Foreground="{StaticResource TextSecondaryBrush}"
+                            ToolTip="Fermer (Échap)"
+                            Click="FindClose_Click">
+                        <TextBlock Text="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="11"/>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Popup>
 
         <!-- Notifications : Popup pour rester visibles au-dessus du WebView2 (fenêtre native). -->
         <Popup x:Name="ToastPopup"

@@ -1,57 +1,47 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
+﻿using System.Windows;
+using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
-    public partial class SimplePasswordDialog : Window
+    public partial class SimplePasswordDialog : DialogWindow
     {
         public string Password => PasswordInput.Password;
+
+        public Func<string, bool>? ValidatePassword { get; set; }
+
+        private int _failedAttempts;
 
         public SimplePasswordDialog(string title)
         {
             InitializeComponent();
-            TitleText.Text = title;
+            Title = title;
+            Loaded += (_, _) => Dispatcher.BeginInvoke(() => PasswordInput.Focus(), DispatcherPriority.Input);
         }
-        public Func<string, bool>? ValidatePassword { get; set; }
 
-        private int _failedAttempts = 0;
-
-        void Ok_Click(object sender, RoutedEventArgs e)
+        private void PasswordInput_PasswordChanged(object sender, RoutedEventArgs e)
         {
+            OkButton.IsEnabled = PasswordInput.Password.Length > 0;
             ErrorText.Visibility = Visibility.Collapsed;
+        }
 
-            var password = PasswordInput.Password;
-
-            if (ValidatePassword != null)
+        private void Ok_Click(object sender, RoutedEventArgs e)
+        {
+            if (ValidatePassword != null && !ValidatePassword(PasswordInput.Password))
             {
-                if (!ValidatePassword(password))
-                {
-                    _failedAttempts++;
+                _failedAttempts++;
 
-                    ErrorText.Text = _failedAttempts >= 3
-                        ? "Trop de tentatives. Veuillez patienter."
-                        : "Mot de passe incorrect";
+                ErrorText.Text = _failedAttempts >= 3
+                    ? Tr("Trop de tentatives. Veuillez patienter.")
+                    : Tr("Mot de passe incorrect");
 
-                    ErrorText.Visibility = Visibility.Visible;
-
-                    PasswordInput.Clear();
-                    PasswordInput.Focus();
-                    return;
-                }
+                PasswordInput.Clear();
+                ErrorText.Visibility = Visibility.Visible;
+                PasswordInput.Focus();
+                return;
             }
 
             DialogResult = true;
         }
-
-        
     }
 }

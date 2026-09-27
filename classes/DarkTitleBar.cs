@@ -7,8 +7,8 @@ using System.Windows.Media;
 namespace MyHomelabBrowser.classes
 {
     /// <summary>
-    /// Barre de titre Windows sombre, assortie au thème. Sous Windows 11, elle prend
-    /// la couleur de la barre d'onglets ; sous Windows 10, le mode sombre seul s'applique.
+    /// Barre de titre Windows assortie au thème (sombre ou claire). Sous Windows 11, elle
+    /// prend la couleur de la barre d'onglets ; sous Windows 10, seul le mode sombre s'applique.
     /// </summary>
     internal static class DarkTitleBar
     {
@@ -48,7 +48,7 @@ namespace MyHomelabBrowser.classes
 
             try
             {
-                int enabled = 1;
+                int enabled = ThemeManager.IsDark ? 1 : 0;
                 if (DwmSetWindowAttribute(hwnd, DwmwaUseImmersiveDarkMode, ref enabled, sizeof(int)) != 0)
                     DwmSetWindowAttribute(hwnd, DwmwaUseImmersiveDarkModeBefore20H1, ref enabled, sizeof(int));
 

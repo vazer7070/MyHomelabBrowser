@@ -1,7 +1,7 @@
 using MyHomelabBrowser.classes;
-using System;
-using System.Threading.Tasks;
+using MyHomelabBrowser.controles;
 using System.Windows;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -36,10 +36,10 @@ namespace MyHomelabBrowser
 
                     string version = info.TargetFullRelease.Version.ToString();
                     await Dispatcher.InvokeAsync(() => ShowToast(
-                        "Mise à jour prête",
-                        $"PommeBrowser {version} sera installé à la fermeture.",
+                        Tr("Mise à jour prête"),
+                        Tr("PommeBrowser {0} sera installé à la fermeture.", version),
                         ToastKind.Info,
-                        "Redémarrer maintenant",
+                        Tr("Redémarrer maintenant"),
                         RestartToApplyUpdate,
                         TimeSpan.FromSeconds(15)));
                 }
@@ -63,8 +63,8 @@ namespace MyHomelabBrowser
         private void WireUpdateActions(SettingsView view)
         {
             view.SetCurrentVersion(AppVersion.Current);
-            view.SetLatestVersion("(non vérifiée)");
-            view.SetUpdateStatus("Prêt");
+            view.SetLatestVersion(Tr("(non vérifiée)"));
+            view.SetUpdateStatus(Tr("Prêt"));
             view.SetUpdateBusy(false);
             view.SetChangelogAvailable(true);
             view.SetInstallAvailable(_downloadedUpdateInfo != null);
@@ -76,14 +76,14 @@ namespace MyHomelabBrowser
 
                 if (!_updates.IsInstalled)
                 {
-                    view.SetUpdateStatus("Mises à jour indisponibles hors version installée.");
+                    view.SetUpdateStatus(Tr("Mises à jour indisponibles hors version installée."));
                     return;
                 }
 
                 _isUpdateCheckRunning = true;
                 view.SetUpdateBusy(true);
-                view.SetUpdateStatus("Recherche de mise à jour…");
-                view.SetLatestVersion("(en cours…)");
+                view.SetUpdateStatus(Tr("Recherche de mise à jour…"));
+                view.SetLatestVersion(Tr("(en cours…)"));
                 view.SetInstallAvailable(false);
                 _pendingUpdateInfo = null;
 
@@ -94,20 +94,20 @@ namespace MyHomelabBrowser
                     if (info == null)
                     {
                         view.SetLatestVersion(AppVersion.Current);
-                        view.SetUpdateStatus("PommeBrowser est à jour.");
+                        view.SetUpdateStatus(Tr("PommeBrowser est à jour."));
                         return;
                     }
 
                     _pendingUpdateInfo = info;
                     view.SetLatestVersion(info.TargetFullRelease.Version.ToString());
-                    view.SetUpdateStatus("Mise à jour disponible.");
+                    view.SetUpdateStatus(Tr("Mise à jour disponible."));
                     view.SetInstallAvailable(true);
                 }
                 catch (Exception ex)
                 {
-                    view.SetUpdateStatus("Erreur pendant la vérification.");
+                    view.SetUpdateStatus(Tr("Erreur pendant la vérification."));
                     RuntimeLogBuffer.Append("[Updates] " + ex.Message);
-                    ShowToast("Mise à jour", "La vérification a échoué : " + ex.Message, ToastKind.Warning);
+                    ShowToast(Tr("Mise à jour"), Tr("La vérification a échoué : ") + ex.Message, ToastKind.Warning);
                 }
                 finally
                 {
@@ -126,7 +126,7 @@ namespace MyHomelabBrowser
                 view.SetUpdateBusy(true);
                 view.SetInstallAvailable(false);
                 view.ShowUpdateProgress(true);
-                view.SetUpdateStatus("Téléchargement…");
+                view.SetUpdateStatus(Tr("Téléchargement…"));
 
                 try
                 {
@@ -136,7 +136,7 @@ namespace MyHomelabBrowser
                             Dispatcher.BeginInvoke(() => view.SetUpdateProgress(percent)));
                     }
 
-                    view.SetUpdateStatus("Installation et redémarrage…");
+                    view.SetUpdateStatus(Tr("Installation et redémarrage…"));
 
                     // Onglets et historique sauvegardés avant que Velopack ne ferme l'application.
                     SaveSessionForUpdateRestart();
@@ -145,9 +145,9 @@ namespace MyHomelabBrowser
                 }
                 catch (Exception ex)
                 {
-                    view.SetUpdateStatus("Erreur pendant l'installation.");
+                    view.SetUpdateStatus(Tr("Erreur pendant l'installation."));
                     view.ShowUpdateProgress(false);
-                    MessageBox.Show(this, "Erreur de mise à jour :\n" + ex.Message, "Mise à jour",
+                    MessageDialog.Show(this, Tr("Erreur de mise à jour :\n") + ex.Message, Tr("Mise à jour"),
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
                 finally
@@ -159,7 +159,7 @@ namespace MyHomelabBrowser
 
             view.ChangelogRequested += () =>
             {
-                var win = new ChangelogWindow("Historique des versions", _remoteChangelogJson ?? "{}")
+                var win = new ChangelogWindow(Tr("Historique des versions"), _remoteChangelogJson ?? "{}")
                 {
                     Owner = this
                 };

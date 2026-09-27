@@ -3,11 +3,10 @@ using MyHomelabBrowser.classes.AdBlock.Integration;
 using MyHomelabBrowser.classes.AdBlock.Models;
 using MyHomelabBrowser.classes.AdBlock.Services;
 using MyHomelabBrowser.controles.AdBlock;
-using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Threading.Tasks;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -129,14 +128,14 @@ namespace MyHomelabBrowser
             AdBlockButton.Opacity = settings.Enabled ? 1.0 : 0.68;
 
             string stateText = !settings.Enabled
-                ? "désactivée partout"
+                ? Tr("désactivée partout")
                 : allowed
-                    ? "désactivée pour ce site"
+                    ? Tr("désactivée pour ce site")
                     : active
                         ? "active"
-                        : "en attente d’une page web";
+                        : Tr("en attente d’une page web");
 
-            AdBlockButton.ToolTip = $"Protection web — {stateText}\n{blocked:N0} requête{(blocked > 1 ? "s" : string.Empty)} bloquée{(blocked > 1 ? "s" : string.Empty)} sur cette page";
+            AdBlockButton.ToolTip = Tr("Protection web — {0}\n{1:N0} requête{2} bloquée{3} sur cette page", stateText, blocked, (blocked > 1 ? "s" : string.Empty), (blocked > 1 ? "s" : string.Empty));
 
             if (AdBlockPopup.IsOpen)
                 _adBlockPanel.Refresh();

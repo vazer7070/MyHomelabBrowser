@@ -2,10 +2,12 @@
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
-    public partial class LoginDialog : Window
+    public partial class LoginDialog : DialogWindow
     {
         public string Username
         {
@@ -25,18 +27,28 @@ namespace MyHomelabBrowser.controles
 
             if (!string.IsNullOrWhiteSpace(presetUsername))
                 UsernameBox.Text = presetUsername;
-            PasswordBox.PasswordChanged += (_, _) =>
+
+            // Nom déjà connu : on saisit directement le mot de passe.
+            Loaded += (_, _) => Dispatcher.BeginInvoke(() =>
             {
-                LoginButton.IsEnabled =
-    !string.IsNullOrWhiteSpace(UsernameBox.Text) &&
-    PasswordBox.Password.Length > 0;
-
-
-                // Retour au style du thème.
-                PasswordBox.ClearValue(Control.BorderBrushProperty);
-                PasswordErrorText.Visibility = Visibility.Collapsed;
-            };
+                if (string.IsNullOrWhiteSpace(UsernameBox.Text))
+                    UsernameBox.Focus();
+                else
+                    PasswordBox.Focus();
+            }, DispatcherPriority.Input);
         }
+
+        private void Input_Changed(object sender, RoutedEventArgs e)
+        {
+            LoginButton.IsEnabled =
+                !string.IsNullOrWhiteSpace(UsernameBox.Text) &&
+                PasswordBox.Password.Length > 0;
+
+            // Retour au style du thème.
+            PasswordBox.ClearValue(Control.BorderBrushProperty);
+            PasswordErrorText.Visibility = Visibility.Collapsed;
+        }
+
         void ShakePasswordBox()
         {
             var animation = new DoubleAnimation
@@ -48,40 +60,29 @@ namespace MyHomelabBrowser.controles
                 RepeatBehavior = new RepeatBehavior(3)
             };
 
-            PasswordShakeTransform.BeginAnimation(
-                TranslateTransform.XProperty,
-                animation
-            );
+            PasswordShakeTransform.BeginAnimation(TranslateTransform.XProperty, animation);
         }
 
         public void ShowPasswordError(string? message = null)
         {
             PasswordBox.SetResourceReference(Control.BorderBrushProperty, "DangerBrush");
-            PasswordErrorText.Text = string.IsNullOrWhiteSpace(message) ? "Mot de passe incorrect" : message;
+            PasswordErrorText.Text = string.IsNullOrWhiteSpace(message) ? Tr("Mot de passe incorrect") : message;
             PasswordErrorText.Visibility = Visibility.Visible;
 
             ShakePasswordBox();
+            PasswordBox.Focus();
+            PasswordBox.SelectAll();
         }
-
 
         private void Login_Click(object sender, RoutedEventArgs e)
         {
-
-            if (ValidateLogin == null ||
-                !ValidateLogin(Username, Password))
+            if (ValidateLogin == null || !ValidateLogin(Username, Password))
             {
                 ShowPasswordError(FailureMessageProvider?.Invoke(Username));
                 return;
             }
 
-            DialogResult = true; 
-        }
-
-
-        private void Cancel_Click(object sender, RoutedEventArgs e)
-        {
-            DialogResult = false;
-            Close();
+            DialogResult = true;
         }
     }
 }

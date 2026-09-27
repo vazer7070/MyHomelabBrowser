@@ -1,14 +1,13 @@
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Flash;
 using MyHomelabBrowser.controles;
-using System;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -79,7 +78,7 @@ namespace MyHomelabBrowser
                                     },
                                     new TextBlock
                                     {
-                                        Text = _vault.IsUnlocked ? "Coffre déverrouillé" : "Profil actif",
+                                        Text = _vault.IsUnlocked ? Tr("Coffre déverrouillé") : Tr("Profil actif"),
                                         FontSize = 11.5,
                                         Foreground = (Brush)FindResource("TextTertiaryBrush")
                                     }
@@ -102,6 +101,23 @@ namespace MyHomelabBrowser
 
             if (FindMenuItem(menu, "VersionMenuItem") is MenuItem version)
                 version.Header = $"PommeBrowser {AppVersion.Current}";
+
+            if (FindMenuItem(menu, "WorkspacesMenuItem") is MenuItem workspaces)
+                PopulateWorkspacesMenu(workspaces);
+
+            if (FindMenuItem(menu, "SplitViewMenuItem") is MenuItem split)
+            {
+                split.Header = IsSplitViewActive ? Tr("Quitter la vue côte à côte") : Tr("Vue côte à côte");
+                split.IsEnabled = IsSplitViewActive || IsSplitEligible(Tabs.SelectedItem as TabItem);
+            }
+
+            bool hasWebPage = GetActiveCore() != null;
+            if (FindMenuItem(menu, "FindMenuItem") is MenuItem find)
+                find.IsEnabled = hasWebPage;
+            if (FindMenuItem(menu, "PrintMenuItem") is MenuItem print)
+                print.IsEnabled = hasWebPage;
+            if (FindMenuItem(menu, "ZoomMenuItem") is MenuItem zoom)
+                zoom.IsEnabled = hasWebPage;
 
             OpenMenu(menu, MainMenuButton);
         }
@@ -275,12 +291,9 @@ namespace MyHomelabBrowser
 
         void EditFavorite(FavoriteItem fav)
         {
-            var dlg = new EditFavoriteDialog(fav)
-            {
-                Owner = this
-            };
+            var dlg = new EditFavoriteDialog(fav, _favorites.Where(f => f.Folder != null).Select(f => f.Folder!));
 
-            if (dlg.ShowDialog() != true)
+            if (!dlg.ShowFor(this))
                 return;
 
             if (dlg.Deleted)
@@ -304,6 +317,8 @@ namespace MyHomelabBrowser
                     page.SetFavorites(_favorites);
                 }
             }
+
+            RefreshStartPageServices();
         }
 
         string? GetCurrentPageUrl()
@@ -332,7 +347,7 @@ namespace MyHomelabBrowser
             FavoriteButton.IsEnabled = canFavorite;
             FavoriteIconEmpty.Visibility = isFav ? Visibility.Collapsed : Visibility.Visible;
             FavoriteIconFilled.Visibility = isFav ? Visibility.Visible : Visibility.Collapsed;
-            FavoriteButton.ToolTip = isFav ? "Retirer des favoris (Ctrl+D)" : "Ajouter aux favoris (Ctrl+D)";
+            FavoriteButton.ToolTip = isFav ? Tr("Retirer des favoris (Ctrl+D)") : Tr("Ajouter aux favoris (Ctrl+D)");
         }
 
         // ---------------------------
@@ -372,7 +387,7 @@ namespace MyHomelabBrowser
             }
             catch (Exception ex)
             {
-                ShowToast("Dossier introuvable", ex.Message, ToastKind.Warning);
+                ShowToast(Tr("Dossier introuvable"), ex.Message, ToastKind.Warning);
             }
         }
 
@@ -406,8 +421,8 @@ namespace MyHomelabBrowser
             ManualLegacyButton.Visibility = canLaunch || isLegacyNow ? Visibility.Visible : Visibility.Collapsed;
             ManualLegacyButton.IsEnabled = !isLegacyNow && canLaunch;
             ManualLegacyButton.ToolTip = isLegacyNow
-                ? "Ce site est ouvert avec Flash Legacy (Basilisk)"
-                : "Ouvrir ce site avec Flash Legacy (Basilisk)";
+                ? Tr("Ce site est ouvert avec Flash Legacy (Basilisk)")
+                : Tr("Ouvrir ce site avec Flash Legacy (Basilisk)");
         }
     }
 }

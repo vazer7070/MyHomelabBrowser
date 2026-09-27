@@ -102,13 +102,14 @@
                             Visibility="Collapsed"
                             Background="{StaticResource PrivateSoftBrush}"
                             CornerRadius="4"
-                            Padding="5,1"
+                            Padding="4,2"
                             Margin="0,0,6,0"
-                            VerticalAlignment="Center">
-                        <TextBlock Text="Privé"
-                                   FontSize="10.5"
-                                   FontWeight="SemiBold"
-                                   Foreground="{StaticResource PrivateBrush}"/>
+                            VerticalAlignment="Center"
+                            ToolTip="Navigation privée">
+                        <Path Width="13" Height="13"
+                              Stretch="Uniform"
+                              Data="{StaticResource PrivateIconGeometry}"
+                              Fill="{StaticResource PrivateBrush}"/>
                     </Border>
 
                     <TextBlock x:Name="Title"

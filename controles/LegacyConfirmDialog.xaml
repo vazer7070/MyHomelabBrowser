@@ -1,62 +1,19 @@
-﻿<Window x:Class="MyHomelabBrowser.controles.LegacyConfirmDialog"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Flash Legacy"
-        Width="420"
-        Height="200"
-        WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize"
-        WindowStyle="None"
-        AllowsTransparency="True"
-        Background="Transparent">
+﻿<controles:DialogWindow x:Class="MyHomelabBrowser.controles.LegacyConfirmDialog"
+                        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                        xmlns:controles="clr-namespace:MyHomelabBrowser.controles"
+                        Title="Flash Legacy"
+                        Width="440">
+    <StackPanel>
+        <TextBlock Text="Activer Flash Legacy (Basilisk) pour cette page ?" TextWrapping="Wrap"/>
 
-    <Border Background="{StaticResource PanelBrush}"
-            BorderBrush="{StaticResource BorderStrongBrush}"
-            BorderThickness="1"
-            CornerRadius="14"
-            Padding="14">
+        <CheckBox x:Name="AddRuleCheck"
+                  Margin="0,14,0,0"
+                  Content="Ajouter aussi ce site en “Legacy direct” (automatique)"/>
 
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-
-            <!-- TITLE -->
-            <TextBlock Text="⚡ Flash Legacy"
-                       FontSize="16"
-                       FontWeight="SemiBold"
-                       Foreground="White"/>
-
-            <!-- CONTENT -->
-            <StackPanel Grid.Row="1" Margin="0,10,0,10">
-                <TextBlock Text="Activer Flash Legacy (Basilisk) pour cette page ?"
-                           Foreground="{StaticResource TextSecondaryBrush}"
-                           FontSize="13"/>
-
-                <CheckBox x:Name="AddRuleCheck"
-                          Margin="0,10,0,0"
-                          Foreground="{StaticResource TextPrimaryBrush}"
-                          Content="Ajouter aussi ce site en “Legacy direct” (automatique)"/>
-            </StackPanel>
-
-            <!-- BUTTONS -->
-            <StackPanel Grid.Row="2"
-                        Orientation="Horizontal"
-                        HorizontalAlignment="Right">
-
-                <Button Content="Annuler"
-                        Margin="0,0,10,0"
-                        Padding="14,6"
-                        Click="Cancel_Click"/>
-
-                <Button Content="Activer"
-                        Padding="14,6"
-                        Background="{StaticResource AccentStrongBrush}"
-                        Foreground="White"
-                        Click="Ok_Click"/>
-            </StackPanel>
-        </Grid>
-    </Border>
-</Window>
+        <StackPanel Style="{StaticResource DialogButtonBarStyle}">
+            <Button Content="Annuler" Command="ApplicationCommands.Close" Margin="0,0,8,0"/>
+            <Button Content="Activer" Style="{StaticResource PrimaryButtonStyle}" IsDefault="True" Click="Ok_Click"/>
+        </StackPanel>
+    </StackPanel>
+</controles:DialogWindow>

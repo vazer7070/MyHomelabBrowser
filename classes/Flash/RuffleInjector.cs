@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using WpfWebView2 = Microsoft.Web.WebView2.Wpf.WebView2;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes.Flash
 {
@@ -15,7 +16,7 @@ namespace MyHomelabBrowser.classes.Flash
             FlashDetectionResult detection)
         {
             if (webView.CoreWebView2 == null)
-                return RuffleInjectionResult.Failed("core-unavailable", false, "WebView2 n'est pas initialisé.");
+                return RuffleInjectionResult.Failed("core-unavailable", false, Tr("WebView2 n'est pas initialisé."));
 
             bool localAssets = RuffleAssetService.Configure(webView.CoreWebView2);
             string scriptUrl = RuffleAssetService.GetPreferredScriptUrl();
@@ -56,7 +57,7 @@ namespace MyHomelabBrowser.classes.Flash
 
             return success
                 ? RuffleInjectionResult.Ok(status, localAssets)
-                : RuffleInjectionResult.Failed(status, localAssets, "Ruffle n'a pas créé de lecteur utilisable.");
+                : RuffleInjectionResult.Failed(status, localAssets, Tr("Ruffle n'a pas créé de lecteur utilisable."));
         }
 
         public static async Task<RuffleStatus> GetStatusAsync(WpfWebView2 webView)

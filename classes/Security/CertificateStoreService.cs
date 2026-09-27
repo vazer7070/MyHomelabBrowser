@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes.Security
 {
@@ -47,13 +48,13 @@ namespace MyHomelabBrowser.classes.Security
             if (includeSystem)
             {
                 ReadWindowsStore(entries, StoreName.Root, StoreLocation.CurrentUser,
-                    CertificateSource.WindowsUser, "Windows · Utilisateur", "Racines de confiance");
+                    CertificateSource.WindowsUser, Tr("Windows · Utilisateur"), Tr("Racines de confiance"));
                 ReadWindowsStore(entries, StoreName.CertificateAuthority, StoreLocation.CurrentUser,
-                    CertificateSource.WindowsUser, "Windows · Utilisateur", "Autorités intermédiaires");
+                    CertificateSource.WindowsUser, Tr("Windows · Utilisateur"), Tr("Autorités intermédiaires"));
                 ReadWindowsStore(entries, StoreName.Root, StoreLocation.LocalMachine,
-                    CertificateSource.WindowsMachine, "Windows · Ordinateur", "Racines de confiance");
+                    CertificateSource.WindowsMachine, Tr("Windows · Ordinateur"), Tr("Racines de confiance"));
                 ReadWindowsStore(entries, StoreName.CertificateAuthority, StoreLocation.LocalMachine,
-                    CertificateSource.WindowsMachine, "Windows · Ordinateur", "Autorités intermédiaires");
+                    CertificateSource.WindowsMachine, Tr("Windows · Ordinateur"), Tr("Autorités intermédiaires"));
             }
 
             return entries
@@ -66,7 +67,7 @@ namespace MyHomelabBrowser.classes.Security
         public CertificateImportResult ImportAuthorityForBrowser(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath))
-                return CertificateImportResult.Failed("Aucun fichier n’a été sélectionné.");
+                return CertificateImportResult.Failed(Tr("Aucun fichier n’a été sélectionné."));
 
             try
             {
@@ -84,8 +85,8 @@ namespace MyHomelabBrowser.classes.Security
                 if (existingPath is not null)
                 {
                     return CertificateImportResult.Succeeded(
-                        "Cette autorité est déjà enregistrée pour ce profil PommeBrowser.",
-                        selfSigned ? "PommeBrowser · Racines" : "PommeBrowser · Intermédiaires");
+                        Tr("Cette autorité est déjà enregistrée pour ce profil PommeBrowser."),
+                        selfSigned ? Tr("PommeBrowser · Racines") : Tr("PommeBrowser · Intermédiaires"));
                 }
 
                 Directory.CreateDirectory(destinationFolder);
@@ -95,21 +96,21 @@ namespace MyHomelabBrowser.classes.Security
 
                 return CertificateImportResult.Succeeded(
                     selfSigned
-                        ? "L’autorité racine a été ajoutée uniquement à ce profil PommeBrowser."
-                        : "L’autorité intermédiaire a été ajoutée uniquement à ce profil PommeBrowser.",
-                    selfSigned ? "PommeBrowser · Racines" : "PommeBrowser · Intermédiaires");
+                        ? Tr("L’autorité racine a été ajoutée uniquement à ce profil PommeBrowser.")
+                        : Tr("L’autorité intermédiaire a été ajoutée uniquement à ce profil PommeBrowser."),
+                    selfSigned ? Tr("PommeBrowser · Racines") : Tr("PommeBrowser · Intermédiaires"));
             }
             catch (Exception ex)
             {
                 return CertificateImportResult.Failed(
-                    $"Impossible d’importer ce certificat : {ex.Message}");
+                    Tr("Impossible d’importer ce certificat : {0}", ex.Message));
             }
         }
 
         public CertificateImportResult ImportAuthorityToWindowsCurrentUser(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath))
-                return CertificateImportResult.Failed("Aucun fichier n’a été sélectionné.");
+                return CertificateImportResult.Failed(Tr("Aucun fichier n’a été sélectionné."));
 
             try
             {
@@ -131,27 +132,27 @@ namespace MyHomelabBrowser.classes.Security
                 if (alreadyPresent)
                 {
                     return CertificateImportResult.Succeeded(
-                        "Cette autorité est déjà installée dans le magasin Windows de l’utilisateur.",
-                        selfSigned ? "Windows · Racines utilisateur" : "Windows · Intermédiaires utilisateur");
+                        Tr("Cette autorité est déjà installée dans le magasin Windows de l’utilisateur."),
+                        selfSigned ? Tr("Windows · Racines utilisateur") : Tr("Windows · Intermédiaires utilisateur"));
                 }
 
                 store.Add(certificate);
 
                 return CertificateImportResult.Succeeded(
-                    "L’autorité a été installée dans Windows pour l’utilisateur courant.",
-                    selfSigned ? "Windows · Racines utilisateur" : "Windows · Intermédiaires utilisateur");
+                    Tr("L’autorité a été installée dans Windows pour l’utilisateur courant."),
+                    selfSigned ? Tr("Windows · Racines utilisateur") : Tr("Windows · Intermédiaires utilisateur"));
             }
             catch (Exception ex)
             {
                 return CertificateImportResult.Failed(
-                    $"Impossible d’installer ce certificat dans Windows : {ex.Message}");
+                    Tr("Impossible d’installer ce certificat dans Windows : {0}", ex.Message));
             }
         }
 
         public CertificateOperationResult RemoveBrowserAuthority(CertificateEntry entry)
         {
             if (entry.Source != CertificateSource.Browser || string.IsNullOrWhiteSpace(entry.StoragePath))
-                return CertificateOperationResult.Failed("Ce certificat n’est pas géré par PommeBrowser.");
+                return CertificateOperationResult.Failed(Tr("Ce certificat n’est pas géré par PommeBrowser."));
 
             try
             {
@@ -161,19 +162,19 @@ namespace MyHomelabBrowser.classes.Security
                     + Path.DirectorySeparatorChar;
 
                 if (!fullPath.StartsWith(allowedRoot, StringComparison.OrdinalIgnoreCase))
-                    return CertificateOperationResult.Failed("Le chemin du certificat est invalide.");
+                    return CertificateOperationResult.Failed(Tr("Le chemin du certificat est invalide."));
 
                 if (!File.Exists(fullPath))
-                    return CertificateOperationResult.Succeeded("Le certificat n’était déjà plus présent.");
+                    return CertificateOperationResult.Succeeded(Tr("Le certificat n’était déjà plus présent."));
 
                 File.Delete(fullPath);
                 return CertificateOperationResult.Succeeded(
-                    "L’autorité a été retirée de ce profil PommeBrowser.");
+                    Tr("L’autorité a été retirée de ce profil PommeBrowser."));
             }
             catch (Exception ex)
             {
                 return CertificateOperationResult.Failed(
-                    $"Impossible de retirer cette autorité : {ex.Message}");
+                    Tr("Impossible de retirer cette autorité : {0}", ex.Message));
             }
         }
 
@@ -261,7 +262,7 @@ namespace MyHomelabBrowser.classes.Security
             if (certificate.HasPrivateKey)
             {
                 return CertificateImportResult.Failed(
-                    "Le fichier contient une clé privée. Seuls les certificats publics d’autorités sont acceptés.");
+                    Tr("Le fichier contient une clé privée. Seuls les certificats publics d’autorités sont acceptés."));
             }
 
             var basicConstraints = certificate.Extensions
@@ -271,7 +272,7 @@ namespace MyHomelabBrowser.classes.Security
             if (basicConstraints is null || !basicConstraints.CertificateAuthority)
             {
                 return CertificateImportResult.Failed(
-                    "Ce certificat n’est pas déclaré comme autorité de certification.");
+                    Tr("Ce certificat n’est pas déclaré comme autorité de certification."));
             }
 
             var keyUsage = certificate.Extensions
@@ -282,17 +283,17 @@ namespace MyHomelabBrowser.classes.Security
                 && !keyUsage.KeyUsages.HasFlag(X509KeyUsageFlags.KeyCertSign))
             {
                 return CertificateImportResult.Failed(
-                    "Ce certificat ne possède pas le droit de signer d’autres certificats.");
+                    Tr("Ce certificat ne possède pas le droit de signer d’autres certificats."));
             }
 
             DateTime now = DateTime.Now;
             if (certificate.NotAfter < now)
-                return CertificateImportResult.Failed("Cette autorité de certification est expirée.");
+                return CertificateImportResult.Failed(Tr("Cette autorité de certification est expirée."));
 
             if (certificate.NotBefore > now)
-                return CertificateImportResult.Failed("Cette autorité de certification n’est pas encore valide.");
+                return CertificateImportResult.Failed(Tr("Cette autorité de certification n’est pas encore valide."));
 
-            return CertificateImportResult.Succeeded("Certificat valide.", "Validation");
+            return CertificateImportResult.Succeeded(Tr("Certificat valide."), "Validation");
         }
 
         private string? FindBrowserCertificatePath(string normalizedThumbprint)
@@ -363,21 +364,21 @@ namespace MyHomelabBrowser.classes.Security
         };
 
         public string ValidityLabel => IsExpired
-            ? "Expiré"
+            ? Tr("Expiré")
             : IsNotYetValid
-                ? "Pas encore valide"
-                : "Valide";
+                ? Tr("Pas encore valide")
+                : Tr("Valide");
 
         public string StoreDisplay => $"{Scope} · {StoreLabel}";
         public string ExpirationDisplay => NotAfter.ToString("dd/MM/yyyy");
-        public string ExpirationLabel => $"Expire le {ExpirationDisplay}";
-        public string IssuerDisplay => $"Émis par : {Issuer}";
+        public string ExpirationLabel => Tr("Expire le {0}", ExpirationDisplay);
+        public string IssuerDisplay => Tr("Émis par : {0}", Issuer);
         public string ValidityPeriodDisplay => $"{NotBefore:dd/MM/yyyy HH:mm} → {NotAfter:dd/MM/yyyy HH:mm}";
         public string SourceBadge => Source switch
         {
             CertificateSource.Browser => "PommeBrowser",
-            CertificateSource.WindowsUser => "Windows utilisateur",
-            _ => "Windows ordinateur"
+            CertificateSource.WindowsUser => Tr("Windows utilisateur"),
+            _ => Tr("Windows ordinateur")
         };
 
         public static CertificateEntry FromBrowserCertificate(
@@ -390,7 +391,7 @@ namespace MyHomelabBrowser.classes.Security
                 null,
                 null,
                 "PommeBrowser",
-                kind == CertificateKind.Root ? "Racines privées" : "Intermédiaires privés",
+                kind == CertificateKind.Root ? Tr("Racines privées") : Tr("Intermédiaires privés"),
                 storagePath,
                 kind);
 

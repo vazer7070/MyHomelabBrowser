@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles.settings
 {
@@ -21,13 +22,13 @@ namespace MyHomelabBrowser.controles.settings
             {
                 new DnsOption<BrowserSettings.SecureDnsMode>(
                     BrowserSettings.SecureDnsMode.System,
-                    "DNS du système Windows"),
+                    Tr("DNS du système Windows")),
                 new DnsOption<BrowserSettings.SecureDnsMode>(
                     BrowserSettings.SecureDnsMode.Automatic,
-                    "DNS sécurisé automatique"),
+                    Tr("DNS sécurisé automatique")),
                 new DnsOption<BrowserSettings.SecureDnsMode>(
                     BrowserSettings.SecureDnsMode.Secure,
-                    "DNS sécurisé avec un fournisseur choisi")
+                    Tr("DNS sécurisé avec un fournisseur choisi"))
             };
 
             DnsProviderBox.ItemsSource = new[]
@@ -46,7 +47,33 @@ namespace MyHomelabBrowser.controles.settings
                     "AdGuard DNS"),
                 new DnsOption<BrowserSettings.SecureDnsProvider>(
                     BrowserSettings.SecureDnsProvider.Custom,
-                    "Personnalisé")
+                    Tr("Personnalisé"))
+            };
+
+            ThemeBox.ItemsSource = new[]
+            {
+                new DnsOption<AppTheme>(AppTheme.System, Tr("Comme Windows")),
+                new DnsOption<AppTheme>(AppTheme.Dark, Tr("Sombre")),
+                new DnsOption<AppTheme>(AppTheme.Light, Tr("Clair"))
+            };
+            LanguageBox.ItemsSource = new[]
+            {
+                new DnsOption<string>("fr", Tr("Français")),
+                new DnsOption<string>("en", "English")
+            };
+
+            AppearanceSettings appearance = AppearanceSettings.Load();
+            _appearanceLoading = true;
+            ThemeBox.SelectedValue = appearance.Theme;
+            LanguageBox.SelectedValue = appearance.Language;
+            _appearanceLoading = false;
+
+            ServiceIntervalBox.ItemsSource = new[]
+            {
+                new DnsOption<int>(30, Tr("Toutes les 30 secondes")),
+                new DnsOption<int>(60, Tr("Toutes les minutes")),
+                new DnsOption<int>(300, Tr("Toutes les 5 minutes")),
+                new DnsOption<int>(900, Tr("Toutes les 15 minutes"))
             };
 
             SearchEngineBox.ItemsSource = Enum.GetValues<BrowserSettings.SearchEngine>()
@@ -106,20 +133,20 @@ namespace MyHomelabBrowser.controles.settings
             DnsStatusText.Text = mode switch
             {
                 BrowserSettings.SecureDnsMode.System =>
-                    "PommeBrowser utilise actuellement la résolution DNS configurée dans Windows.",
+                    Tr("PommeBrowser utilise actuellement la résolution DNS configurée dans Windows."),
 
                 BrowserSettings.SecureDnsMode.Automatic =>
-                    "WebView2 tentera d’utiliser DNS-over-HTTPS et pourra revenir au DNS système si le réseau l’exige.",
+                    Tr("WebView2 tentera d’utiliser DNS-over-HTTPS et pourra revenir au DNS système si le réseau l’exige."),
 
                 BrowserSettings.SecureDnsMode.Secure when provider == BrowserSettings.SecureDnsProvider.Custom =>
                     SecureDnsConfiguration.IsValidHttpsTemplate(CustomDnsTemplateBox.Text)
-                        ? $"DNS-over-HTTPS strict : {CustomDnsTemplateBox.Text.Trim()}"
-                        : "Le DNS personnalisé ne sera pas appliqué tant que son adresse n’est pas valide.",
+                        ? Tr("DNS-over-HTTPS strict : {0}", CustomDnsTemplateBox.Text.Trim())
+                        : Tr("Le DNS personnalisé ne sera pas appliqué tant que son adresse n’est pas valide."),
 
                 BrowserSettings.SecureDnsMode.Secure =>
-                    $"DNS-over-HTTPS strict : {GetProviderLabel(provider)}.",
+                    Tr("DNS-over-HTTPS strict : {0}.", GetProviderLabel(provider)),
 
-                _ => "DNS du système Windows."
+                _ => Tr("DNS du système Windows.")
             };
         }
 
@@ -137,7 +164,7 @@ namespace MyHomelabBrowser.controles.settings
             bool valid = SecureDnsConfiguration.IsValidHttpsTemplate(CustomDnsTemplateBox.Text);
             CustomDnsValidationText.Text = valid
                 ? string.Empty
-                : "Saisissez une URL HTTPS valide vers un service DNS-over-HTTPS.";
+                : Tr("Saisissez une URL HTTPS valide vers un service DNS-over-HTTPS.");
             CustomDnsValidationText.Visibility = valid ? Visibility.Collapsed : Visibility.Visible;
         }
 
@@ -168,14 +195,14 @@ namespace MyHomelabBrowser.controles.settings
                 BrowserSettings.SecureDnsProvider.Google => "Google Public DNS",
                 BrowserSettings.SecureDnsProvider.Quad9 => "Quad9",
                 BrowserSettings.SecureDnsProvider.AdGuard => "AdGuard DNS",
-                _ => "fournisseur personnalisé"
+                _ => Tr("fournisseur personnalisé")
             };
 
         private async Task UpdateCertificateSummaryAsync()
         {
             try
             {
-                CertificateSummaryText.Text = "Chargement des certificats du profil…";
+                CertificateSummaryText.Text = Tr("Chargement des certificats du profil…");
 
                 var certificates = await Task.Run(() =>
                     new CertificateStoreService(AppDataContext.Root)
@@ -189,13 +216,13 @@ namespace MyHomelabBrowser.controles.settings
                     certificate.Source == CertificateSource.WindowsMachine);
 
                 CertificateSummaryText.Text =
-                    $"{browserCount} CA propre(s) au profil · " +
-                    $"{windowsUserCount} utilisateur Windows · " +
-                    $"{windowsMachineCount} ordinateur";
+                    Tr("{0} CA propre(s) au profil · ", browserCount) +
+                    Tr("{0} utilisateur Windows · ", windowsUserCount) +
+                    Tr("{0} ordinateur", windowsMachineCount);
             }
             catch (Exception ex)
             {
-                CertificateSummaryText.Text = $"Lecture impossible : {ex.Message}";
+                CertificateSummaryText.Text = Tr("Lecture impossible : {0}", ex.Message);
             }
         }
 
@@ -209,6 +236,40 @@ namespace MyHomelabBrowser.controles.settings
             window.ShowDialog();
             _ = UpdateCertificateSummaryAsync();
         }
+
+        private bool _appearanceLoading;
+
+        /// <summary>
+        /// Enregistré tout de suite (réglage commun à tous les profils), appliqué au redémarrage.
+        /// </summary>
+        private void Appearance_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_appearanceLoading || ThemeBox.SelectedValue is not AppTheme theme || LanguageBox.SelectedValue is not string language)
+                return;
+
+            var appearance = new AppearanceSettings { Theme = theme, Language = language };
+            try
+            {
+                appearance.Save();
+            }
+            catch
+            {
+                return;
+            }
+
+            bool pending = theme != ThemeManager.Appearance.Theme ||
+                           !string.Equals(language, ThemeManager.Appearance.Language, StringComparison.OrdinalIgnoreCase);
+            AppearanceRestartPanel.Visibility = pending ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void RestartNow_Click(object sender, RoutedEventArgs e)
+        {
+            if (Application.Current.MainWindow is MainWindow main)
+                main.RestartApplication();
+        }
+
+        private void OpenPinnedCertificates_Click(object sender, RoutedEventArgs e)
+            => new PinnedCertificatesDialog().ShowFor(Window.GetWindow(this));
 
         public sealed record DnsOption<T>(T Value, string Label)
         {

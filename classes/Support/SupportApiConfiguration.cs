@@ -4,8 +4,8 @@ namespace MyHomelabBrowser.classes.Support
 {
     /// <summary>
     /// Point unique à modifier lorsque le backend de support sera disponible.
-    /// Tant que CompiledApiBaseUrl est vide, le navigateur conserve le transport
-    /// Discord historique. Une URL peut aussi être fournie temporairement via la
+    /// Tant que CompiledApiBaseUrl est vide, les rapports sont enregistrés dans une
+    /// archive locale. Une URL peut aussi être fournie temporairement via la
     /// variable POMMEBROWSER_SUPPORT_API_URL pour tester le backend sans recompiler.
     /// </summary>
     public static class SupportApiConfiguration
@@ -15,11 +15,6 @@ namespace MyHomelabBrowser.classes.Support
         public const string CompiledApiBaseUrl = "";
 
         public const string ReportPath = "/api/v1/support/reports";
-
-        // Pendant la transition, le support historique reste disponible.
-        // À passer à false après validation du backend et suppression des webhooks
-        // du code distribué.
-        public static bool AllowLegacyDiscordFallback { get; } = true;
 
         public static TimeSpan RequestTimeout => TimeSpan.FromSeconds(35);
 

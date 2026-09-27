@@ -5,6 +5,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles.AdBlock
 {
@@ -73,35 +74,35 @@ namespace MyHomelabBrowser.controles.AdBlock
             bool activeOnSite = hasSite && session?.IsProtectionActive == true;
 
             HeaderStatusText.Text = !settings.Enabled
-                ? "Désactivée dans tout le navigateur"
+                ? Tr("Désactivée dans tout le navigateur")
                 : allowed
-                    ? "Désactivée pour ce site"
+                    ? Tr("Désactivée pour ce site")
                     : activeOnSite
-                        ? "Protection active"
-                        : "En attente d’une page web";
+                        ? Tr("Protection active")
+                        : Tr("En attente d’une page web");
 
-            CurrentSiteText.Text = hasSite ? host : "Aucun site";
+            CurrentSiteText.Text = hasSite ? host : Tr("Aucun site");
             SiteProtectionText.Text = !hasSite
-                ? "Ouvrez une page web pour voir son état."
+                ? Tr("Ouvrez une page web pour voir son état.")
                 : allowed
-                    ? "Ce domaine figure dans les sites autorisés."
+                    ? Tr("Ce domaine figure dans les sites autorisés.")
                     : activeOnSite
-                        ? "Publicités et traqueurs sont filtrés avant leur chargement."
-                        : "La protection ne s’applique pas à cette adresse.";
+                        ? Tr("Publicités et traqueurs sont filtrés avant leur chargement.")
+                        : Tr("La protection ne s’applique pas à cette adresse.");
 
             ToggleSiteButton.IsEnabled = hasSite && settings.Enabled;
-            ToggleSiteButton.Content = allowed ? "Réactiver ici" : "Autoriser ce site";
+            ToggleSiteButton.Content = allowed ? Tr("Réactiver ici") : Tr("Autoriser ce site");
 
             PageBlockedText.Text = (session?.BlockedCount ?? 0).ToString("N0");
             SessionBlockedText.Text = snapshot.SessionBlockedCount.ToString("N0");
-            RulesText.Text = $"{snapshot.NetworkRuleCount:N0} règles réseau · {snapshot.CosmeticRuleCount:N0} règles visuelles";
+            RulesText.Text = Tr("{0:N0} règles réseau · {1:N0} règles visuelles", snapshot.NetworkRuleCount, snapshot.CosmeticRuleCount);
             UpdateText.Text = snapshot.LastSuccessfulUpdateUtc.HasValue
-                ? "Dernière mise à jour : " + snapshot.LastSuccessfulUpdateUtc.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                ? Tr("Dernière mise à jour : ") + snapshot.LastSuccessfulUpdateUtc.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
                 : snapshot.StatusMessage;
 
-            GlobalToggleButton.Content = settings.Enabled ? "Désactiver partout" : "Activer partout";
+            GlobalToggleButton.Content = settings.Enabled ? Tr("Désactiver partout") : Tr("Activer partout");
             UpdateListsButton.IsEnabled = !_updating;
-            UpdateListsButton.Content = _updating ? "Mise à jour…" : "Mettre à jour";
+            UpdateListsButton.Content = _updating ? Tr("Mise à jour…") : Tr("Mettre à jour");
 
             Brush activeBrush = (Brush)FindResource("AccentBrush");
             Brush inactiveBrush = (Brush)FindResource("TextTertiaryBrush");

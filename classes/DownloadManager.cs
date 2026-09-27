@@ -63,6 +63,18 @@ namespace MyHomelabBrowser.classes
             ItemsChanged?.Invoke();
         }
 
+        /// <summary>
+        /// Retire de la liste les téléchargements terminés commencés après <paramref name="since"/>.
+        /// </summary>
+        public void RemoveFinishedSince(DateTime since)
+        {
+            foreach (var d in Items.Where(d => !d.IsInProgress && d.StartedAt >= since).ToList())
+                Items.Remove(d);
+
+            SaveHistory();
+            ItemsChanged?.Invoke();
+        }
+
         public void ClearPrivateDownloads()
         {
             var toRemove = Items.Where(d => d.IsPrivate).ToList();

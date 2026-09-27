@@ -1,11 +1,11 @@
 using MyHomelabBrowser.classes;
-using System;
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -63,6 +63,9 @@ namespace MyHomelabBrowser
         {
             ToastPopup.IsOpen = false;
             CommandSuggestionsPopup.IsOpen = false;
+
+            // La barre de recherche reste ouverte : elle réapparaît à la réactivation.
+            FindPopup.IsOpen = false;
         }
 
         public void ShowToast(string title, string message, DownloadItem? item)
@@ -77,7 +80,7 @@ namespace MyHomelabBrowser
                 title,
                 message,
                 ToastKind.Success,
-                "Ouvrir le fichier",
+                Tr("Ouvrir le fichier"),
                 () => DownloadManager.Instance.OpenFile(item));
         }
 
@@ -132,7 +135,7 @@ namespace MyHomelabBrowser
             }
             catch (Exception ex)
             {
-                ShowToast("Action impossible", ex.Message, ToastKind.Warning);
+                ShowToast(Tr("Action impossible"), ex.Message, ToastKind.Warning);
             }
         }
 

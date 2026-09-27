@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes
 {
@@ -62,7 +63,7 @@ namespace MyHomelabBrowser.classes
                 template = (settings.SecureDnsCustomTemplate ?? string.Empty).Trim();
                 if (!IsValidHttpsTemplate(template))
                 {
-                    validationMessage = "L’adresse DNS personnalisée doit être une URL HTTPS valide.";
+                    validationMessage = Tr("L’adresse DNS personnalisée doit être une URL HTTPS valide.");
                     return false;
                 }
 
@@ -78,7 +79,7 @@ namespace MyHomelabBrowser.classes
             }
 
             template = string.Empty;
-            validationMessage = "Le fournisseur DNS sélectionné n’est pas reconnu.";
+            validationMessage = Tr("Le fournisseur DNS sélectionné n’est pas reconnu.");
             return false;
         }
 

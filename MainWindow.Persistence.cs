@@ -1,14 +1,10 @@
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.controles;
-using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -166,7 +162,7 @@ namespace MyHomelabBrowser
                 RemoveHistoryEntry,
                 RemoveHistoryEntries);
 
-            OpenViewTab(view, "Historique");
+            OpenViewTab(view, Tr("Historique"));
         }
 
         // ---------------------------

@@ -1,10 +1,7 @@
-using MyHomelabBrowser.classes;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -17,8 +14,8 @@ namespace MyHomelabBrowser
         /// <summary>
         /// Raccourcis du navigateur. Le contrôle WebView2 relaie aussi ses touches
         /// d'accélération sous forme d'événements WPF : ils fonctionnent donc même
-        /// quand la page a le focus. Les touches non gérées ici (Ctrl+F, Ctrl+P, zoom…)
-        /// restent traitées par le moteur web.
+        /// quand la page a le focus. Les touches non gérées ici restent traitées
+        /// par le moteur web.
         /// </summary>
         private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
         {
@@ -84,6 +81,30 @@ namespace MyHomelabBrowser
                     case Key.OemComma:
                         OpenSettings();
                         break;
+                    case Key.F:
+                        OpenFindBar();
+                        break;
+                    case Key.G:
+                        FindStep(forward: !shift);
+                        break;
+                    case Key.P:
+                        PrintActivePage();
+                        break;
+                    case Key.Delete when shift:
+                        OpenClearBrowsingData();
+                        break;
+                    case Key.OemPlus:
+                    case Key.Add:
+                        ZoomActivePage(1);
+                        break;
+                    case Key.OemMinus:
+                    case Key.Subtract:
+                        ZoomActivePage(-1);
+                        break;
+                    case Key.D0:
+                    case Key.NumPad0:
+                        ZoomActivePage(0);
+                        break;
                     default:
                         handled = false;
                         break;
@@ -122,6 +143,12 @@ namespace MyHomelabBrowser
                         break;
                     case Key.F11:
                         ToggleWindowFullscreen();
+                        break;
+                    case Key.F3:
+                        FindStep(forward: !shift);
+                        break;
+                    case Key.Escape when _findBarOpen:
+                        CloseFindBar();
                         break;
                     case Key.BrowserBack:
                         BackBtn_Click(this, new RoutedEventArgs());
@@ -218,7 +245,7 @@ namespace MyHomelabBrowser
                 WindowState = WindowState.Normal;
                 WindowState = WindowState.Maximized;
 
-                ShowToast("Plein écran", "Appuyez sur F11 ou Échap pour quitter.", duration: TimeSpan.FromSeconds(3));
+                ShowToast(Tr("Plein écran"), Tr("Appuyez sur F11 ou Échap pour quitter."), duration: TimeSpan.FromSeconds(3));
             }
             else
             {

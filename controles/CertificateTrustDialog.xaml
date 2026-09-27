@@ -1,0 +1,75 @@
+<controles:DialogWindow x:Class="MyHomelabBrowser.controles.CertificateTrustDialog"
+                        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                        xmlns:controles="clr-namespace:MyHomelabBrowser.controles"
+                        Title="Certificat non reconnu"
+                        Width="540">
+    <StackPanel>
+        <Border x:Name="Banner"
+                Padding="14,12"
+                CornerRadius="10"
+                Background="{StaticResource WarningSoftBrush}">
+            <DockPanel>
+                <TextBlock x:Name="BannerIcon"
+                           DockPanel.Dock="Left"
+                           Text="&#xE7BA;"
+                           FontFamily="{StaticResource IconFont}"
+                           FontSize="18"
+                           Margin="0,1,12,0"
+                           Foreground="{StaticResource WarningBrush}"/>
+                <TextBlock x:Name="BannerText" TextWrapping="Wrap"/>
+            </DockPanel>
+        </Border>
+
+        <TextBlock x:Name="ProblemsText"
+                   Style="{StaticResource DialogHintStyle}"
+                   Margin="0,12,0,0"/>
+
+        <Grid Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Text="Service" Style="{StaticResource DialogHintStyle}" Margin="0,0,14,6"/>
+            <TextBlock x:Name="AuthorityText" Grid.Column="1" FontWeight="SemiBold" Margin="0,0,0,6"/>
+
+            <TextBlock Grid.Row="1" Text="Délivré à" Style="{StaticResource DialogHintStyle}" Margin="0,0,14,6"/>
+            <TextBlock x:Name="SubjectText" Grid.Row="1" Grid.Column="1" TextWrapping="Wrap" Margin="0,0,0,6"/>
+
+            <TextBlock Grid.Row="2" Text="Délivré par" Style="{StaticResource DialogHintStyle}" Margin="0,0,14,6"/>
+            <TextBlock x:Name="IssuerText" Grid.Row="2" Grid.Column="1" TextWrapping="Wrap" Margin="0,0,0,6"/>
+
+            <TextBlock Grid.Row="3" Text="Validité" Style="{StaticResource DialogHintStyle}" Margin="0,0,14,6"/>
+            <TextBlock x:Name="ValidityText" Grid.Row="3" Grid.Column="1" Margin="0,0,0,6"/>
+
+            <TextBlock Grid.Row="4" Text="Empreinte SHA-256" Style="{StaticResource DialogHintStyle}" Margin="0,0,14,0"/>
+            <TextBox x:Name="FingerprintText"
+                     Grid.Row="4"
+                     Grid.Column="1"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     FontFamily="Consolas"
+                     FontSize="11.5"
+                     BorderThickness="0"
+                     Background="Transparent"
+                     Padding="0"/>
+        </Grid>
+
+        <TextBlock Text="Comparez l’empreinte avec celle affichée par le service (page d’administration ou console) avant d’accepter. Le choix est mémorisé pour cette adresse ; il se retire dans Paramètres › Général."
+                   Style="{StaticResource DialogHintStyle}"
+                   Margin="0,14,0,0"/>
+
+        <StackPanel Style="{StaticResource DialogButtonBarStyle}">
+            <Button Content="Ne pas ouvrir" Command="ApplicationCommands.Close" Margin="0,0,8,0" IsDefault="True"/>
+            <Button x:Name="TrustButton" Content="Faire confiance à ce certificat" Style="{StaticResource PrimaryButtonStyle}" Click="Trust_Click"/>
+        </StackPanel>
+    </StackPanel>
+</controles:DialogWindow>

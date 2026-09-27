@@ -1,12 +1,18 @@
 using MyHomelabBrowser.classes;
+using MyHomelabBrowser.classes.Homelab;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -17,6 +23,17 @@ namespace MyHomelabBrowser.controles
         readonly DispatcherTimer _debounce;
         bool _mouseDownInSuggestions;
         public event Action<string>? NavigateRequested;
+
+        // Services du homelab
+        public event Action<string, bool>? ServiceOpenRequested;
+        public event Action? AddServiceRequested;
+        public event Action<Guid>? EditServiceRequested;
+        public event Action<Guid>? DeleteServiceRequested;
+        public event Action<Guid>? CheckServiceRequested;
+        public event Action? CheckAllServicesRequested;
+        public event Action? ImportLocalFavoritesRequested;
+
+        ObservableCollection<ServiceTile>? _serviceTiles;
 
         IReadOnlyList<HistoryEntry> _history = Array.Empty<HistoryEntry>();
         List<OmniboxSuggestion> _currentSuggestions = new();
@@ -43,11 +60,18 @@ namespace MyHomelabBrowser.controles
             int hour = DateTime.Now.Hour;
             GreetingText.Text = hour switch
             {
-                < 5 => "Bonne nuit",
-                < 12 => "Bonjour",
-                < 18 => "Bon après-midi",
-                _ => "Bonsoir"
+                < 5 => Tr("Bonne nuit"),
+                < 12 => Tr("Bonjour"),
+                < 18 => Tr("Bon après-midi"),
+                _ => Tr("Bonsoir")
             };
+
+            if (_serviceTiles != null)
+            {
+                _serviceTiles.CollectionChanged -= ServiceTiles_CollectionChanged;
+                _serviceTiles.CollectionChanged += ServiceTiles_CollectionChanged;
+                UpdateServicesState();
+            }
 
             // Focus direct dans le champ, comme la page de nouvel onglet des autres navigateurs.
             Dispatcher.BeginInvoke(() => SearchBox.Focus(), DispatcherPriority.Input);
@@ -71,6 +95,106 @@ namespace MyHomelabBrowser.controles
 
             FavoritesTiles.ItemsSource = tiles;
             FavoritesSection.Visibility = tiles.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        // =========================
+        // Services du homelab
+        // =========================
+
+        /// <summary>
+        /// Les tuiles sont partagées entre toutes les pages d'accueil : leur état se met à
+        /// jour partout à chaque vérification. Chaque page a sa propre vue groupée.
+        /// </summary>
+        public void SetServices(ObservableCollection<ServiceTile> tiles, int localFavoriteCount)
+        {
+            if (!ReferenceEquals(_serviceTiles, tiles))
+            {
+                if (_serviceTiles != null)
+                    _serviceTiles.CollectionChanged -= ServiceTiles_CollectionChanged;
+
+                _serviceTiles = tiles;
+                _serviceTiles.CollectionChanged += ServiceTiles_CollectionChanged;
+
+                var view = new ListCollectionView(tiles);
+                view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ServiceTile.Group)));
+                view.SortDescriptions.Add(new SortDescription(nameof(ServiceTile.Group), ListSortDirection.Ascending));
+                view.SortDescriptions.Add(new SortDescription(nameof(ServiceTile.Name), ListSortDirection.Ascending));
+                view.IsLiveSorting = true;
+                view.IsLiveGrouping = true;
+                ServicesTiles.ItemsSource = view;
+            }
+
+            ImportLocalFavoritesButton.Content = localFavoriteCount == 1
+                ? Tr("Importer 1 favori local")
+                : Tr("Importer {0} favoris locaux", localFavoriteCount);
+            ImportLocalFavoritesButton.Visibility = localFavoriteCount > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            UpdateServicesState();
+        }
+
+        private void ServiceTiles_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => UpdateServicesState();
+
+        private void UpdateServicesState()
+        {
+            bool hasServices = _serviceTiles is { Count: > 0 };
+            ServicesTiles.Visibility = hasServices ? Visibility.Visible : Visibility.Collapsed;
+            ServicesEmptyState.Visibility = hasServices ? Visibility.Collapsed : Visibility.Visible;
+            CheckAllServicesButton.Visibility = hasServices ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private static ServiceTile? TileFrom(object sender)
+            => (sender as FrameworkElement)?.DataContext as ServiceTile;
+
+        private void ServiceTile_Click(object sender, RoutedEventArgs e)
+        {
+            if (TileFrom(sender) is { } tile)
+                ServiceOpenRequested?.Invoke(tile.Url, Keyboard.Modifiers.HasFlag(ModifierKeys.Control));
+        }
+
+        private void ServiceTile_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton == MouseButton.Middle && TileFrom(sender) is { } tile)
+            {
+                ServiceOpenRequested?.Invoke(tile.Url, true);
+                e.Handled = true;
+            }
+        }
+
+        private void ServiceOpenInNewTab_Click(object sender, RoutedEventArgs e)
+        {
+            if (TileFrom(sender) is { } tile)
+                ServiceOpenRequested?.Invoke(tile.Url, true);
+        }
+
+        private void ServiceCheck_Click(object sender, RoutedEventArgs e)
+        {
+            if (TileFrom(sender) is { } tile)
+                CheckServiceRequested?.Invoke(tile.Id);
+        }
+
+        private void ServiceEdit_Click(object sender, RoutedEventArgs e)
+        {
+            if (TileFrom(sender) is { } tile)
+                EditServiceRequested?.Invoke(tile.Id);
+        }
+
+        private void ServiceDelete_Click(object sender, RoutedEventArgs e)
+        {
+            if (TileFrom(sender) is { } tile)
+                DeleteServiceRequested?.Invoke(tile.Id);
+        }
+
+        private void AddService_Click(object sender, RoutedEventArgs e) => AddServiceRequested?.Invoke();
+
+        private void CheckAllServices_Click(object sender, RoutedEventArgs e) => CheckAllServicesRequested?.Invoke();
+
+        private void ImportLocalFavorites_Click(object sender, RoutedEventArgs e) => ImportLocalFavoritesRequested?.Invoke();
+
+        private void StartPage_Unloaded(object sender, RoutedEventArgs e)
+        {
+            // La collection partagée survit à la page : on se désabonne pour ne pas la retenir.
+            if (_serviceTiles != null)
+                _serviceTiles.CollectionChanged -= ServiceTiles_CollectionChanged;
         }
 
         private void FavoriteTile_Click(object sender, RoutedEventArgs e)
@@ -205,7 +329,7 @@ namespace MyHomelabBrowser.controles
                 list.Add(new OmniboxSuggestion
                 {
                     Icon = "",
-                    Prefix = "Ouvrir ",
+                    Prefix = Tr("Ouvrir "),
                     Match = directUrl,
                     Url = directUrl
                 });
@@ -240,9 +364,9 @@ namespace MyHomelabBrowser.controles
             list.Add(new OmniboxSuggestion
             {
                 Icon = "",
-                Prefix = "Rechercher ",
+                Prefix = Tr("Rechercher "),
                 Match = $"« {input} »",
-                Suffix = " sur " + UrlResolver.GetSearchEngineName(SearchEngine),
+                Suffix = Tr(" sur ") + UrlResolver.GetSearchEngineName(SearchEngine),
                 Url = UrlResolver.BuildSearchUrl(input, SearchEngine)
             });
 

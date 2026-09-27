@@ -3,6 +3,7 @@ using MyHomelabBrowser.classes.Profiles;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 public class ProfileService
 {
@@ -14,14 +15,7 @@ public class ProfileService
     const int MaxAttempts = 5;
     const int BaseLockSeconds = 10;
     const int MaxLockSeconds = 15 * 60;
-    public const int MaxUsernameLength = 32;
-
-    static readonly HashSet<string> ReservedWindowsNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "CON", "PRN", "AUX", "NUL",
-        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
-    };
+    public const int MaxUsernameLength = ProfileNameRules.MaxLength;
 
     readonly string _rootDir;
     readonly string _profilesIndexPath;
@@ -36,6 +30,12 @@ public class ProfileService
 
     // Levé avant tout changement de dossier de profil, pour terminer les écritures en attente.
     public event Action? ProfileChanging;
+
+    // Ancien nom, nouveau nom : les données WebView2 du profil doivent suivre.
+    public event Action<string, string>? ProfileRenamed;
+
+    // Nom du profil supprimé : ses données WebView2 (cookies, cache) doivent être effacées.
+    public event Action<string>? ProfileDeleted;
 
     public ProfileService(string globalAppDataRoot)
     {
@@ -57,52 +57,8 @@ public class ProfileService
     // VALIDATION
     // =====================
 
-    /// <summary>
-    /// Le nom sert de nom de dossier : il doit rester un segment de chemin simple,
-    /// sinon un profil nommé ".." pointerait vers le dossier de l'application
-    /// et sa suppression l'effacerait entièrement.
-    /// </summary>
     public static bool TryValidateUsername(string? username, out string error)
-    {
-        error = string.Empty;
-        string value = (username ?? string.Empty).Trim();
-
-        if (value.Length == 0)
-        {
-            error = "Le nom du profil est obligatoire.";
-            return false;
-        }
-
-        if (value.Length > MaxUsernameLength)
-        {
-            error = $"Le nom du profil ne doit pas dépasser {MaxUsernameLength} caractères.";
-            return false;
-        }
-
-        foreach (char c in value)
-        {
-            if (!(char.IsLetterOrDigit(c) || c is ' ' or '-' or '_' or '.'))
-            {
-                error = "Le nom du profil ne peut contenir que des lettres, des chiffres, des espaces et - _ .";
-                return false;
-            }
-        }
-
-        if (value.StartsWith('.') || value.EndsWith('.'))
-        {
-            error = "Le nom du profil ne peut pas commencer ni finir par un point.";
-            return false;
-        }
-
-        if (ReservedWindowsNames.Contains(value) ||
-            value.Equals("default", StringComparison.OrdinalIgnoreCase))
-        {
-            error = "Ce nom est réservé. Choisissez-en un autre.";
-            return false;
-        }
-
-        return true;
-    }
+        => ProfileNameRules.TryValidate(username, out error);
 
     // =====================
     // PROFILS
@@ -134,7 +90,7 @@ public class ProfileService
 
         var key = username.ToLowerInvariant();
         if (_profiles.ContainsKey(key))
-            throw new InvalidOperationException("Ce profil existe déjà.");
+            throw new InvalidOperationException(Tr("Ce profil existe déjà."));
 
         var (hash, salt) = PasswordHasher.Hash(password);
 
@@ -242,8 +198,9 @@ public class ProfileService
 
         ProfileChanging?.Invoke();
 
-        var key = Current.Username.ToLowerInvariant();
-        var dir = GetProfileDir(Current.Username);
+        var deletedName = Current.Username;
+        var key = deletedName.ToLowerInvariant();
+        var dir = GetProfileDir(deletedName);
 
         _profiles.Remove(key);
 
@@ -260,13 +217,14 @@ public class ProfileService
         SaveProfiles();
         AppDataContext.UseGlobal();
         SaveLastProfile();
+        ProfileDeleted?.Invoke(deletedName);
         ProfileChanged?.Invoke(null);
     }
 
     public void UpdateProfile(string newUsername, string? newPassword)
     {
         if (Current == null)
-            throw new InvalidOperationException("Aucun profil connecté.");
+            throw new InvalidOperationException(Tr("Aucun profil connecté."));
 
         newUsername = (newUsername ?? string.Empty).Trim();
 
@@ -281,18 +239,21 @@ public class ProfileService
         if (newKey != oldKey)
         {
             if (_profiles.ContainsKey(newKey))
-                throw new InvalidOperationException("Un profil avec ce nom existe déjà.");
+                throw new InvalidOperationException(Tr("Un profil avec ce nom existe déjà."));
 
             ProfileChanging?.Invoke();
 
             // Les données du profil (coffre, historique, favoris, paramètres) sont
             // rangées dans un dossier nommé d'après le profil : on le déplace,
             // sinon le profil renommé repartait de zéro.
-            MoveProfileDirectory(Current.Username, newUsername);
+            string oldUsername = Current.Username;
+            MoveProfileDirectory(oldUsername, newUsername);
 
             _profiles.Remove(oldKey);
             Current.Username = newUsername;
             _profiles[newKey] = Current;
+
+            ProfileRenamed?.Invoke(oldUsername, newUsername);
         }
         else
         {
@@ -327,7 +288,7 @@ public class ProfileService
             // Dossier résiduel d'un ancien profil supprimé : on ne fusionne jamais.
             if (Directory.EnumerateFileSystemEntries(destination).Any())
                 throw new InvalidOperationException(
-                    "Un dossier de données existe déjà pour ce nom. Choisissez un autre nom.");
+                    Tr("Un dossier de données existe déjà pour ce nom. Choisissez un autre nom."));
 
             Directory.Delete(destination);
         }

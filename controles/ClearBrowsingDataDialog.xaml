@@ -1,0 +1,55 @@
+<controles:DialogWindow x:Class="MyHomelabBrowser.controles.ClearBrowsingDataDialog"
+                        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                        xmlns:controles="clr-namespace:MyHomelabBrowser.controles"
+                        Title="Effacer les données de navigation"
+                        Width="480">
+    <StackPanel>
+        <TextBlock Text="Période" Style="{StaticResource DialogHintStyle}" Margin="0,0,0,6"/>
+        <ComboBox x:Name="RangeBox" SelectedIndex="1">
+            <ComboBoxItem Content="Dernière heure" Tag="1"/>
+            <ComboBoxItem Content="Dernières 24 heures" Tag="24"/>
+            <ComboBoxItem Content="7 derniers jours" Tag="168"/>
+            <ComboBoxItem Content="4 dernières semaines" Tag="672"/>
+            <ComboBoxItem Content="Depuis toujours" Tag="0"/>
+        </ComboBox>
+
+        <StackPanel Margin="0,18,0,0">
+            <CheckBox x:Name="HistoryBox" IsChecked="True" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="Historique de navigation"/>
+                    <TextBlock Text="Pages visitées et suggestions de la barre d’adresse." Style="{StaticResource DialogHintStyle}"/>
+                </StackPanel>
+            </CheckBox>
+            <CheckBox x:Name="CookiesBox" IsChecked="True" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="Cookies et données des sites"/>
+                    <TextBlock Text="Vous serez déconnecté de la plupart des sites." Style="{StaticResource DialogHintStyle}"/>
+                </StackPanel>
+            </CheckBox>
+            <CheckBox x:Name="CacheBox" IsChecked="True" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="Images et fichiers en cache"/>
+                    <TextBlock Text="Certains sites se chargeront plus lentement la prochaine fois." Style="{StaticResource DialogHintStyle}"/>
+                </StackPanel>
+            </CheckBox>
+            <CheckBox x:Name="DownloadsBox" Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="Historique des téléchargements"/>
+                    <TextBlock Text="La liste est vidée, les fichiers restent sur le disque." Style="{StaticResource DialogHintStyle}"/>
+                </StackPanel>
+            </CheckBox>
+            <CheckBox x:Name="AutofillBox">
+                <StackPanel>
+                    <TextBlock Text="Saisie automatique des formulaires"/>
+                    <TextBlock Text="Le coffre des mots de passe PommeBrowser n’est pas concerné." Style="{StaticResource DialogHintStyle}"/>
+                </StackPanel>
+            </CheckBox>
+        </StackPanel>
+
+        <StackPanel Style="{StaticResource DialogButtonBarStyle}">
+            <Button Content="Annuler" Command="ApplicationCommands.Close" Margin="0,0,8,0"/>
+            <Button x:Name="ClearButton" Content="Effacer les données" Style="{StaticResource PrimaryButtonStyle}" IsDefault="True" Click="Clear_Click"/>
+        </StackPanel>
+    </StackPanel>
+</controles:DialogWindow>

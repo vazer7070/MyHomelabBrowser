@@ -13,6 +13,9 @@
 		<FileVersion>0.9.8.0</FileVersion>
 
 		<ApplicationIcon>PommeBrowser_desktop.ico</ApplicationIcon>
+
+		<!-- Le projet de tests vit dans le même dépôt : ses fichiers ne font pas partie de l'application. -->
+		<DefaultItemExcludes>$(DefaultItemExcludes);tests\**</DefaultItemExcludes>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -42,6 +45,11 @@
 		<PackageReference Include="Velopack" Version="1.2.0" />
 	</ItemGroup>
 
+
+	<ItemGroup>
+		<!-- Traduction anglaise de l'interface (clé = texte français). -->
+		<EmbeddedResource Include="lang\en.json" LogicalName="lang.en.json" />
+	</ItemGroup>
 
 	<ItemGroup>
 		<Content Include="Assets\Ruffle\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

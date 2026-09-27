@@ -1,0 +1,67 @@
+<controles:DialogWindow x:Class="MyHomelabBrowser.controles.ImportFavoritesDialog"
+                        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                        xmlns:controles="clr-namespace:MyHomelabBrowser.controles"
+                        Title="Importer des favoris"
+                        Width="520">
+    <StackPanel>
+        <TextBlock Text="Choisissez le navigateur d’origine. Les favoris de sa barre rejoignent la barre de favoris ; les autres sont rangés dans des dossiers."
+                   Style="{StaticResource DialogHintStyle}"
+                   Margin="0,0,0,12"/>
+
+        <ListBox x:Name="SourcesList"
+                 MaxHeight="260"
+                 SelectionMode="Single"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 SelectionChanged="SourcesList_SelectionChanged">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="4,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="30"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding Icon}"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="16"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource AccentBrush}"/>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding Detail}"
+                                       Style="{StaticResource DialogHintStyle}"
+                                       TextTrimming="CharacterEllipsis"
+                                       TextWrapping="NoWrap"/>
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <TextBlock x:Name="NoSourceText"
+                   Text="Aucun autre navigateur n’a été détecté sur cet ordinateur."
+                   Style="{StaticResource DialogHintStyle}"
+                   Visibility="Collapsed"/>
+
+        <Button Content="Importer depuis un fichier HTML…"
+                Style="{StaticResource TextButtonStyle}"
+                HorizontalAlignment="Left"
+                Margin="-8,10,0,0"
+                Click="ChooseFile_Click"/>
+
+        <TextBlock x:Name="StatusText"
+                   Style="{StaticResource DialogHintStyle}"
+                   Margin="0,10,0,0"
+                   Visibility="Collapsed"/>
+
+        <StackPanel Style="{StaticResource DialogButtonBarStyle}">
+            <Button Content="Annuler" Command="ApplicationCommands.Close" Margin="0,0,8,0"/>
+            <Button x:Name="ImportButton"
+                    Content="Importer"
+                    Style="{StaticResource PrimaryButtonStyle}"
+                    IsDefault="True"
+                    IsEnabled="False"
+                    Click="Import_Click"/>
+        </StackPanel>
+    </StackPanel>
+</controles:DialogWindow>

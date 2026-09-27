@@ -23,7 +23,7 @@
                     <TextBlock Text="Mises à jour"
                                FontSize="28"
                                FontWeight="Bold"
-                               Foreground="White"/>
+                               Foreground="{StaticResource TextPrimaryBrush}"/>
 
                     <TextBlock Text="État et gestion des mises à jour du navigateur"
                                Foreground="{StaticResource TextSecondaryBrush}"
@@ -46,7 +46,7 @@
                                 <TextBlock Text="Version actuelle : "
                                            Foreground="{StaticResource TextSecondaryBrush}"/>
                                 <TextBlock x:Name="CurrentVersionLabel"
-                                           Foreground="White"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
                                            FontWeight="SemiBold"/>
                             </StackPanel>
 
@@ -54,7 +54,7 @@
                                 <TextBlock Text="Dernière version : "
                                            Foreground="{StaticResource TextSecondaryBrush}"/>
                                 <TextBlock x:Name="LatestVersionLabel"
-                                           Foreground="White"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
                                            FontWeight="SemiBold"/>
                             </StackPanel>
                         </Grid>
@@ -84,7 +84,7 @@
                                 Height="40"
                                 Padding="18,0"
                                 Background="{StaticResource SurfaceRaisedBrush}"
-                                Foreground="White"
+                                Foreground="{StaticResource TextPrimaryBrush}"
                                 BorderThickness="0"
                                 Cursor="Hand"/>
 
@@ -94,7 +94,7 @@
                                 Padding="18,0"
                                 Margin="10,0,0,0"
                                 Background="{StaticResource SurfaceRaisedBrush}"
-                                Foreground="White"
+                                Foreground="{StaticResource TextPrimaryBrush}"
                                 BorderThickness="0"
                                 IsEnabled="False"
                                 Cursor="Hand"/>
@@ -105,7 +105,7 @@
                                 Padding="18,0"
                                 Margin="10,0,0,0"
                                 Background="{StaticResource SurfaceRaisedBrush}"
-                                Foreground="White"
+                                Foreground="{StaticResource TextPrimaryBrush}"
                                 BorderThickness="0"
                                 Cursor="Hand"/>
                     </StackPanel>

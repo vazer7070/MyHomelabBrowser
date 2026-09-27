@@ -141,6 +141,86 @@
                            FontSize="14"
                            Margin="0,6,0,24"/>
 
+                <!-- APPARENCE -->
+                <Border Style="{StaticResource SettingsCard}">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="&#xE790;"
+                                       FontFamily="{StaticResource IconFont}"
+                                       FontSize="18"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2"
+                                       Text="Apparence"
+                                       Style="{StaticResource SettingsTitle}"
+                                       Margin="0"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="220"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Text="Thème" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="ThemeBox"
+                                      Grid.Column="1"
+                                      Style="{StaticResource DnsComboBoxStyle}"
+                                      SelectedValuePath="Value"
+                                      SelectionChanged="Appearance_Changed">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Label}" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+
+                            <TextBlock x:Name="LanguageLabel"
+                                       Grid.Row="1"
+                                       Text="Langue"
+                                       Style="{StaticResource SettingsLabel}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,10,0,0"/>
+                            <ComboBox x:Name="LanguageBox"
+                                      Grid.Row="1"
+                                      Grid.Column="1"
+                                      Margin="0,10,0,0"
+                                      Style="{StaticResource DnsComboBoxStyle}"
+                                      SelectedValuePath="Value"
+                                      SelectionChanged="Appearance_Changed">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Label}" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
+
+                        <StackPanel x:Name="AppearanceRestartPanel"
+                                    Orientation="Horizontal"
+                                    Margin="0,14,0,0"
+                                    Visibility="Collapsed">
+                            <TextBlock Text="Appliqué au prochain démarrage."
+                                       Style="{StaticResource SettingsLabel}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,12,0"/>
+                            <Button Content="Redémarrer maintenant"
+                                    Style="{StaticResource PrimaryButtonStyle}"
+                                    Click="RestartNow_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <!-- DÉMARRAGE -->
                 <Border Style="{StaticResource SettingsCard}">
                     <StackPanel>
@@ -245,6 +325,66 @@
 
                         <TextBox x:Name="NewTabPageBox"
                                  Text="{Binding NewTabPage, UpdateSourceTrigger=PropertyChanged}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- SERVICES DU HOMELAB -->
+                <Border Style="{StaticResource SettingsCard}">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="&#xE968;"
+                                       FontFamily="{StaticResource IconFont}"
+                                       FontSize="18"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2"
+                                       Text="Services du homelab"
+                                       Style="{StaticResource SettingsTitle}"
+                                       Margin="0"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <TextBlock Text="Les services s’ajoutent depuis la page d’accueil ou le menu « Ajouter la page aux services »."
+                                   Style="{StaticResource SettingsLabel}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,10"/>
+
+                        <CheckBox Content="Vérifier régulièrement que les services répondent"
+                                  IsChecked="{Binding ServiceMonitoring}"
+                                  Margin="0,0,0,10"/>
+
+                        <Grid Margin="24,0,0,10"
+                              IsEnabled="{Binding ServiceMonitoring}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="200"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Fréquence"
+                                       Style="{StaticResource SettingsLabel}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,12,0"/>
+                            <ComboBox x:Name="ServiceIntervalBox"
+                                      Grid.Column="1"
+                                      Style="{StaticResource DnsComboBoxStyle}"
+                                      SelectedValuePath="Value"
+                                      SelectedValue="{Binding ServiceCheckIntervalSeconds, Mode=TwoWay}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Label}" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
+
+                        <CheckBox Content="Me prévenir quand un service tombe ou revient"
+                                  IsChecked="{Binding ServiceAlerts}"
+                                  IsEnabled="{Binding ServiceMonitoring}"
+                                  Margin="24,0,0,0"/>
                     </StackPanel>
                 </Border>
 
@@ -391,6 +531,11 @@
                                        FontSize="12"
                                        Foreground="{StaticResource TextMutedBrush}"
                                        Text="Chargement des certificats du profil…"/>
+                            <Button Content="Certificats acceptés pour les services locaux…"
+                                    Style="{StaticResource TextButtonStyle}"
+                                    HorizontalAlignment="Left"
+                                    Margin="-8,6,0,0"
+                                    Click="OpenPinnedCertificates_Click"/>
                         </StackPanel>
 
                         <Button Grid.Column="2"

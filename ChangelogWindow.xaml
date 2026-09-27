@@ -6,7 +6,7 @@
         Width="760"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource FluentBg}"
-        Foreground="White"
+        Foreground="{StaticResource TextPrimaryBrush}"
         ResizeMode="NoResize"
         WindowStyle="ToolWindow">
 
@@ -53,7 +53,7 @@
                     Padding="22,10"
                     MinWidth="110"
                     Background="{StaticResource SurfaceHoverBrush}"
-                    Foreground="White"
+                    Foreground="{StaticResource TextPrimaryBrush}"
                     BorderThickness="0"
                     Cursor="Hand"
                     Click="Close_Click"/>
