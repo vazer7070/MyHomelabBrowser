@@ -27,7 +27,7 @@
                 <TextBlock Text="Paramètres du profil"
                            FontSize="22"
                            FontWeight="SemiBold"
-                           Foreground="White"/>
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
 
                 <TextBlock Text="Modifiez les informations et la sécurité du profil actif"
                            FontSize="13"
@@ -39,7 +39,7 @@
             <StackPanel Grid.Row="1" Margin="0,0,0,24">
                 <TextBlock Text="Identité"
                            FontWeight="SemiBold"
-                           Foreground="White"
+                           Foreground="{StaticResource TextPrimaryBrush}"
                            Margin="0,0,0,14"/>
 
                 <Border Background="{StaticResource SurfaceRaisedBrush}"
@@ -58,7 +58,7 @@
                                  Height="40"
                                  Padding="14,0"
                                  Background="{StaticResource PanelBrush}"
-                                 Foreground="White"
+                                 Foreground="{StaticResource TextPrimaryBrush}"
                                  BorderBrush="{StaticResource BorderStrongBrush}"
                                  BorderThickness="1"
                                  VerticalContentAlignment="Center"/>
@@ -73,7 +73,7 @@
                 <!-- ===== Sécurité du profil ===== -->
                 <TextBlock Text="Sécurité du profil"
                            FontWeight="SemiBold"
-                           Foreground="White"
+                           Foreground="{StaticResource TextPrimaryBrush}"
                            Margin="0,0,0,14"/>
 
                 <Border Background="{StaticResource SurfaceRaisedBrush}"
@@ -93,7 +93,7 @@
                                      Height="40"
                                      Padding="14,0"
                                      Background="{StaticResource PanelBrush}"
-                                     Foreground="White"
+                                     Foreground="{StaticResource TextPrimaryBrush}"
                                      BorderBrush="{StaticResource BorderStrongBrush}"
                                      BorderThickness="1"
                                      VerticalContentAlignment="Center"/>
@@ -104,7 +104,7 @@
                 <!-- ===== Coffre ===== -->
                 <TextBlock Text="Coffre des mots de passe"
                            FontWeight="SemiBold"
-                           Foreground="White"
+                           Foreground="{StaticResource TextPrimaryBrush}"
                            Margin="0,0,0,14"/>
 
                 <Border Background="{StaticResource SurfaceRaisedBrush}"
@@ -118,7 +118,7 @@
                                 Margin="0,0,0,12"
                                 Height="38"
                                 Background="{StaticResource SurfaceRaisedBrush}"
-                                Foreground="White"
+                                Foreground="{StaticResource TextPrimaryBrush}"
                                 BorderBrush="{StaticResource BorderStrongBrush}"
                                 BorderThickness="1"
                                 Click="Passwords_Click"/>
@@ -126,7 +126,7 @@
                         <Button Content="Changer le mot de passe du coffre"
                                 Height="38"
                                 Background="{StaticResource SurfaceRaisedBrush}"
-                                Foreground="White"
+                                Foreground="{StaticResource TextPrimaryBrush}"
                                 BorderBrush="{StaticResource BorderStrongBrush}"
                                 BorderThickness="1"
                                 Click="ChangeVaultPassword_Click"/>
@@ -163,7 +163,7 @@
                         MinWidth="110"
                         Height="40"
                         Background="{StaticResource SurfaceRaisedBrush}"
-                        Foreground="White"
+                        Foreground="{StaticResource TextPrimaryBrush}"
                         BorderBrush="{StaticResource BorderStrongBrush}"
                         BorderThickness="1"
                         Cursor="Hand"

@@ -113,8 +113,8 @@
 
     <Style x:Key="DangerButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="Background" Value="{StaticResource DangerSoftBrush}"/>
-        <Setter Property="BorderBrush" Value="#5E2B36"/>
-        <Setter Property="Foreground" Value="#FFD6DC"/>
+        <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
     </Style>
 
     <Style x:Key="TextButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
@@ -189,7 +189,7 @@
         <Setter Property="MinHeight" Value="0"/>
         <Setter Property="Padding" Value="10,0"/>
         <Setter Property="Background" Value="{StaticResource WarningSoftBrush}"/>
-        <Setter Property="BorderBrush" Value="#6B551C"/>
+        <Setter Property="BorderBrush" Value="{StaticResource WarningBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource WarningBrush}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
     </Style>

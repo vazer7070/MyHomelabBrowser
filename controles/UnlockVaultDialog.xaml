@@ -24,7 +24,7 @@
                        FontSize="20"
                        FontWeight="SemiBold"
                        Margin="0,0,0,10"
-                       Foreground="White"/>
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
 
             <TextBlock Text="Entrez le mot de passe du coffre pour continuer."
                        TextWrapping="Wrap"
@@ -48,7 +48,7 @@
                              Height="42"
                              Padding="14,0"
                              Background="Transparent"
-                             Foreground="White"
+                             Foreground="{StaticResource TextPrimaryBrush}"
                              BorderThickness="0"/>
             </Border>
 

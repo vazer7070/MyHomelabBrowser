@@ -49,6 +49,24 @@ namespace MyHomelabBrowser.controles.settings
                     "Personnalisé")
             };
 
+            ThemeBox.ItemsSource = new[]
+            {
+                new DnsOption<AppTheme>(AppTheme.System, "Comme Windows"),
+                new DnsOption<AppTheme>(AppTheme.Dark, "Sombre"),
+                new DnsOption<AppTheme>(AppTheme.Light, "Clair")
+            };
+            LanguageBox.ItemsSource = new[]
+            {
+                new DnsOption<string>("fr", "Français"),
+                new DnsOption<string>("en", "English")
+            };
+
+            AppearanceSettings appearance = AppearanceSettings.Load();
+            _appearanceLoading = true;
+            ThemeBox.SelectedValue = appearance.Theme;
+            LanguageBox.SelectedValue = appearance.Language;
+            _appearanceLoading = false;
+
             ServiceIntervalBox.ItemsSource = new[]
             {
                 new DnsOption<int>(30, "Toutes les 30 secondes"),
@@ -216,6 +234,37 @@ namespace MyHomelabBrowser.controles.settings
 
             window.ShowDialog();
             _ = UpdateCertificateSummaryAsync();
+        }
+
+        private bool _appearanceLoading;
+
+        /// <summary>
+        /// Enregistré tout de suite (réglage commun à tous les profils), appliqué au redémarrage.
+        /// </summary>
+        private void Appearance_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_appearanceLoading || ThemeBox.SelectedValue is not AppTheme theme || LanguageBox.SelectedValue is not string language)
+                return;
+
+            var appearance = new AppearanceSettings { Theme = theme, Language = language };
+            try
+            {
+                appearance.Save();
+            }
+            catch
+            {
+                return;
+            }
+
+            bool pending = theme != ThemeManager.Appearance.Theme ||
+                           !string.Equals(language, ThemeManager.Appearance.Language, StringComparison.OrdinalIgnoreCase);
+            AppearanceRestartPanel.Visibility = pending ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void RestartNow_Click(object sender, RoutedEventArgs e)
+        {
+            if (Application.Current.MainWindow is MainWindow main)
+                main.RestartApplication();
         }
 
         private void OpenPinnedCertificates_Click(object sender, RoutedEventArgs e)

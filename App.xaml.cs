@@ -10,6 +10,9 @@ namespace MyHomelabBrowser
         protected override void OnStartup(StartupEventArgs e)
         {
             VelopackApp.Build().Run();
+
+            // Avant toute fenêtre : les styles sont construits avec la palette choisie.
+            ThemeManager.Apply(this, AppearanceSettings.Load());
             DarkTitleBar.RegisterForAllWindows();
 
             // Renommages et suppressions de profils restés en attente (dossier verrouillé).

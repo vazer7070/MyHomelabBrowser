@@ -44,20 +44,24 @@ namespace MyHomelabBrowser
 
         void AddVersionHeader(string version)
         {
-            ChangelogHost.Children.Add(new Border
+            var title = new TextBlock
             {
-                Background = new SolidColorBrush(Color.FromRgb(45, 45, 45)),
+                Text = $"🚀 Version {version}",
+                FontSize = 17,
+                FontWeight = FontWeights.Bold
+            };
+            title.SetResourceReference(TextBlock.ForegroundProperty, "TextPrimaryBrush");
+
+            var header = new Border
+            {
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(12),
                 Margin = new Thickness(0, 20, 0, 6),
-                Child = new TextBlock
-                {
-                    Text = $"🚀 Version {version}",
-                    FontSize = 17,
-                    FontWeight = FontWeights.Bold,
-                    Foreground = Brushes.White
-                }
-            });
+                Child = title
+            };
+            header.SetResourceReference(Border.BackgroundProperty, "SurfaceRaisedBrush");
+
+            ChangelogHost.Children.Add(header);
         }
         string NormalizeChangelogInput(string raw)
         {
@@ -154,26 +158,28 @@ namespace MyHomelabBrowser
 
         void AddSection(string icon, string title)
         {
-            ChangelogHost.Children.Add(new TextBlock
+            var text = new TextBlock
             {
                 Text = $"{icon} {title}",
                 FontSize = 16,
                 FontWeight = FontWeights.SemiBold,
-                Margin = new Thickness(0, 16, 0, 6),
-                Foreground = Brushes.White
-            });
+                Margin = new Thickness(0, 16, 0, 6)
+            };
+            text.SetResourceReference(TextBlock.ForegroundProperty, "TextPrimaryBrush");
+            ChangelogHost.Children.Add(text);
         }
 
         void AddBullet(string text)
         {
-            ChangelogHost.Children.Add(new TextBlock
+            var bullet = new TextBlock
             {
                 Text = "• " + text,
                 FontSize = 14,
                 Margin = new Thickness(12, 2, 0, 2),
-                Foreground = new SolidColorBrush(Color.FromRgb(230, 230, 230)),
                 TextWrapping = TextWrapping.Wrap
-            });
+            };
+            bullet.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondaryBrush");
+            ChangelogHost.Children.Add(bullet);
         }
 
         private void Close_Click(object sender, RoutedEventArgs e)

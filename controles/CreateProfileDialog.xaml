@@ -21,7 +21,7 @@
 
             <!-- ===== TITRE ===== -->
             <TextBlock Text="Créer un profil"
-                       Foreground="White"
+                       Foreground="{StaticResource TextPrimaryBrush}"
                        FontSize="22"
                        FontWeight="SemiBold"
                        Margin="0,0,0,20"/>
@@ -40,7 +40,7 @@
                          Height="42"
                          Padding="14,0"
                          Background="Transparent"
-                         Foreground="White"
+                         Foreground="{StaticResource TextPrimaryBrush}"
                          BorderThickness="0"/>
             </Border>
 
@@ -58,7 +58,7 @@
                              Height="42"
                              Padding="14,0"
                              Background="Transparent"
-                             Foreground="White"
+                             Foreground="{StaticResource TextPrimaryBrush}"
                              BorderThickness="0"/>
             </Border>
 
@@ -76,7 +76,7 @@
                              Height="42"
                              Padding="14,0"
                              Background="Transparent"
-                             Foreground="White"
+                             Foreground="{StaticResource TextPrimaryBrush}"
                              BorderThickness="0"/>
             </Border>
 

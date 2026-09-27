@@ -34,7 +34,7 @@
                            Margin="16,0"
                            FontSize="16"
                            FontWeight="SemiBold"
-                           Foreground="White"/>
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
 
                 <Button Grid.Column="1"
                         Content="✕"
@@ -60,7 +60,7 @@
                          Height="34"
                          Padding="10,4"
                          Background="{StaticResource SurfaceRaisedBrush}"
-                         Foreground="White"
+                         Foreground="{StaticResource TextPrimaryBrush}"
                          BorderThickness="0"
                          Margin="0,0,0,16"/>
 
@@ -72,7 +72,7 @@
                          Height="34"
                          Padding="10,4"
                          Background="{StaticResource SurfaceRaisedBrush}"
-                         Foreground="White"
+                         Foreground="{StaticResource TextPrimaryBrush}"
                          BorderThickness="0"/>
             </StackPanel>
 
@@ -102,7 +102,7 @@
                         Margin="0,-3,8,3"
                         Padding="14,6"
                         Background="{StaticResource SurfaceRaisedBrush}"
-                        Foreground="White"
+                        Foreground="{StaticResource TextPrimaryBrush}"
                         BorderThickness="0"
                         Click="Cancel_Click"/>
 

@@ -488,7 +488,9 @@ namespace MyHomelabBrowser
         // ---------------------------
         protected override void OnClosing(CancelEventArgs e)
         {
-            SaveSessionOnExit();
+            // Redémarrage demandé : la session a déjà été enregistrée pour être rouverte.
+            if (!_restartPending)
+                SaveSessionOnExit();
             FlushPersistentState();
 
             foreach (TabItem tab in Tabs.Items.OfType<TabItem>())

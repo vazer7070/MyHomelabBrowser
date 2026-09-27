@@ -53,6 +53,35 @@ namespace MyHomelabBrowser
             return state;
         }
 
+        private bool _restartPending;
+
+        /// <summary>
+        /// Redémarre le navigateur en rouvrant les onglets (changement de thème ou de langue).
+        /// </summary>
+        public void RestartApplication()
+        {
+            string? executable = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(executable))
+                return;
+
+            _restartPending = true;
+            SaveSessionForUpdateRestart();
+            FlushPersistentState();
+
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(executable) { UseShellExecute = false });
+            }
+            catch (Exception ex)
+            {
+                _restartPending = false;
+                ShowToast("Redémarrage impossible", ex.Message, ToastKind.Warning);
+                return;
+            }
+
+            System.Windows.Application.Current.Shutdown();
+        }
+
         private void SaveSessionForUpdateRestart()
         {
             try

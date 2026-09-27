@@ -8,7 +8,7 @@
             <TextBlock Text="⚠ Paramètres avancés"
                        FontSize="26"
                        FontWeight="Bold"
-                       Foreground="White"/>
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
 
             <TextBlock Text="Options techniques réservées aux utilisateurs avancés."
                        Foreground="{StaticResource WarningBrush}"

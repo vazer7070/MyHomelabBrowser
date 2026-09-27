@@ -80,12 +80,12 @@ namespace MyHomelabBrowser
             // Tooltip container (une seule fois)
             var border = new Border
             {
-                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(32, 32, 32)),
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(6),
                 Width = 320,
                 Height = 200
             };
+            border.SetResourceReference(Border.BackgroundProperty, "PanelBrush");
             tab.ToolTip = border;
 
             tab.MouseLeave += (_, _) =>

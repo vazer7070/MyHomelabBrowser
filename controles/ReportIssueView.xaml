@@ -24,8 +24,8 @@
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="CaretBrush" Value="White"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="CaretBrush" Value="{StaticResource TextPrimaryBrush}"/>
             <Setter Property="SelectionBrush" Value="{StaticResource AccentStrongBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
@@ -57,7 +57,7 @@
         <Style x:Key="FormComboBox" TargetType="ComboBox">
             <Setter Property="Height" Value="42"/>
             <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
             <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
@@ -142,7 +142,7 @@
             <Setter Property="ItemContainerStyle">
                 <Setter.Value>
                     <Style TargetType="ComboBoxItem">
-                        <Setter Property="Foreground" Value="White"/>
+                        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
                         <Setter Property="Padding" Value="12,9"/>
                         <Setter Property="Margin" Value="0,1"/>
                         <Setter Property="Background" Value="Transparent"/>
@@ -181,7 +181,7 @@
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Background" Value="{StaticResource SurfaceRaisedBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -219,7 +219,7 @@
             <TextBlock Text="Signaler un problème"
                        FontSize="26"
                        FontWeight="SemiBold"
-                       Foreground="White"/>
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
             <TextBlock Text="Le rapport est envoyé par le canal de support disponible avec les informations techniques autorisées dans les paramètres."
                        FontSize="13"
                        Foreground="{StaticResource TextSecondaryBrush}"

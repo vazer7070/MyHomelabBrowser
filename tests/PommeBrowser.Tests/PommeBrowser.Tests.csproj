@@ -41,6 +41,7 @@
     <Compile Include="..\..\classes\Homelab\ServiceHealthChecker.cs" Link="App\Homelab\ServiceHealthChecker.cs" />
     <Compile Include="..\..\classes\Homelab\ServiceMonitor.cs" Link="App\Homelab\ServiceMonitor.cs" />
     <Compile Include="..\..\classes\Workspaces\WorkspaceStore.cs" Link="App\Workspaces\WorkspaceStore.cs" />
+    <Compile Include="..\..\classes\AppearanceSettings.cs" Link="App\AppearanceSettings.cs" />
     <Compile Include="..\..\classes\Profiles\PasswordHasher.cs" Link="App\Profiles\PasswordHasher.cs" />
     <Compile Include="..\..\classes\Profiles\ProfileNameRules.cs" Link="App\Profiles\ProfileNameRules.cs" />
     <Compile Include="..\..\classes\Profiles\WebViewProfileData.cs" Link="App\Profiles\WebViewProfileData.cs" />

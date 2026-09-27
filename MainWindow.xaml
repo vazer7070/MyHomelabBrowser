@@ -551,7 +551,7 @@
                                 Click="ProfileButton_Click"
                                 ToolTip="Profil utilisateur"
                                 Background="{StaticResource SurfaceRaisedBrush}"
-                                Foreground="White"
+                                Foreground="{StaticResource TextPrimaryBrush}"
                                 FontWeight="SemiBold"
                                 FontSize="13">
                             <Button.Template>

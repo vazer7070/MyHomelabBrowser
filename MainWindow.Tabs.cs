@@ -336,6 +336,15 @@ namespace MyHomelabBrowser
             if (content.IsClosed || core == null)
                 return content;
 
+            try
+            {
+                // Les sites qui proposent un mode sombre suivent le thème du navigateur.
+                core.Profile.PreferredColorScheme = ThemeManager.PreferredColorScheme;
+            }
+            catch
+            {
+            }
+
             InitializeFlashRuntimeForCore(content);
             AttachSiteZoom(web, content);
 

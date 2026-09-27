@@ -6,7 +6,7 @@
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Background="{StaticResource PanelBrush}"
-        Foreground="White">
+        Foreground="{StaticResource TextPrimaryBrush}">
 
     <Grid Margin="16">
         <Grid.RowDefinitions>
@@ -27,7 +27,7 @@
                  FontSize="14"
                  Padding="10,6"
                  Background="{StaticResource SurfaceRaisedBrush}"
-                 Foreground="White"
+                 Foreground="{StaticResource TextPrimaryBrush}"
                  BorderBrush="{StaticResource BorderStrongBrush}"
                  BorderThickness="1"
                  Text=""/>

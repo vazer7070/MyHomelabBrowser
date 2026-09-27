@@ -23,7 +23,7 @@
                     <TextBlock Text="Historique"
                                FontSize="28"
                                FontWeight="Bold"
-                               Foreground="White"/>
+                               Foreground="{StaticResource TextPrimaryBrush}"/>
 
                     <TextBlock Text="Consulter et gérer l’historique de navigation"
                                Foreground="{StaticResource TextSecondaryBrush}"
@@ -39,7 +39,7 @@
 
                             <StackPanel DockPanel.Dock="Left">
                                 <TextBlock Text="Historique de navigation"
-                                           Foreground="White"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
                                            FontSize="16"
                                            FontWeight="SemiBold"/>
 
@@ -55,7 +55,7 @@
                                     Padding="18,0"
                                     Margin="12,0,0,0"
                                     Background="{StaticResource SurfaceRaisedBrush}"
-                                    Foreground="White"
+                                    Foreground="{StaticResource TextPrimaryBrush}"
                                     BorderThickness="0"
                                     Cursor="Hand"
                                     DockPanel.Dock="Right"/>

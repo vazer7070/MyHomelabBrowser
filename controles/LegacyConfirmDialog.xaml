@@ -27,7 +27,7 @@
             <TextBlock Text="⚡ Flash Legacy"
                        FontSize="16"
                        FontWeight="SemiBold"
-                       Foreground="White"/>
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
 
             <!-- CONTENT -->
             <StackPanel Grid.Row="1" Margin="0,10,0,10">
