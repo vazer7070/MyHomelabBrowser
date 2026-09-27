@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -201,7 +202,7 @@ namespace MyHomelabBrowser
 
             var title = new TextBlock
             {
-                Text = "Onglet en veille",
+                Text = Tr("Onglet en veille"),
                 FontSize = 20,
                 FontWeight = FontWeights.SemiBold,
                 Margin = new Thickness(0, 14, 0, 0),
@@ -211,7 +212,7 @@ namespace MyHomelabBrowser
 
             var hint = new TextBlock
             {
-                Text = "Mis en pause pour libérer de la mémoire. Cliquez pour le réactiver.",
+                Text = Tr("Mis en pause pour libérer de la mémoire. Cliquez pour le réactiver."),
                 FontSize = 13,
                 Margin = new Thickness(0, 8, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Center
@@ -344,7 +345,7 @@ namespace MyHomelabBrowser
             {
                 state.OwnerTab = tab;
                 var header = (BrowserTabHeader)tab.Header;
-                header.SetTitle(state.Web?.CoreWebView2?.DocumentTitle ?? "Onglet");
+                header.SetTitle(state.Web?.CoreWebView2?.DocumentTitle ?? Tr("Onglet"));
                 header.SetPrivate(state.IsPrivate);
                 WireTabHeader(tab, header, state);
             }

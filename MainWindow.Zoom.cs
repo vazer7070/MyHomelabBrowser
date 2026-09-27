@@ -5,6 +5,7 @@ using MyHomelabBrowser.classes.Profiles;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -76,7 +77,7 @@ namespace MyHomelabBrowser
 
             ZoomButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
             ZoomButtonText.Text = SiteZoomStore.Format(zoom);
-            ZoomButton.ToolTip = $"Zoom : {SiteZoomStore.Format(zoom)} — cliquer pour revenir à 100 %";
+            ZoomButton.ToolTip = Tr("Zoom : {0} — cliquer pour revenir à 100 %", SiteZoomStore.Format(zoom));
         }
 
         private void ZoomButton_Click(object sender, RoutedEventArgs e) => ZoomActivePage(0);
@@ -101,7 +102,7 @@ namespace MyHomelabBrowser
             }
             catch (Exception ex)
             {
-                ShowToast("Impression impossible", ex.Message, ToastKind.Warning);
+                ShowToast(Tr("Impression impossible"), ex.Message, ToastKind.Warning);
             }
         }
 

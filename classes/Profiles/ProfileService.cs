@@ -3,6 +3,7 @@ using MyHomelabBrowser.classes.Profiles;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 public class ProfileService
 {
@@ -89,7 +90,7 @@ public class ProfileService
 
         var key = username.ToLowerInvariant();
         if (_profiles.ContainsKey(key))
-            throw new InvalidOperationException("Ce profil existe déjà.");
+            throw new InvalidOperationException(Tr("Ce profil existe déjà."));
 
         var (hash, salt) = PasswordHasher.Hash(password);
 
@@ -223,7 +224,7 @@ public class ProfileService
     public void UpdateProfile(string newUsername, string? newPassword)
     {
         if (Current == null)
-            throw new InvalidOperationException("Aucun profil connecté.");
+            throw new InvalidOperationException(Tr("Aucun profil connecté."));
 
         newUsername = (newUsername ?? string.Empty).Trim();
 
@@ -238,7 +239,7 @@ public class ProfileService
         if (newKey != oldKey)
         {
             if (_profiles.ContainsKey(newKey))
-                throw new InvalidOperationException("Un profil avec ce nom existe déjà.");
+                throw new InvalidOperationException(Tr("Un profil avec ce nom existe déjà."));
 
             ProfileChanging?.Invoke();
 
@@ -287,7 +288,7 @@ public class ProfileService
             // Dossier résiduel d'un ancien profil supprimé : on ne fusionne jamais.
             if (Directory.EnumerateFileSystemEntries(destination).Any())
                 throw new InvalidOperationException(
-                    "Un dossier de données existe déjà pour ce nom. Choisissez un autre nom.");
+                    Tr("Un dossier de données existe déjà pour ce nom. Choisissez un autre nom."));
 
             Directory.Delete(destination);
         }

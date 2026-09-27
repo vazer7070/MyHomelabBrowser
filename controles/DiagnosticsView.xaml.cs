@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -35,19 +36,19 @@ namespace MyHomelabBrowser.controles
         private async Task RefreshAsync()
         {
             RefreshButton.IsEnabled = false;
-            GeneratedText.Text = "Collecte des informations…";
+            GeneratedText.Text = Tr("Collecte des informations…");
 
             try
             {
                 _report = await _buildReport();
                 SectionsList.ItemsSource = _report.Sections;
-                LogBox.Text = string.IsNullOrWhiteSpace(_report.Log) ? "(journal vide)" : _report.Log;
+                LogBox.Text = string.IsNullOrWhiteSpace(_report.Log) ? Tr("(journal vide)") : _report.Log;
                 LogBox.ScrollToEnd();
-                GeneratedText.Text = $"Relevé du {_report.GeneratedAt:dd/MM/yyyy à HH:mm:ss}";
+                GeneratedText.Text = Tr("Relevé du {0:dd/MM/yyyy à HH:mm:ss}", _report.GeneratedAt);
             }
             catch (Exception ex)
             {
-                GeneratedText.Text = "Collecte impossible : " + ex.Message;
+                GeneratedText.Text = Tr("Collecte impossible : ") + ex.Message;
             }
             finally
             {
@@ -75,11 +76,11 @@ namespace MyHomelabBrowser.controles
             try
             {
                 Clipboard.SetText(builder.ToString());
-                CopyButton.Content = "Copié";
+                CopyButton.Content = Tr("Copié");
             }
             catch
             {
-                CopyButton.Content = "Presse-papiers indisponible";
+                CopyButton.Content = Tr("Presse-papiers indisponible");
             }
         }
 

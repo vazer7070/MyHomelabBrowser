@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using WpfWebView2 = Microsoft.Web.WebView2.Wpf.WebView2;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes.Flash
 {
@@ -93,7 +94,7 @@ namespace MyHomelabBrowser.classes.Flash
             string? fatal = LastStatus.Errors.FirstOrDefault(IsFatalRuffleError);
             if (!string.IsNullOrWhiteSpace(fatal))
             {
-                RaiseFailure("Erreur Ruffle : " + fatal, LastStatus);
+                RaiseFailure(Tr("Erreur Ruffle : ") + fatal, LastStatus);
                 return;
             }
 
@@ -121,7 +122,7 @@ namespace MyHomelabBrowser.classes.Flash
                 if (_missingAfterReadyTicks >= 3)
                 {
                     RaiseFailure(
-                        "Le lecteur Ruffle avait démarré, puis le contenu Flash a disparu ou s'est arrêté.",
+                        Tr("Le lecteur Ruffle avait démarré, puis le contenu Flash a disparu ou s'est arrêté."),
                         LastStatus);
                 }
                 return;
@@ -131,9 +132,9 @@ namespace MyHomelabBrowser.classes.Flash
             {
                 string reason = LastStatus.ScriptLoaded
                     ? LastStatus.PlayerCount > 0
-                        ? "Ruffle a créé un lecteur, mais le fichier SWF n'a pas atteint l'état de lecture."
-                        : "Ruffle est chargé, mais aucun lecteur Flash n'a été créé."
-                    : "Le moteur Ruffle n'a pas pu être chargé dans le délai prévu.";
+                        ? Tr("Ruffle a créé un lecteur, mais le fichier SWF n'a pas atteint l'état de lecture.")
+                        : Tr("Ruffle est chargé, mais aucun lecteur Flash n'a été créé.")
+                    : Tr("Le moteur Ruffle n'a pas pu être chargé dans le délai prévu.");
 
                 RaiseFailure(reason, LastStatus);
             }

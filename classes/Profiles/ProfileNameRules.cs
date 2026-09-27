@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes.Profiles
 {
@@ -27,13 +28,13 @@ namespace MyHomelabBrowser.classes.Profiles
 
             if (value.Length == 0)
             {
-                error = "Le nom du profil est obligatoire.";
+                error = Tr("Le nom du profil est obligatoire.");
                 return false;
             }
 
             if (value.Length > MaxLength)
             {
-                error = $"Le nom du profil ne doit pas dépasser {MaxLength} caractères.";
+                error = Tr("Le nom du profil ne doit pas dépasser {0} caractères.", MaxLength);
                 return false;
             }
 
@@ -41,20 +42,20 @@ namespace MyHomelabBrowser.classes.Profiles
             {
                 if (!(char.IsLetterOrDigit(c) || c is ' ' or '-' or '_' or '.'))
                 {
-                    error = "Le nom du profil ne peut contenir que des lettres, des chiffres, des espaces et - _ .";
+                    error = Tr("Le nom du profil ne peut contenir que des lettres, des chiffres, des espaces et - _ .");
                     return false;
                 }
             }
 
             if (value.StartsWith('.') || value.EndsWith('.'))
             {
-                error = "Le nom du profil ne peut pas commencer ni finir par un point.";
+                error = Tr("Le nom du profil ne peut pas commencer ni finir par un point.");
                 return false;
             }
 
             if (ReservedNames.Contains(value))
             {
-                error = "Ce nom est réservé. Choisissez-en un autre.";
+                error = Tr("Ce nom est réservé. Choisissez-en un autre.");
                 return false;
             }
 

@@ -12,6 +12,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -43,7 +44,7 @@ namespace MyHomelabBrowser.controles
             // Vault inexistant => création
             if (!_vault.VaultExists)
             {
-                var create = new MyHomelabBrowser.controles.SimplePasswordDialog("Créer le mot de passe du coffre")
+                var create = new MyHomelabBrowser.controles.SimplePasswordDialog(Tr("Créer le mot de passe du coffre"))
                 {
                     Owner = this
                 };
@@ -55,7 +56,7 @@ namespace MyHomelabBrowser.controles
                 if (string.IsNullOrWhiteSpace(pw1))
                     return;
 
-                var confirm = new MyHomelabBrowser.controles.SimplePasswordDialog("Confirmer le mot de passe du coffre")
+                var confirm = new MyHomelabBrowser.controles.SimplePasswordDialog(Tr("Confirmer le mot de passe du coffre"))
                 {
                     Owner = this
                 };
@@ -66,20 +67,20 @@ namespace MyHomelabBrowser.controles
                 var pw2 = confirm.Password;
                 if (!string.Equals(pw1, pw2, StringComparison.Ordinal))
                 {
-                    MessageBox.Show("Les mots de passe ne correspondent pas.");
+                    MessageBox.Show(Tr("Les mots de passe ne correspondent pas."));
                     return;
                 }
 
                 if (!_vault.TryInitializeNewVault(pw1))
                 {
-                    MessageBox.Show("Impossible de créer le coffre.");
+                    MessageBox.Show(Tr("Impossible de créer le coffre."));
                     return;
                 }
             }
             else
             {
                 // Vault existant => unlock au mot de passe du VAULT
-                var ask = new MyHomelabBrowser.controles.SimplePasswordDialog("Déverrouiller le coffre")
+                var ask = new MyHomelabBrowser.controles.SimplePasswordDialog(Tr("Déverrouiller le coffre"))
                 {
                     Owner = this
                 };
@@ -89,7 +90,7 @@ namespace MyHomelabBrowser.controles
 
                 if (!_vault.TryUnlock(ask.Password))
                 {
-                    MessageBox.Show("Mot de passe du coffre incorrect (ou trop de tentatives).");
+                    MessageBox.Show(Tr("Mot de passe du coffre incorrect (ou trop de tentatives)."));
                     return;
                 }
             }
@@ -105,7 +106,7 @@ namespace MyHomelabBrowser.controles
 
             if (!_vault.VaultExists)
             {
-                MessageBox.Show("Le coffre n'est pas encore créé. Ouvrez-le une première fois pour définir un mot de passe.");
+                MessageBox.Show(Tr("Le coffre n'est pas encore créé. Ouvrez-le une première fois pour définir un mot de passe."));
                 return;
             }
 
@@ -113,7 +114,7 @@ namespace MyHomelabBrowser.controles
             var verifyProfile = new LoginDialog(_profileService.Current.Username)
             {
                 Owner = this,
-                Title = "Confirmer le mot de passe du profil",
+                Title = Tr("Confirmer le mot de passe du profil"),
                 ValidateLogin = (_, p) =>
                     _profileService.Current != null &&
                     _profileService.VerifyPassword(_profileService.Current, p)
@@ -123,7 +124,7 @@ namespace MyHomelabBrowser.controles
                 return;
 
             // 2) Ancien mdp VAULT
-            var oldDlg = new MyHomelabBrowser.controles.SimplePasswordDialog("Mot de passe actuel du coffre")
+            var oldDlg = new MyHomelabBrowser.controles.SimplePasswordDialog(Tr("Mot de passe actuel du coffre"))
             {
                 Owner = this
             };
@@ -131,14 +132,14 @@ namespace MyHomelabBrowser.controles
                 return;
 
             // 3) Nouveau mdp VAULT + confirmation
-            var newDlg = new MyHomelabBrowser.controles.SimplePasswordDialog("Nouveau mot de passe du coffre")
+            var newDlg = new MyHomelabBrowser.controles.SimplePasswordDialog(Tr("Nouveau mot de passe du coffre"))
             {
                 Owner = this
             };
             if (newDlg.ShowDialog() != true)
                 return;
 
-            var confirm = new MyHomelabBrowser.controles.SimplePasswordDialog("Confirmer le nouveau mot de passe du coffre")
+            var confirm = new MyHomelabBrowser.controles.SimplePasswordDialog(Tr("Confirmer le nouveau mot de passe du coffre"))
             {
                 Owner = this
             };
@@ -147,17 +148,17 @@ namespace MyHomelabBrowser.controles
 
             if (!string.Equals(newDlg.Password, confirm.Password, StringComparison.Ordinal))
             {
-                MessageBox.Show("Les mots de passe ne correspondent pas.");
+                MessageBox.Show(Tr("Les mots de passe ne correspondent pas."));
                 return;
             }
 
             if (!_vault.TryChangeVaultPassword(oldDlg.Password, newDlg.Password))
             {
-                MessageBox.Show("Impossible de changer le mot de passe du coffre (ancien mot de passe incorrect ?).");
+                MessageBox.Show(Tr("Impossible de changer le mot de passe du coffre (ancien mot de passe incorrect ?)."));
                 return;
             }
 
-            MessageBox.Show("Mot de passe du coffre mis à jour.");
+            MessageBox.Show(Tr("Mot de passe du coffre mis à jour."));
         }
 
 
@@ -169,14 +170,14 @@ namespace MyHomelabBrowser.controles
 
             if (username.Length == 0)
             {
-                MessageBox.Show("Le nom du profil est obligatoire.", "Profil",
+                MessageBox.Show(Tr("Le nom du profil est obligatoire."), Tr("Profil"),
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             if (!string.IsNullOrEmpty(password) && password.Length < 6)
             {
-                MessageBox.Show("Le mot de passe doit faire au moins 6 caractères.", "Profil",
+                MessageBox.Show(Tr("Le mot de passe doit faire au moins 6 caractères."), Tr("Profil"),
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -193,8 +194,8 @@ namespace MyHomelabBrowser.controles
                 MessageBox.Show(
                     ex is InvalidOperationException
                         ? ex.Message
-                        : "Impossible de renommer le dossier du profil. Fermez les onglets Flash Legacy puis réessayez.\n\n" + ex.Message,
-                    "Profil",
+                        : Tr("Impossible de renommer le dossier du profil. Fermez les onglets Flash Legacy puis réessayez.\n\n") + ex.Message,
+                    Tr("Profil"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 return;
@@ -206,8 +207,8 @@ namespace MyHomelabBrowser.controles
         private void Delete_Click(object sender, RoutedEventArgs e)
         {
             var res = MessageBox.Show(
-                "Supprimer ce profil définitivement ?",
-                "Confirmation",
+                Tr("Supprimer ce profil définitivement ?"),
+                Tr("Confirmation"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning
             );

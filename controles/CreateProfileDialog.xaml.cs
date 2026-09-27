@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -20,7 +21,7 @@ namespace MyHomelabBrowser.controles
             {
                 MessageBox.Show(
                     usernameError,
-                    "Erreur",
+                    Tr("Erreur"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 return;
@@ -29,8 +30,8 @@ namespace MyHomelabBrowser.controles
             if (UsernameExists?.Invoke(Username) == true)
             {
                 MessageBox.Show(
-                    "Un profil porte déjà ce nom.",
-                    "Erreur",
+                    Tr("Un profil porte déjà ce nom."),
+                    Tr("Erreur"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 return;
@@ -39,8 +40,8 @@ namespace MyHomelabBrowser.controles
             if (Password.Length < 6)
             {
                 MessageBox.Show(
-                    "Le mot de passe doit faire au moins 6 caractères.",
-                    "Erreur",
+                    Tr("Le mot de passe doit faire au moins 6 caractères."),
+                    Tr("Erreur"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 return;
@@ -49,8 +50,8 @@ namespace MyHomelabBrowser.controles
             if (Password != ConfirmBox.Password)
             {
                 MessageBox.Show(
-                    "Les mots de passe ne correspondent pas.",
-                    "Erreur",
+                    Tr("Les mots de passe ne correspondent pas."),
+                    Tr("Erreur"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 return;

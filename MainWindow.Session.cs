@@ -3,6 +3,7 @@ using MyHomelabBrowser.classes.Session;
 using MyHomelabBrowser.controles;
 using System.Windows.Controls;
 using static MyHomelabBrowser.classes.BrowserSettings;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -75,7 +76,7 @@ namespace MyHomelabBrowser
             catch (Exception ex)
             {
                 _restartPending = false;
-                ShowToast("Redémarrage impossible", ex.Message, ToastKind.Warning);
+                ShowToast(Tr("Redémarrage impossible"), ex.Message, ToastKind.Warning);
                 return;
             }
 

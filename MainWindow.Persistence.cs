@@ -4,6 +4,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -161,7 +162,7 @@ namespace MyHomelabBrowser
                 RemoveHistoryEntry,
                 RemoveHistoryEntries);
 
-            OpenViewTab(view, "Historique");
+            OpenViewTab(view, Tr("Historique"));
         }
 
         // ---------------------------

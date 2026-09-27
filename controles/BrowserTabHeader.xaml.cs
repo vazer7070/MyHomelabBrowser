@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -51,8 +52,8 @@ namespace MyHomelabBrowser.controles
 
             if (_pinned)
                 Root.ToolTip = string.IsNullOrWhiteSpace(Title.Text)
-                    ? "Onglet épinglé"
-                    : $"{Title.Text}\nOnglet épinglé";
+                    ? Tr("Onglet épinglé")
+                    : Tr("{0}\nOnglet épinglé", Title.Text);
         }
 
         public void SetIcon(ImageSource? icon)
@@ -108,13 +109,13 @@ namespace MyHomelabBrowser.controles
 
             Root.ToolTip = pinned
                 ? (string.IsNullOrWhiteSpace(TabTitle)
-                    ? "Onglet épinglé"
-                    : $"{TabTitle}\nOnglet épinglé")
+                    ? Tr("Onglet épinglé")
+                    : Tr("{0}\nOnglet épinglé", TabTitle))
                 : null;
 
             PinBtn.ToolTip = pinned
-                ? "Désépingler l’onglet"
-                : "Épingler l’onglet";
+                ? Tr("Désépingler l’onglet")
+                : Tr("Épingler l’onglet");
 
             if (!pinned)
                 HidePinnedAction(immediate: true);

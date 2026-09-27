@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -44,9 +45,9 @@ namespace MyHomelabBrowser.controles
 
             CountText.Text = _allItems.Count switch
             {
-                0 => "Aucun identifiant",
-                1 => "1 identifiant",
-                _ => $"{_allItems.Count} identifiants"
+                0 => Tr("Aucun identifiant"),
+                1 => Tr("1 identifiant"),
+                _ => Tr("{0} identifiants", _allItems.Count)
             };
 
             ApplyFilter();
@@ -90,13 +91,13 @@ namespace MyHomelabBrowser.controles
 
             if (_allItems.Count == 0)
             {
-                EmptyTitle.Text = "Aucun identifiant enregistré";
-                EmptyDescription.Text = "Les identifiants enregistrés apparaîtront ici.";
+                EmptyTitle.Text = Tr("Aucun identifiant enregistré");
+                EmptyDescription.Text = Tr("Les identifiants enregistrés apparaîtront ici.");
             }
             else
             {
-                EmptyTitle.Text = "Aucun résultat";
-                EmptyDescription.Text = "Modifie ou efface les termes de recherche.";
+                EmptyTitle.Text = Tr("Aucun résultat");
+                EmptyDescription.Text = Tr("Modifie ou efface les termes de recherche.");
             }
         }
 
@@ -124,7 +125,7 @@ namespace MyHomelabBrowser.controles
             if (dialog.Changed)
             {
                 Refresh();
-                ShowStatus(credential.HasTotp ? "Code de double authentification enregistré." : "Code de double authentification retiré.");
+                ShowStatus(credential.HasTotp ? Tr("Code de double authentification enregistré.") : Tr("Code de double authentification retiré."));
             }
         }
 
@@ -136,12 +137,12 @@ namespace MyHomelabBrowser.controles
             try
             {
                 Clipboard.SetText(credential.Password);
-                ShowStatus("Mot de passe copié — le presse-papiers sera effacé dans 30 secondes.");
+                ShowStatus(Tr("Mot de passe copié — le presse-papiers sera effacé dans 30 secondes."));
                 await ClearClipboardLaterAsync(credential.Password);
             }
             catch
             {
-                ShowStatus("Impossible d’accéder au presse-papiers.");
+                ShowStatus(Tr("Impossible d’accéder au presse-papiers."));
             }
         }
 
@@ -160,7 +161,7 @@ namespace MyHomelabBrowser.controles
 
             _vault.Delete(credential.Host, credential.Username);
             Refresh();
-            ShowStatus("Identifiant supprimé du coffre.");
+            ShowStatus(Tr("Identifiant supprimé du coffre."));
         }
 
         private void ShowStatus(string message)

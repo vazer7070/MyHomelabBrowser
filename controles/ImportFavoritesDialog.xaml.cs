@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -46,8 +47,8 @@ namespace MyHomelabBrowser.controles
         {
             var dialog = new OpenFileDialog
             {
-                Title = "Fichier de favoris exporté",
-                Filter = "Favoris HTML (*.html;*.htm)|*.html;*.htm|Tous les fichiers (*.*)|*.*"
+                Title = Tr("Fichier de favoris exporté"),
+                Filter = Tr("Favoris HTML (*.html;*.htm)|*.html;*.htm|Tous les fichiers (*.*)|*.*")
             };
 
             if (dialog.ShowDialog(this) == true)
@@ -57,14 +58,14 @@ namespace MyHomelabBrowser.controles
         private async Task ImportAsync(BookmarkSource source)
         {
             ImportButton.IsEnabled = false;
-            ShowStatus($"Lecture des favoris de {source.Name}…");
+            ShowStatus(Tr("Lecture des favoris de {0}…", source.Name));
 
             try
             {
                 IReadOnlyList<ImportedBookmark> bookmarks = await Task.Run(() => BookmarkImporter.Read(source));
                 if (bookmarks.Count == 0)
                 {
-                    ShowStatus($"Aucun favori trouvé dans {source.Name}.");
+                    ShowStatus(Tr("Aucun favori trouvé dans {0}.", source.Name));
                     ImportButton.IsEnabled = SourcesList.SelectedItem is SourceItem;
                     return;
                 }
@@ -75,8 +76,8 @@ namespace MyHomelabBrowser.controles
             }
             catch (Exception ex)
             {
-                ShowStatus("Lecture impossible : " + ex.Message +
-                           (source.Kind == BookmarkSourceKind.FirefoxPlaces ? " Fermez Firefox puis réessayez." : string.Empty));
+                ShowStatus(Tr("Lecture impossible : ") + ex.Message +
+                           (source.Kind == BookmarkSourceKind.FirefoxPlaces ? Tr(" Fermez Firefox puis réessayez.") : string.Empty));
                 ImportButton.IsEnabled = SourcesList.SelectedItem is SourceItem;
             }
         }

@@ -11,6 +11,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -139,7 +140,7 @@ namespace MyHomelabBrowser
         void CreateEmptyStartTab(int insertIndex = -1)
         {
             var header = new BrowserTabHeader();
-            header.SetTitle("Accueil");
+            header.SetTitle(Tr("Accueil"));
             header.SetIcon(StartTabIcon.Value);
 
             var content = new WebTabContent
@@ -255,7 +256,7 @@ namespace MyHomelabBrowser
             var header = new BrowserTabHeader();
             header.SetTitle(!string.IsNullOrWhiteSpace(pendingTitle)
                 ? pendingTitle
-                : isPrivate ? "Onglet privé" : "Nouvel onglet");
+                : isPrivate ? Tr("Onglet privé") : Tr("Nouvel onglet"));
             header.SetPrivate(isPrivate);
             header.SetLoading(!deferNavigation && !string.IsNullOrWhiteSpace(url));
 
@@ -325,7 +326,7 @@ namespace MyHomelabBrowser
                 if (!content.IsClosed)
                 {
                     header.SetLoading(false);
-                    ShowTabError(content, "Impossible de démarrer le moteur web de cet onglet.", ex.Message);
+                    ShowTabError(content, Tr("Impossible de démarrer le moteur web de cet onglet."), ex.Message);
                 }
 
                 FlashDbg("[CreateWebTabAsync] " + ex);
@@ -398,7 +399,7 @@ namespace MyHomelabBrowser
             {
                 string title = core.DocumentTitle;
                 header.SetTitle(string.IsNullOrWhiteSpace(title)
-                    ? isPrivate ? "Onglet privé" : "Nouvel onglet"
+                    ? isPrivate ? Tr("Onglet privé") : Tr("Nouvel onglet")
                     : title);
 
                 if (!isPrivate)
@@ -758,9 +759,9 @@ namespace MyHomelabBrowser
             content.LastPopupNoticeUtc = DateTime.UtcNow;
 
             ShowToast(
-                "Fenêtre surgissante bloquée",
+                Tr("Fenêtre surgissante bloquée"),
                 uri,
-                actionLabel: "Ouvrir",
+                actionLabel: Tr("Ouvrir"),
                 action: () =>
                 {
                     if (content.IsPrivate)

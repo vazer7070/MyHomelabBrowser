@@ -4,6 +4,7 @@ using MyHomelabBrowser.controles;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -21,11 +22,11 @@ namespace MyHomelabBrowser
             try
             {
                 await ClearBrowsingDataAsync(dialog);
-                ShowToast("Données effacées", "Les données sélectionnées ont été supprimées.", ToastKind.Success);
+                ShowToast(Tr("Données effacées"), Tr("Les données sélectionnées ont été supprimées."), ToastKind.Success);
             }
             catch (Exception ex)
             {
-                ShowToast("Effacement incomplet", ex.Message, ToastKind.Warning);
+                ShowToast(Tr("Effacement incomplet"), ex.Message, ToastKind.Warning);
             }
         }
 

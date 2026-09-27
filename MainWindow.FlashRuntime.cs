@@ -5,6 +5,7 @@ using MyHomelabBrowser.controles;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -159,21 +160,21 @@ namespace MyHomelabBrowser
                 if (_legacyLauncher.CanLaunch() && tab.Header is BrowserTabHeader legacyHeader)
                 {
                     overlay.SetActions(
-                        "Ouvrir avec le moteur Legacy",
+                        Tr("Ouvrir avec le moteur Legacy"),
                         () =>
                         {
                             content.FlashMode = FlashMode.Legacy;
                             _ = LaunchLegacyIntoInternalTabAsync(content, uri, legacyHeader);
                         },
-                        "Réessayer Ruffle",
+                        Tr("Réessayer Ruffle"),
                         retryRuffle);
                 }
                 else
                 {
                     overlay.SetActions(
-                        "Réessayer Ruffle",
+                        Tr("Réessayer Ruffle"),
                         retryRuffle,
-                        "Configurer Basilisk",
+                        Tr("Configurer Basilisk"),
                         OpenSettings);
                 }
 
@@ -184,7 +185,7 @@ namespace MyHomelabBrowser
                 content.FlashMode == FlashMode.Ruffle &&
                 content.RuffleMonitor != null)
             {
-                overlay.TryShow("Démarrage du moteur Ruffle intégré…");
+                overlay.TryShow(Tr("Démarrage du moteur Ruffle intégré…"));
                 return;
             }
 
@@ -206,7 +207,7 @@ namespace MyHomelabBrowser
 
             if (!s.EnableFlashSupport)
             {
-                reason = "Le support Flash est désactivé dans les paramètres.";
+                reason = Tr("Le support Flash est désactivé dans les paramètres.");
                 return false;
             }
 
@@ -216,7 +217,7 @@ namespace MyHomelabBrowser
 
             if (legacyRequired && !_legacyLauncher.CanLaunch())
             {
-                reason = "Ce site nécessite Flash réel, mais Basilisk n’est pas configuré.";
+                reason = Tr("Ce site nécessite Flash réel, mais Basilisk n’est pas configuré.");
                 return false;
             }
 
@@ -232,7 +233,7 @@ namespace MyHomelabBrowser
             {
                 if (!_legacyLauncher.CanLaunch())
                 {
-                    content.LegacyLastError = "Basilisk n’est pas configuré ou chemin invalide.";
+                    content.LegacyLastError = Tr("Basilisk n’est pas configuré ou chemin invalide.");
                     return false;
                 }
 
@@ -279,15 +280,15 @@ namespace MyHomelabBrowser
                 if (!_legacyLauncher.CanLaunch())
                 {
                     overlay.BindHost(content.HostGrid);
-                    overlay.ShowBlocked("Le moteur Legacy n'est pas configuré.");
-                    overlay.SetActions("Configurer Basilisk", OpenSettings);
+                    overlay.ShowBlocked(Tr("Le moteur Legacy n'est pas configuré."));
+                    overlay.SetActions(Tr("Configurer Basilisk"), OpenSettings);
                     return;
                 }
 
                 StopRuffleMonitoring(content);
                 content.FlashMode = FlashMode.Legacy;
                 overlay.BindHost(content.HostGrid);
-                overlay.TryShow("Ouverture manuelle avec le moteur Legacy…");
+                overlay.TryShow(Tr("Ouverture manuelle avec le moteur Legacy…"));
                 ApplyLegacyRuleToMode(content);
 
                 bool ok = await TryLaunchLegacy(content, uri, header).ConfigureAwait(true);
@@ -302,10 +303,10 @@ namespace MyHomelabBrowser
                 else
                 {
                     overlay.ShowBlocked(
-                        "Impossible de lancer Basilisk.\n\n" +
-                        (content.LegacyLastError ?? "Erreur inconnue."));
-                    overlay.SetActions("Réessayer", () => _ = LaunchLegacyExplicitAsync(),
-                        "Paramètres", OpenSettings);
+                        Tr("Impossible de lancer Basilisk.\n\n") +
+                        (content.LegacyLastError ?? Tr("Erreur inconnue.")));
+                    overlay.SetActions(Tr("Réessayer"), () => _ = LaunchLegacyExplicitAsync(),
+                        Tr("Paramètres"), OpenSettings);
                 }
             }
 
@@ -323,17 +324,17 @@ namespace MyHomelabBrowser
                 if (_legacyLauncher.CanLaunch())
                 {
                     overlay.SetActions(
-                        "Ouvrir avec le moteur Legacy",
+                        Tr("Ouvrir avec le moteur Legacy"),
                         () => _ = LaunchLegacyExplicitAsync(),
-                        "Réessayer Ruffle",
+                        Tr("Réessayer Ruffle"),
                         () => _ = HandleFlashAsync(web, content, header, overlay, forceRecheck: true));
                 }
                 else
                 {
                     overlay.SetActions(
-                        "Réessayer Ruffle",
+                        Tr("Réessayer Ruffle"),
                         () => _ = HandleFlashAsync(web, content, header, overlay, forceRecheck: true),
-                        "Configurer Basilisk",
+                        Tr("Configurer Basilisk"),
                         OpenSettings);
                 }
             }
@@ -367,7 +368,7 @@ namespace MyHomelabBrowser
             if (!CanUseFlashOrLegacy(uri, flashDetected: true, out string reason))
             {
                 overlay.ShowBlocked(reason);
-                overlay.SetActions("Paramètres", OpenSettings);
+                overlay.SetActions(Tr("Paramètres"), OpenSettings);
                 return;
             }
 
@@ -382,7 +383,7 @@ namespace MyHomelabBrowser
             }
 
             if (IsActiveTab(content))
-                overlay.TryShow("Flash détecté — démarrage du moteur Ruffle intégré…\n" + detection.Describe());
+                overlay.TryShow(Tr("Flash détecté — démarrage du moteur Ruffle intégré…\n") + detection.Describe());
             content.FlashMode = FlashMode.Ruffle;
             StopRuffleMonitoring(content);
 
@@ -445,7 +446,7 @@ namespace MyHomelabBrowser
             // Basilisk pas dispo => rien (car activer legacy ne servirait à rien)
             if (!_legacyLauncher.CanLaunch())
             {
-                content.FlashOverlay?.ShowBlocked("Flash Legacy indisponible : Basilisk n’est pas configuré.");
+                content.FlashOverlay?.ShowBlocked(Tr("Flash Legacy indisponible : Basilisk n’est pas configuré."));
                 UpdateManualLegacyButton();
                 return;
             }

@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -184,7 +185,7 @@ namespace MyHomelabBrowser
                 return;
             }
 
-            FindCountText.Text = count <= 0 ? "Aucun résultat" : $"{Math.Max(index, 1)} sur {count}";
+            FindCountText.Text = count <= 0 ? Tr("Aucun résultat") : Tr("{0} sur {1}", Math.Max(index, 1), count);
             FindCountText.SetResourceReference(TextBlock.ForegroundProperty, count <= 0 ? "DangerBrush" : "TextSecondaryBrush");
         }
 

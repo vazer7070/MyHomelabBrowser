@@ -9,6 +9,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -38,8 +39,8 @@ namespace MyHomelabBrowser.controles
                     _failedAttempts++;
 
                     ErrorText.Text = _failedAttempts >= 3
-                        ? "Trop de tentatives. Veuillez patienter."
-                        : "Mot de passe incorrect";
+                        ? Tr("Trop de tentatives. Veuillez patienter.")
+                        : Tr("Mot de passe incorrect");
 
                     ErrorText.Visibility = Visibility.Visible;
 

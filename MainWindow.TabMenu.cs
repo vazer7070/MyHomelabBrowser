@@ -1,6 +1,7 @@
 using MyHomelabBrowser.controles;
 using System.Windows;
 using System.Windows.Controls;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -30,10 +31,10 @@ namespace MyHomelabBrowser
             bool isWeb = !content.IsCustomView && content.Web != null;
             bool isSelected = ReferenceEquals(Tabs.SelectedItem, tab);
 
-            Add("Nouvel onglet à droite", () => CreateEmptyStartTab(Tabs.Items.IndexOf(tab) + 1));
-            Add("Recharger", () => ReloadTab(tab, content), isSelected ? "Ctrl+R" : null, isWeb);
-            Add("Dupliquer", () => DuplicateTab(tab, content), enabled: isWeb || content.IsCustomView);
-            Add(content.IsPinned ? "Détacher de la barre (désépingler)" : "Épingler", () =>
+            Add(Tr("Nouvel onglet à droite"), () => CreateEmptyStartTab(Tabs.Items.IndexOf(tab) + 1));
+            Add(Tr("Recharger"), () => ReloadTab(tab, content), isSelected ? "Ctrl+R" : null, isWeb);
+            Add(Tr("Dupliquer"), () => DuplicateTab(tab, content), enabled: isWeb || content.IsCustomView);
+            Add(content.IsPinned ? Tr("Détacher de la barre (désépingler)") : Tr("Épingler"), () =>
             {
                 content.IsPinned = !content.IsPinned;
                 ApplyPinState(tab, header, content.IsPinned);
@@ -42,21 +43,21 @@ namespace MyHomelabBrowser
             menu.Items.Add(new Separator());
 
             if (ReferenceEquals(tab, _splitPartner) || (isSelected && IsSplitViewActive))
-                Add("Quitter la vue côte à côte", ExitSplitView);
+                Add(Tr("Quitter la vue côte à côte"), ExitSplitView);
             else if (!isSelected)
-                Add("Afficher à côté de l’onglet actif", () => ShowSideBySide(tab), enabled: IsSplitEligible(tab) && IsSplitEligible(Tabs.SelectedItem as TabItem));
+                Add(Tr("Afficher à côté de l’onglet actif"), () => ShowSideBySide(tab), enabled: IsSplitEligible(tab) && IsSplitEligible(Tabs.SelectedItem as TabItem));
 
             menu.Items.Add(new Separator());
 
             int index = Tabs.Items.IndexOf(tab);
             bool hasTabsToRight = Tabs.Items.OfType<TabItem>().Skip(index + 1).Any(t => t.Tag is not WebTabContent { IsPinned: true });
 
-            Add("Fermer", () => CloseTab(tab), isSelected ? "Ctrl+W" : null);
-            Add("Fermer les autres onglets", () => CloseTabsExcept(tab), enabled: Tabs.Items.Count > 1);
-            Add("Fermer les onglets à droite", () => CloseTabsToRight(tab), enabled: hasTabsToRight);
+            Add(Tr("Fermer"), () => CloseTab(tab), isSelected ? "Ctrl+W" : null);
+            Add(Tr("Fermer les autres onglets"), () => CloseTabsExcept(tab), enabled: Tabs.Items.Count > 1);
+            Add(Tr("Fermer les onglets à droite"), () => CloseTabsToRight(tab), enabled: hasTabsToRight);
 
             menu.Items.Add(new Separator());
-            Add("Rouvrir l’onglet fermé", ReopenClosedTab, "Ctrl+Maj+T", HasRecentlyClosedTabs);
+            Add(Tr("Rouvrir l’onglet fermé"), ReopenClosedTab, "Ctrl+Maj+T", HasRecentlyClosedTabs);
         }
 
         void ReloadTab(TabItem tab, WebTabContent content)

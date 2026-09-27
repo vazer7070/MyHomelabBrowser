@@ -10,6 +10,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -106,8 +107,8 @@ namespace MyHomelabBrowser.controles
 
             var answer = MessageBox.Show(
                 Window.GetWindow(this),
-                "Effacer tout l’historique de navigation de ce profil ?",
-                "Historique",
+                Tr("Effacer tout l’historique de navigation de ce profil ?"),
+                Tr("Historique"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
 
@@ -196,7 +197,7 @@ namespace MyHomelabBrowser.controles
 
             // UI
             if (CountText != null)
-                CountText.Text = $"{vms.Count} élément(s)";
+                CountText.Text = Tr("{0} élément(s)", vms.Count);
 
             if (ClearSearchBtn != null)
                 ClearSearchBtn.Visibility = string.IsNullOrWhiteSpace(SearchBox.Text)
@@ -273,8 +274,8 @@ namespace MyHomelabBrowser.controles
                 var d = Entry.VisitedAt.Date;
                 var today = DateTime.Today;
 
-                if (d == today) return "Aujourd’hui";
-                if (d == today.AddDays(-1)) return "Hier";
+                if (d == today) return Tr("Aujourd’hui");
+                if (d == today.AddDays(-1)) return Tr("Hier");
                 return Entry.VisitedAt.ToString("dd/MM/yyyy");
             }
         }
@@ -286,9 +287,9 @@ namespace MyHomelabBrowser.controles
                 var d = Entry.VisitedAt.Date;
                 var today = DateTime.Today;
 
-                if (d == today) return "Aujourd’hui";
-                if (d == today.AddDays(-1)) return "Hier";
-                return "Plus ancien";
+                if (d == today) return Tr("Aujourd’hui");
+                if (d == today.AddDays(-1)) return Tr("Hier");
+                return Tr("Plus ancien");
             }
         }
 

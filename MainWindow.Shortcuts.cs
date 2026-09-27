@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -244,7 +245,7 @@ namespace MyHomelabBrowser
                 WindowState = WindowState.Normal;
                 WindowState = WindowState.Maximized;
 
-                ShowToast("Plein écran", "Appuyez sur F11 ou Échap pour quitter.", duration: TimeSpan.FromSeconds(3));
+                ShowToast(Tr("Plein écran"), Tr("Appuyez sur F11 ou Échap pour quitter."), duration: TimeSpan.FromSeconds(3));
             }
             else
             {

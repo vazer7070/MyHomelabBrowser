@@ -2,6 +2,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Microsoft.Web.WebView2.Core;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes
 {
@@ -145,10 +146,11 @@ namespace MyHomelabBrowser.classes
             const double MB = KB * 1024;
             const double GB = MB * 1024;
 
-            if (bytes >= GB) return $"{bytes / GB:0.##} Go";
-            if (bytes >= MB) return $"{bytes / MB:0.##} Mo";
-            if (bytes >= KB) return $"{bytes / KB:0.#} Ko";
-            return $"{bytes} o";
+            bool english = Language == "en";
+            if (bytes >= GB) return $"{bytes / GB:0.##} {(english ? "GB" : "Go")}";
+            if (bytes >= MB) return $"{bytes / MB:0.##} {(english ? "MB" : "Mo")}";
+            if (bytes >= KB) return $"{bytes / KB:0.#} {(english ? "KB" : "Ko")}";
+            return $"{bytes} {(english ? "B" : "o")}";
         }
 
         public string SizeText
@@ -168,10 +170,10 @@ namespace MyHomelabBrowser.classes
 
         public string StatusText => State switch
         {
-            DownloadUiState.Completed => "Terminé",
-            DownloadUiState.Interrupted => "Échec",
-            DownloadUiState.Cancelled => "Annulé",
-            _ => IsPaused ? "En pause" : "En cours"
+            DownloadUiState.Completed => Tr("Terminé"),
+            DownloadUiState.Interrupted => Tr("Échec"),
+            DownloadUiState.Cancelled => Tr("Annulé"),
+            _ => IsPaused ? Tr("En pause") : Tr("En cours")
         };
 
         public string SpeedText
@@ -179,7 +181,7 @@ namespace MyHomelabBrowser.classes
             get
             {
                 if (IsPaused)
-                    return "En pause";
+                    return Tr("En pause");
 
                 if (State != DownloadUiState.InProgress || SpeedBytesPerSec <= 0)
                     return "";

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -19,7 +20,7 @@ namespace MyHomelabBrowser.controles
 
             bool isNew = service == null;
             _service = service ?? new HomelabService();
-            Title = isNew ? "Ajouter un service" : "Modifier le service";
+            Title = isNew ? Tr("Ajouter un service") : Tr("Modifier le service");
 
             GroupBox.ItemsSource = knownGroups
                 .Where(g => !string.IsNullOrWhiteSpace(g))

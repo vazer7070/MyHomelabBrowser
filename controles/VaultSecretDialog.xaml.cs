@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -60,7 +61,7 @@ namespace MyHomelabBrowser.controles
 
         private void UpdateCountdown()
         {
-            CountdownText.Text = $"Fermeture automatique dans {_secondsRemaining} s";
+            CountdownText.Text = Tr("Fermeture automatique dans {0} s", _secondsRemaining);
         }
 
         private async void Copy_Click(object sender, RoutedEventArgs e)
@@ -68,16 +69,16 @@ namespace MyHomelabBrowser.controles
             try
             {
                 Clipboard.SetText(_password);
-                CopyStatusText.Text = "Mot de passe copié — effacement du presse-papiers dans 30 s";
-                CopyButtonText.Text = "Copié";
+                CopyStatusText.Text = Tr("Mot de passe copié — effacement du presse-papiers dans 30 s");
+                CopyButtonText.Text = Tr("Copié");
                 CopyButton.IsEnabled = false;
 
                 await ClearClipboardLaterAsync(_password);
             }
             catch
             {
-                CopyStatusText.Text = "Le presse-papiers est momentanément indisponible.";
-                CopyButtonText.Text = "Réessayer";
+                CopyStatusText.Text = Tr("Le presse-papiers est momentanément indisponible.");
+                CopyButtonText.Text = Tr("Réessayer");
                 CopyButton.IsEnabled = true;
             }
         }

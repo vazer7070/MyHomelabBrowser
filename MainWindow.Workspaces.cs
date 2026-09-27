@@ -5,6 +5,7 @@ using MyHomelabBrowser.controles;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -42,7 +43,7 @@ namespace MyHomelabBrowser
             List<WorkspaceTab> tabs = CollectWorkspaceTabs();
             if (tabs.Count == 0)
             {
-                ShowToast("Aucun onglet à enregistrer", "Ouvrez des pages web (hors navigation privée) avant de créer un espace.", ToastKind.Info);
+                ShowToast(Tr("Aucun onglet à enregistrer"), Tr("Ouvrez des pages web (hors navigation privée) avant de créer un espace."), ToastKind.Info);
                 return;
             }
 
@@ -50,9 +51,9 @@ namespace MyHomelabBrowser
             if (name == null)
             {
                 var prompt = new TextPromptDialog(
-                    "Nouvel espace de travail",
-                    $"Nom de l’espace ({tabs.Count} onglet{(tabs.Count > 1 ? "s" : "")}), par exemple « Réseau » ou « Médias » :",
-                    "Enregistrer");
+                    Tr("Nouvel espace de travail"),
+                    Tr("Nom de l’espace ({0} onglet{1}), par exemple « Réseau » ou « Médias » :", tabs.Count, (tabs.Count > 1 ? "s" : "")),
+                    Tr("Enregistrer"));
                 if (!prompt.ShowFor(this))
                     return;
                 name = prompt.Value;
@@ -61,11 +62,11 @@ namespace MyHomelabBrowser
             try
             {
                 Workspace saved = _workspaces.Save(name, tabs);
-                ShowToast("Espace enregistré", $"« {saved.Name} » : {saved.Tabs.Count} onglet{(saved.Tabs.Count > 1 ? "s" : "")}.", ToastKind.Success);
+                ShowToast(Tr("Espace enregistré"), Tr("« {0} » : {1} onglet{2}.", saved.Name, saved.Tabs.Count, (saved.Tabs.Count > 1 ? "s" : "")), ToastKind.Success);
             }
             catch (ArgumentException ex)
             {
-                ShowToast("Enregistrement impossible", ex.Message, ToastKind.Warning);
+                ShowToast(Tr("Enregistrement impossible"), ex.Message, ToastKind.Warning);
             }
         }
 
@@ -109,7 +110,7 @@ namespace MyHomelabBrowser
         void DeleteWorkspace(Workspace workspace)
         {
             if (_workspaces.Remove(workspace.Id))
-                ShowToast("Espace supprimé", workspace.Name, ToastKind.Info);
+                ShowToast(Tr("Espace supprimé"), workspace.Name, ToastKind.Info);
         }
 
         /// <summary>
@@ -124,14 +125,14 @@ namespace MyHomelabBrowser
                 var item = new MenuItem
                 {
                     Header = workspace.Name,
-                    InputGestureText = workspace.Tabs.Count == 1 ? "1 onglet" : $"{workspace.Tabs.Count} onglets"
+                    InputGestureText = workspace.Tabs.Count == 1 ? Tr("1 onglet") : Tr("{0} onglets", workspace.Tabs.Count)
                 };
 
-                var open = new MenuItem { Header = "Ouvrir" };
+                var open = new MenuItem { Header = Tr("Ouvrir") };
                 open.Click += (_, _) => OpenWorkspace(workspace);
-                var update = new MenuItem { Header = "Remplacer par les onglets ouverts" };
+                var update = new MenuItem { Header = Tr("Remplacer par les onglets ouverts") };
                 update.Click += (_, _) => SaveTabsAsWorkspace(workspace.Name);
-                var delete = new MenuItem { Header = "Supprimer" };
+                var delete = new MenuItem { Header = Tr("Supprimer") };
                 delete.Click += (_, _) => DeleteWorkspace(workspace);
 
                 item.Items.Add(open);
@@ -144,7 +145,7 @@ namespace MyHomelabBrowser
             if (root.Items.Count > 0)
                 root.Items.Add(new Separator());
 
-            var save = new MenuItem { Header = "Enregistrer les onglets ouverts…" };
+            var save = new MenuItem { Header = Tr("Enregistrer les onglets ouverts…") };
             save.Click += (_, _) => SaveTabsAsWorkspace();
             root.Items.Add(save);
         }

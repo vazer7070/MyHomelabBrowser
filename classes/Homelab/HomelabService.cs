@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes.Homelab
 {
@@ -89,16 +90,16 @@ namespace MyHomelabBrowser.classes.Homelab
             get
             {
                 if (!Service.Monitor)
-                    return "Surveillance désactivée";
+                    return Tr("Surveillance désactivée");
                 if (_isChecking && _result.State == ServiceState.Unknown)
-                    return "Vérification…";
+                    return Tr("Vérification…");
 
                 return _result.State switch
                 {
-                    ServiceState.Online => _result.Latency is { } latency ? $"En ligne · {latency.TotalMilliseconds:0} ms" : "En ligne",
-                    ServiceState.Degraded => $"Erreur {_result.StatusCode}",
-                    ServiceState.Offline => "Hors ligne" + (string.IsNullOrWhiteSpace(_result.Error) ? string.Empty : " · " + _result.Error),
-                    _ => "Pas encore vérifié"
+                    ServiceState.Online => _result.Latency is { } latency ? Tr("En ligne · {0:0} ms", latency.TotalMilliseconds) : Tr("En ligne"),
+                    ServiceState.Degraded => Tr("Erreur {0}", _result.StatusCode),
+                    ServiceState.Offline => Tr("Hors ligne") + (string.IsNullOrWhiteSpace(_result.Error) ? string.Empty : " · " + _result.Error),
+                    _ => Tr("Pas encore vérifié")
                 };
             }
         }

@@ -2,6 +2,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes.Profiles.Credentials
 {
@@ -331,7 +332,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             EnsureUnlocked();
             var normalizedOrigin = CredentialOrigin.NormalizeStoredValue(origin);
             if (normalizedOrigin.Length == 0)
-                throw new ArgumentException("Origine invalide.", nameof(origin));
+                throw new ArgumentException(Tr("Origine invalide."), nameof(origin));
 
             var existing = _policies.FirstOrDefault(x =>
                 string.Equals(x.Origin, normalizedOrigin, StringComparison.OrdinalIgnoreCase));
@@ -371,9 +372,9 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
 
             var normalizedOrigin = CredentialOrigin.NormalizeStoredValue(origin);
             if (normalizedOrigin.Length == 0)
-                throw new ArgumentException("Origine invalide.", nameof(origin));
+                throw new ArgumentException(Tr("Origine invalide."), nameof(origin));
             if (string.IsNullOrEmpty(password))
-                throw new ArgumentException("Mot de passe vide.", nameof(password));
+                throw new ArgumentException(Tr("Mot de passe vide."), nameof(password));
 
             // Compatibilité avec les anciens appelants, sans jamais créer une fausse entrée secrète.
             if (neverSave)
@@ -421,7 +422,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             var existing = _cache.FirstOrDefault(x =>
                 string.Equals(x.Host, normalizedOrigin, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(x.Username, username, StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidOperationException("Identifiant introuvable dans le coffre.");
+                ?? throw new InvalidOperationException(Tr("Identifiant introuvable dans le coffre."));
 
             if (!string.IsNullOrWhiteSpace(secret) &&
                 !MyHomelabBrowser.classes.Security.Totp.TryParse(secret, out _, out string error))
@@ -452,7 +453,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
         {
             EnsureUnlocked();
             if (_salt is not { Length: > 0 })
-                throw new InvalidOperationException("Sel du coffre manquant.");
+                throw new InvalidOperationException(Tr("Sel du coffre manquant."));
 
             var payload = new VaultPayload
             {
@@ -682,7 +683,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
         {
             var info = new FileInfo(path);
             if (info.Length <= 0 || info.Length > MaxVaultBytes)
-                throw new InvalidDataException("Taille de coffre invalide.");
+                throw new InvalidDataException(Tr("Taille de coffre invalide."));
 
             return File.ReadAllBytes(path);
         }
@@ -781,7 +782,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
         private static string DecryptToString(byte[] key, byte[] nonce, byte[] ciphertext)
         {
             if (ciphertext.Length < 17)
-                throw new InvalidDataException("Contenu chiffré invalide.");
+                throw new InvalidDataException(Tr("Contenu chiffré invalide."));
 
             var tag = ciphertext.AsSpan(0, 16);
             var data = ciphertext.AsSpan(16);
@@ -818,7 +819,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
         private void EnsureUnlocked()
         {
             if (!IsUnlocked)
-                throw new InvalidOperationException("Coffre verrouillé.");
+                throw new InvalidOperationException(Tr("Coffre verrouillé."));
         }
 
         private sealed class LegacyCredentialEntry
@@ -863,7 +864,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                 var ciphertext = ReadBounded(reader, min: 17, max: MaxVaultBytes);
 
                 if (stream.Position != stream.Length)
-                    throw new InvalidDataException("Données supplémentaires inattendues.");
+                    throw new InvalidDataException(Tr("Données supplémentaires inattendues."));
 
                 return new VaultEnvelope
                 {
@@ -896,7 +897,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             {
                 var length = reader.ReadInt32();
                 if (length < min || length > max)
-                    throw new InvalidDataException("Longueur invalide dans le coffre.");
+                    throw new InvalidDataException(Tr("Longueur invalide dans le coffre."));
 
                 var bytes = reader.ReadBytes(length);
                 if (bytes.Length != length)

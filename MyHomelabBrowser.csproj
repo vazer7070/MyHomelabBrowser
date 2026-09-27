@@ -47,6 +47,11 @@
 
 
 	<ItemGroup>
+		<!-- Traduction anglaise de l'interface (clé = texte français). -->
+		<EmbeddedResource Include="lang\en.json" LogicalName="lang.en.json" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<Content Include="Assets\Ruffle\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
 	</ItemGroup>
 </Project>

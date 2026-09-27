@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -93,7 +94,7 @@ namespace MyHomelabBrowser
                     alwaysSave: true);
 
                 ShowToast(
-                    existing == null ? "Identifiant enregistré" : "Identifiant mis à jour",
+                    existing == null ? Tr("Identifiant enregistré") : Tr("Identifiant mis à jour"),
                     CredentialOrigin.DisplayName(candidate.Origin),
                     null);
                 return;
@@ -128,7 +129,7 @@ namespace MyHomelabBrowser
             {
                 _vault.SetPolicy(candidate.Origin, CredentialSavePolicy.NeverSave);
                 ShowToast(
-                    "Enregistrement désactivé",
+                    Tr("Enregistrement désactivé"),
                     CredentialOrigin.DisplayName(candidate.Origin),
                     null);
                 return;
@@ -148,7 +149,7 @@ namespace MyHomelabBrowser
                 _vault.SetPolicy(candidate.Origin, CredentialSavePolicy.Ask);
 
             ShowToast(
-                existing == null ? "Mot de passe enregistré" : "Mot de passe mis à jour",
+                existing == null ? Tr("Mot de passe enregistré") : Tr("Mot de passe mis à jour"),
                 CredentialOrigin.DisplayName(candidate.Origin),
                 null);
         }
@@ -212,7 +213,7 @@ namespace MyHomelabBrowser
 
             if (!_vault.VaultExists)
             {
-                var first = new SimplePasswordDialog("Créer le mot de passe du coffre")
+                var first = new SimplePasswordDialog(Tr("Créer le mot de passe du coffre"))
                 {
                     Owner = this
                 };
@@ -220,7 +221,7 @@ namespace MyHomelabBrowser
                 if (first.ShowDialog() != true || string.IsNullOrWhiteSpace(first.Password))
                     return false;
 
-                var confirmation = new SimplePasswordDialog("Confirmer le mot de passe du coffre")
+                var confirmation = new SimplePasswordDialog(Tr("Confirmer le mot de passe du coffre"))
                 {
                     Owner = this
                 };
@@ -232,8 +233,8 @@ namespace MyHomelabBrowser
                 {
                     MessageBox.Show(
                         this,
-                        "Les mots de passe ne correspondent pas.",
-                        "Coffre des mots de passe",
+                        Tr("Les mots de passe ne correspondent pas."),
+                        Tr("Coffre des mots de passe"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
                     return false;
@@ -243,8 +244,8 @@ namespace MyHomelabBrowser
                 {
                     MessageBox.Show(
                         this,
-                        "Impossible de créer le coffre.",
-                        "Coffre des mots de passe",
+                        Tr("Impossible de créer le coffre."),
+                        Tr("Coffre des mots de passe"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Error);
                     return false;
@@ -266,13 +267,13 @@ namespace MyHomelabBrowser
 
             var lockedUntil = _vault.UnlockAvailableAtUtc;
             var message = lockedUntil.HasValue && lockedUntil.Value > DateTime.UtcNow
-                ? $"Le coffre est temporairement verrouillé jusqu’à {lockedUntil.Value.ToLocalTime():HH:mm:ss}."
-                : "Mot de passe du coffre incorrect.";
+                ? Tr("Le coffre est temporairement verrouillé jusqu’à {0:HH:mm:ss}.", lockedUntil.Value.ToLocalTime())
+                : Tr("Mot de passe du coffre incorrect.");
 
             MessageBox.Show(
                 this,
                 message,
-                "Coffre des mots de passe",
+                Tr("Coffre des mots de passe"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return false;
@@ -296,8 +297,8 @@ namespace MyHomelabBrowser
             if (credential == null)
             {
                 ShowToast(
-                    "Aucun identifiant",
-                    "Aucun compte n’est enregistré pour cette origine.",
+                    Tr("Aucun identifiant"),
+                    Tr("Aucun compte n’est enregistré pour cette origine."),
                     null);
                 UpdateFillCredentialButtonState();
                 return;
@@ -402,12 +403,12 @@ namespace MyHomelabBrowser
 
             if (result == "\"otp\"")
             {
-                ShowToast("Code 2FA rempli", credential.DisplayHost, ToastKind.Success);
+                ShowToast(Tr("Code 2FA rempli"), credential.DisplayHost, ToastKind.Success);
             }
             else if (ClipboardHelper.TryCopyWithAutoClear(otpCode))
             {
                 // Le code sera demandé à l'étape suivante : il est prêt à être collé.
-                ShowToast("Code 2FA copié", "Collez-le à l’étape de double authentification (effacé du presse-papiers dans 30 s).", ToastKind.Info);
+                ShowToast(Tr("Code 2FA copié"), Tr("Collez-le à l’étape de double authentification (effacé du presse-papiers dans 30 s)."), ToastKind.Info);
             }
         }
 
@@ -417,7 +418,7 @@ namespace MyHomelabBrowser
             {
                 FillCredentialButton.IsEnabled = false;
                 FillCredentialButton.Opacity = 0.35;
-                FillCredentialButton.ToolTip = "Aucun identifiant disponible";
+                FillCredentialButton.ToolTip = Tr("Aucun identifiant disponible");
 
                 if (_profileService.Current == null)
                     return;
@@ -442,7 +443,7 @@ namespace MyHomelabBrowser
                         FillCredentialButton.IsEnabled = true;
                         FillCredentialButton.Opacity = 1.0;
                         FillCredentialButton.ToolTip =
-                            "Déverrouiller le coffre pour rechercher un identifiant";
+                            Tr("Déverrouiller le coffre pour rechercher un identifiant");
                     }
 
                     return;
@@ -452,7 +453,7 @@ namespace MyHomelabBrowser
                 {
                     FillCredentialButton.IsEnabled = true;
                     FillCredentialButton.Opacity = 1.0;
-                    FillCredentialButton.ToolTip = "Remplir les identifiants";
+                    FillCredentialButton.ToolTip = Tr("Remplir les identifiants");
                 }
             }
             catch

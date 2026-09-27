@@ -28,6 +28,7 @@
 
   <ItemGroup Label="Sources de l'application">
     <Compile Include="..\..\classes\AtomicFile.cs" Link="App\AtomicFile.cs" />
+    <Compile Include="..\..\classes\Localization\Loc.cs" Link="App\Localization\Loc.cs" />
     <Compile Include="..\..\classes\BrowserSettings.cs" Link="App\BrowserSettings.cs" />
     <Compile Include="..\..\classes\CommandSetting.cs" Link="App\CommandSetting.cs" />
     <Compile Include="..\..\classes\UrlResolver.cs" Link="App\UrlResolver.cs" />

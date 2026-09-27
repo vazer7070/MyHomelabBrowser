@@ -12,6 +12,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -59,10 +60,10 @@ namespace MyHomelabBrowser.controles
             int hour = DateTime.Now.Hour;
             GreetingText.Text = hour switch
             {
-                < 5 => "Bonne nuit",
-                < 12 => "Bonjour",
-                < 18 => "Bon après-midi",
-                _ => "Bonsoir"
+                < 5 => Tr("Bonne nuit"),
+                < 12 => Tr("Bonjour"),
+                < 18 => Tr("Bon après-midi"),
+                _ => Tr("Bonsoir")
             };
 
             if (_serviceTiles != null)
@@ -124,8 +125,8 @@ namespace MyHomelabBrowser.controles
             }
 
             ImportLocalFavoritesButton.Content = localFavoriteCount == 1
-                ? "Importer 1 favori local"
-                : $"Importer {localFavoriteCount} favoris locaux";
+                ? Tr("Importer 1 favori local")
+                : Tr("Importer {0} favoris locaux", localFavoriteCount);
             ImportLocalFavoritesButton.Visibility = localFavoriteCount > 0 ? Visibility.Visible : Visibility.Collapsed;
 
             UpdateServicesState();
@@ -328,7 +329,7 @@ namespace MyHomelabBrowser.controles
                 list.Add(new OmniboxSuggestion
                 {
                     Icon = "",
-                    Prefix = "Ouvrir ",
+                    Prefix = Tr("Ouvrir "),
                     Match = directUrl,
                     Url = directUrl
                 });
@@ -363,9 +364,9 @@ namespace MyHomelabBrowser.controles
             list.Add(new OmniboxSuggestion
             {
                 Icon = "",
-                Prefix = "Rechercher ",
+                Prefix = Tr("Rechercher "),
                 Match = $"« {input} »",
-                Suffix = " sur " + UrlResolver.GetSearchEngineName(SearchEngine),
+                Suffix = Tr(" sur ") + UrlResolver.GetSearchEngineName(SearchEngine),
                 Url = UrlResolver.BuildSearchUrl(input, SearchEngine)
             });
 

@@ -5,6 +5,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes.Flash
 {
@@ -76,7 +77,7 @@ namespace MyHomelabBrowser.classes.Flash
 
             _primaryBtn = new Button
             {
-                Content = "Fermer",
+                Content = Tr("Fermer"),
                 Margin = new Thickness(0, 0, 8, 0),
                 HorizontalAlignment = HorizontalAlignment.Left
             };
@@ -85,7 +86,7 @@ namespace MyHomelabBrowser.classes.Flash
 
             _secondaryBtn = new Button
             {
-                Content = "Paramètres",
+                Content = Tr("Paramètres"),
                 HorizontalAlignment = HorizontalAlignment.Left,
                 Visibility = Visibility.Collapsed
             };
@@ -170,7 +171,7 @@ namespace MyHomelabBrowser.classes.Flash
             _secondaryAction = null;
 
             if (_primaryBtn != null)
-                _primaryBtn.Content = "Fermer";
+                _primaryBtn.Content = Tr("Fermer");
 
             if (_secondaryBtn != null)
                 _secondaryBtn.Visibility = Visibility.Collapsed;

@@ -2,6 +2,7 @@
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -57,7 +58,7 @@ namespace MyHomelabBrowser.controles
         public void ShowPasswordError(string? message = null)
         {
             PasswordBox.SetResourceReference(Control.BorderBrushProperty, "DangerBrush");
-            PasswordErrorText.Text = string.IsNullOrWhiteSpace(message) ? "Mot de passe incorrect" : message;
+            PasswordErrorText.Text = string.IsNullOrWhiteSpace(message) ? Tr("Mot de passe incorrect") : message;
             PasswordErrorText.Visibility = Visibility.Visible;
 
             ShakePasswordBox();

@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes.Support.Transports
 {
@@ -66,7 +67,7 @@ namespace MyHomelabBrowser.classes.Support.Transports
             {
                 Success = true,
                 ReportId = reportId,
-                Message = "Rapport enregistré sur cet ordinateur.",
+                Message = Tr("Rapport enregistré sur cet ordinateur."),
                 Channel = SupportDeliveryChannel.LocalFile,
                 FilePath = path
             });
@@ -79,7 +80,7 @@ namespace MyHomelabBrowser.classes.Support.Transports
             builder.AppendLine($"Application : {report.Client} {report.ClientVersion}");
             builder.AppendLine($"Date (UTC)  : {report.CreatedAtUtc:yyyy-MM-dd HH:mm:ss}");
             builder.AppendLine($"Module      : {report.ModuleLabel}");
-            builder.AppendLine($"Catégorie   : {report.CategoryLabel}");
+            builder.AppendLine(Tr("Catégorie   : {0}", report.CategoryLabel));
             builder.AppendLine();
             builder.AppendLine("Titre");
             builder.AppendLine(report.Title);

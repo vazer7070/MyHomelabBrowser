@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -12,7 +13,7 @@ namespace MyHomelabBrowser
         {
             InitializeComponent();
 
-            TitleText.Text = "Historique des versions";
+            TitleText.Text = Tr("Historique des versions");
 
             if (string.IsNullOrWhiteSpace(changelog))
                 return;
@@ -46,7 +47,7 @@ namespace MyHomelabBrowser
         {
             var title = new TextBlock
             {
-                Text = $"🚀 Version {version}",
+                Text = Tr("🚀 Version {0}", version),
                 FontSize = 17,
                 FontWeight = FontWeights.Bold
             };

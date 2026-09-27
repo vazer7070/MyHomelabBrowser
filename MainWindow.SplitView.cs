@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -222,11 +223,11 @@ namespace MyHomelabBrowser
 
                 pane.Title.Text = pane.Tab?.Header is BrowserTabHeader header && !string.IsNullOrWhiteSpace(header.TabTitle)
                     ? header.TabTitle
-                    : "Nouvel onglet";
+                    : Tr("Nouvel onglet");
 
                 pane.Header.SetResourceReference(Border.BorderBrushProperty, isActive ? "AccentBrush" : "BorderBrush");
                 pane.Title.SetResourceReference(TextBlock.ForegroundProperty, isActive ? "TextPrimaryBrush" : "TextSecondaryBrush");
-                pane.Header.ToolTip = isActive ? null : "Cliquer pour activer ce volet";
+                pane.Header.ToolTip = isActive ? null : Tr("Cliquer pour activer ce volet");
             }
         }
 
@@ -279,7 +280,7 @@ namespace MyHomelabBrowser
             var close = new Button
             {
                 Content = closeIcon,
-                ToolTip = "Quitter la vue côte à côte",
+                ToolTip = Tr("Quitter la vue côte à côte"),
                 Margin = new Thickness(0, 0, 4, 0),
                 VerticalAlignment = VerticalAlignment.Center
             };

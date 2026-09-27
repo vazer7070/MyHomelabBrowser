@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -57,8 +58,8 @@ namespace MyHomelabBrowser.controles
             if (DateTime.UtcNow - _lastSend < TimeSpan.FromSeconds(10))
             {
                 ShowDialog(
-                    "Trop rapide",
-                    "Merci d’attendre quelques secondes avant un nouvel envoi.");
+                    Tr("Trop rapide"),
+                    Tr("Merci d’attendre quelques secondes avant un nouvel envoi."));
                 return;
             }
 
@@ -70,22 +71,22 @@ namespace MyHomelabBrowser.controles
             if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(description))
             {
                 ShowDialog(
-                    "Champs manquants",
-                    "Merci de remplir le titre et la description avant l’envoi.");
+                    Tr("Champs manquants"),
+                    Tr("Merci de remplir le titre et la description avant l’envoi."));
                 return;
             }
 
             if (description.Length > 3500)
             {
                 ShowDialog(
-                    "Message trop long",
-                    "La description est trop longue pour être envoyée.");
+                    Tr("Message trop long"),
+                    Tr("La description est trop longue pour être envoyée."));
                 return;
             }
 
             MessageBoxResult confirm = MessageBox.Show(
-                $"Envoyer ce rapport concernant {GetModuleLabel(module)} ?",
-                "Confirmation",
+                Tr("Envoyer ce rapport concernant {0} ?", GetModuleLabel(module)),
+                Tr("Confirmation"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
 
@@ -97,7 +98,7 @@ namespace MyHomelabBrowser.controles
                 .GetName()
                 .Version?
                 .ToString()
-                ?? "inconnue";
+                ?? Tr("inconnue");
 
             string reportId = GenerateReportId();
             string moduleLabel = GetModuleLabel(module);
@@ -135,20 +136,20 @@ namespace MyHomelabBrowser.controles
                 if (result.Channel == SupportDeliveryChannel.LocalFile && result.FilePath != null)
                 {
                     string reason = result.UsedFallback
-                        ? "Le service de support est injoignable pour le moment."
-                        : "Le service de support n’est pas encore en ligne.";
+                        ? Tr("Le service de support est injoignable pour le moment.")
+                        : Tr("Le service de support n’est pas encore en ligne.");
 
                     ShowDialog(
-                        "Rapport enregistré",
-                        $"{reason}\n\nLe rapport a été enregistré sur cet ordinateur :\n{result.FilePath}\n\nVous pouvez transmettre ce fichier au développeur.");
+                        Tr("Rapport enregistré"),
+                        Tr("{0}\n\nLe rapport a été enregistré sur cet ordinateur :\n{1}\n\nVous pouvez transmettre ce fichier au développeur.", reason, result.FilePath));
 
                     RevealInExplorer(result.FilePath);
                 }
                 else
                 {
                     ShowDialog(
-                        "Message envoyé",
-                        $"Merci pour le signalement.\n\nID du rapport : {result.ReportId}");
+                        Tr("Message envoyé"),
+                        Tr("Merci pour le signalement.\n\nID du rapport : {0}", result.ReportId));
                 }
 
                 CloseRequested?.Invoke();
@@ -156,14 +157,14 @@ namespace MyHomelabBrowser.controles
             catch (SupportApiRejectedException ex)
             {
                 ShowDialog(
-                    "Rapport refusé",
+                    Tr("Rapport refusé"),
                     ex.Message);
             }
             catch (Exception ex)
             {
                 ShowDialog(
-                    "Erreur d’envoi",
-                    "Impossible d’envoyer le message.\n\n" + ex.Message);
+                    Tr("Erreur d’envoi"),
+                    Tr("Impossible d’envoyer le message.\n\n") + ex.Message);
             }
             finally
             {
@@ -234,13 +235,13 @@ Aucun log console n’a été généré pour cette session.
             var extra = new StringBuilder();
 
             if (_options.IncludeLogs)
-                extra.AppendLine("- Logs récents : joints au message");
+                extra.AppendLine(Tr("- Logs récents : joints au message"));
 
             if (_options.IncludePcInfo)
             {
-                extra.AppendLine($"- Système : {Environment.OSVersion}");
+                extra.AppendLine(Tr("- Système : {0}", Environment.OSVersion));
                 extra.AppendLine($"- Architecture : {System.Runtime.InteropServices.RuntimeInformation.OSArchitecture}");
-                extra.AppendLine($"- .NET : {Environment.Version}");
+                extra.AppendLine(Tr("- .NET : {0}", Environment.Version));
             }
 
             if (_options.IncludeMode)
@@ -249,7 +250,7 @@ Aucun log console n’a été généré pour cette session.
             AppendModuleDiagnostics(extra, module);
 
             return extra.Length == 0
-                ? "Aucune information technique jointe."
+                ? Tr("Aucune information technique jointe.")
                 : extra.ToString().TrimEnd();
         }
 
@@ -258,27 +259,27 @@ Aucun log console n’a été généré pour cette session.
             BrowserContext? context = _options.Context;
             if (context == null)
             {
-                extra.AppendLine("- Mode navigateur : inconnu");
+                extra.AppendLine(Tr("- Mode navigateur : inconnu"));
                 return;
             }
 
             string mode = context.IsLegacy
                 ? "legacy"
                 : context.IsPrivate
-                    ? "privé"
+                    ? Tr("privé")
                     : "normal";
 
-            extra.AppendLine($"- Mode navigateur : {mode}");
-            extra.AppendLine($"- Mode Flash : {context.FlashMode}");
+            extra.AppendLine(Tr("- Mode navigateur : {0}", mode));
+            extra.AppendLine(Tr("- Mode Flash : {0}", context.FlashMode));
 
             if (!string.IsNullOrWhiteSpace(context.CurrentUrl))
-                extra.AppendLine($"- URL active : {SanitizeUrl(context.CurrentUrl)}");
+                extra.AppendLine(Tr("- URL active : {0}", SanitizeUrl(context.CurrentUrl)));
 
             if (!string.IsNullOrWhiteSpace(context.PageTitle))
-                extra.AppendLine($"- Titre de la page : {Limit(context.PageTitle, 180)}");
+                extra.AppendLine(Tr("- Titre de la page : {0}", Limit(context.PageTitle, 180)));
 
             if (context.TabId != null)
-                extra.AppendLine($"- Onglet : {context.TabId}");
+                extra.AppendLine(Tr("- Onglet : {0}", context.TabId));
         }
 
         private static void AppendModuleDiagnostics(StringBuilder extra, ReportModule module)
@@ -288,18 +289,18 @@ Aucun log console n’a été généré pour cette session.
                 case ReportModule.AdBlock:
                 {
                     var snapshot = AdBlockModuleHost.Current.GetSnapshot();
-                    extra.AppendLine($"- Bloqueur activé : {YesNo(snapshot.Enabled)}");
-                    extra.AppendLine($"- Moteur prêt : {YesNo(snapshot.IsReady)}");
-                    extra.AppendLine($"- Règles réseau : {snapshot.NetworkRuleCount:N0}");
-                    extra.AppendLine($"- Règles visuelles : {snapshot.CosmeticRuleCount:N0}");
-                    extra.AppendLine($"- Blocages pendant la session : {snapshot.SessionBlockedCount:N0}");
-                    extra.AppendLine($"- État : {Limit(snapshot.StatusMessage, 220)}");
-                    extra.AppendLine($"- Dernière mise à jour : {FormatDate(snapshot.LastSuccessfulUpdateUtc)}");
+                    extra.AppendLine(Tr("- Bloqueur activé : {0}", YesNo(snapshot.Enabled)));
+                    extra.AppendLine(Tr("- Moteur prêt : {0}", YesNo(snapshot.IsReady)));
+                    extra.AppendLine(Tr("- Règles réseau : {0:N0}", snapshot.NetworkRuleCount));
+                    extra.AppendLine(Tr("- Règles visuelles : {0:N0}", snapshot.CosmeticRuleCount));
+                    extra.AppendLine(Tr("- Blocages pendant la session : {0:N0}", snapshot.SessionBlockedCount));
+                    extra.AppendLine(Tr("- État : {0}", Limit(snapshot.StatusMessage, 220)));
+                    extra.AppendLine(Tr("- Dernière mise à jour : {0}", FormatDate(snapshot.LastSuccessfulUpdateUtc)));
                     break;
                 }
 
                 default:
-                    extra.AppendLine("- Composant : cœur du navigateur");
+                    extra.AppendLine(Tr("- Composant : cœur du navigateur"));
                     break;
             }
         }
@@ -328,13 +329,13 @@ Aucun log console n’a été généré pour cette session.
             switch (module)
             {
                 case ReportModule.AdBlock:
-                    ModuleHint.Text = "Pour une publicité non bloquée, un site cassé, une liste qui ne se met pas à jour ou un problème de filtrage.";
-                    DiagnosticNotice.Text = "Le rapport ajoutera l’état du bloqueur, le nombre de règles, les statistiques de session et la date de mise à jour des listes.";
+                    ModuleHint.Text = Tr("Pour une publicité non bloquée, un site cassé, une liste qui ne se met pas à jour ou un problème de filtrage.");
+                    DiagnosticNotice.Text = Tr("Le rapport ajoutera l’état du bloqueur, le nombre de règles, les statistiques de session et la date de mise à jour des listes.");
                     break;
 
                 default:
-                    ModuleHint.Text = "Pour un problème général du navigateur, des onglets, des téléchargements, des profils ou de l’interface.";
-                    DiagnosticNotice.Text = "Le rapport indiquera le contexte de navigation autorisé dans les paramètres. Aucun mot de passe ni secret n’est envoyé.";
+                    ModuleHint.Text = Tr("Pour un problème général du navigateur, des onglets, des téléchargements, des profils ou de l’interface.");
+                    DiagnosticNotice.Text = Tr("Le rapport indiquera le contexte de navigation autorisé dans les paramètres. Aucun mot de passe ni secret n’est envoyé.");
                     break;
             }
         }
@@ -404,7 +405,7 @@ Aucun log console n’a été généré pour cette session.
 
         private static string GetModuleLabel(ReportModule module) => module switch
         {
-            ReportModule.AdBlock => "Bloqueur de publicités",
+            ReportModule.AdBlock => Tr("Bloqueur de publicités"),
             _ => "PommeBrowser"
         };
 
@@ -416,12 +417,12 @@ Aucun log console n’a été généré pour cette session.
 
         private static string GetIssueTypeLabel(IssueType type) => type switch
         {
-            IssueType.Bug => "Bug ou dysfonctionnement",
-            IssueType.MissingFeature => "Fonctionnalité absente",
-            IssueType.FeatureRequest => "Demande d’ajout",
-            IssueType.UiUx => "Interface ou ergonomie",
+            IssueType.Bug => Tr("Bug ou dysfonctionnement"),
+            IssueType.MissingFeature => Tr("Fonctionnalité absente"),
+            IssueType.FeatureRequest => Tr("Demande d’ajout"),
+            IssueType.UiUx => Tr("Interface ou ergonomie"),
             IssueType.Performance => "Performance",
-            _ => "Autre"
+            _ => Tr("Autre")
         };
 
         private static string GetIssueTypeKey(IssueType type) => type switch
@@ -451,19 +452,19 @@ Aucun log console n’a été généré pour cette session.
         }
 
         private static string FormatDate(DateTimeOffset? value)
-            => value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "inconnue";
+            => value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? Tr("inconnue");
 
         private static string Limit(string? value, int maxLength)
         {
             if (string.IsNullOrWhiteSpace(value))
-                return "inconnu";
+                return Tr("inconnu");
 
             string trimmed = value.Trim();
             return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength] + "…";
         }
 
 
-        private static string YesNo(bool value) => value ? "oui" : "non";
+        private static string YesNo(bool value) => value ? Tr("oui") : Tr("non");
 
         public enum IssueType
         {

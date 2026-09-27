@@ -3,6 +3,7 @@ using MyHomelabBrowser.classes.Flash;
 using MyHomelabBrowser.controles;
 using System.Windows;
 using System.Windows.Controls;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -38,12 +39,12 @@ namespace MyHomelabBrowser
                 string url =
                     wt.IsLegacyExternal && !string.IsNullOrWhiteSpace(wt.LegacyUrl)
                         ? wt.LegacyUrl
-                        : wt.Web?.Source?.AbsoluteUri ?? "inconnu";
+                        : wt.Web?.Source?.AbsoluteUri ?? Tr("inconnu");
 
                 string title =
                     wt.IsLegacyExternal
                         ? "Legacy (Basilisk)"
-                        : wt.Web?.CoreWebView2?.DocumentTitle ?? "inconnu";
+                        : wt.Web?.CoreWebView2?.DocumentTitle ?? Tr("inconnu");
 
                 string flashMode =
                     wt.IsLegacyExternal ? "legacy" :
@@ -95,7 +96,7 @@ namespace MyHomelabBrowser
             };
 
             // OpenViewTab branche aussi la croix de fermeture, absente auparavant.
-            OpenViewTab(view, "Signaler un problème");
+            OpenViewTab(view, Tr("Signaler un problème"));
         }
 
         void OpenSettingsSection(string? sectionName)
@@ -125,7 +126,7 @@ namespace MyHomelabBrowser
 
             WireUpdateActions(view);
 
-            OpenViewTab(view, "Paramètres");
+            OpenViewTab(view, Tr("Paramètres"));
         }
 
         /// <summary>

@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -149,7 +150,7 @@ namespace MyHomelabBrowser
             {
                 content.IsLegacyLaunching = false;
                 content.IsLegacyExternal = true;
-                content.LegacyLastError = "Basilisk n’est pas configuré ou chemin invalide.";
+                content.LegacyLastError = Tr("Basilisk n’est pas configuré ou chemin invalide.");
 
                 await Dispatcher.InvokeAsync(SyncWebHostWithSelection);
                 return false;
@@ -178,7 +179,7 @@ namespace MyHomelabBrowser
                     content.LegacyProfileLease = null;
                     content.IsLegacyLaunching = false;
                     content.IsLegacyExternal = true;
-                    content.LegacyLastError = "Process Basilisk non lancé (Launch() a retourné null).";
+                    content.LegacyLastError = Tr("Process Basilisk non lancé (Launch() a retourné null).");
 
                     await Dispatcher.InvokeAsync(SyncWebHostWithSelection);
                     return false;
@@ -202,7 +203,7 @@ namespace MyHomelabBrowser
                     content.LegacyProfileLease = null;
                     content.IsLegacyLaunching = false;
                     content.IsLegacyExternal = true;
-                    content.LegacyLastError = "Fenêtre Basilisk introuvable (timeout).";
+                    content.LegacyLastError = Tr("Fenêtre Basilisk introuvable (timeout).");
 
                     await Dispatcher.InvokeAsync(SyncWebHostWithSelection);
                     return false;
@@ -258,7 +259,7 @@ namespace MyHomelabBrowser
                 content.LegacyProfileLease = null;
                 content.IsLegacyLaunching = false;
                 content.IsLegacyExternal = true;
-                content.LegacyLastError = "Erreur au lancement de Basilisk :\n" + ex;
+                content.LegacyLastError = Tr("Erreur au lancement de Basilisk :\n") + ex;
 
                 await Dispatcher.InvokeAsync(SyncWebHostWithSelection);
                 return false;

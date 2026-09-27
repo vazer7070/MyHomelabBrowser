@@ -1,5 +1,6 @@
 ﻿using MyHomelabBrowser.classes;
 using System.Windows;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -34,7 +35,7 @@ namespace MyHomelabBrowser.controles
 
         private void Delete_Click(object sender, RoutedEventArgs e)
         {
-            if (MessageBox.Show("Supprimer ce favori ?", "Confirmation",
+            if (MessageBox.Show(Tr("Supprimer ce favori ?"), Tr("Confirmation"),
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
             {
                 Deleted = true;

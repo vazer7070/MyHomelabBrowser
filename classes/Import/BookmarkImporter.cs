@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes.Import
 {
@@ -30,7 +31,7 @@ namespace MyHomelabBrowser.classes.Import
     /// </summary>
     public static class BookmarkImporter
     {
-        public const string DefaultFolder = "Importés";
+        public static string DefaultFolder => Tr("Importés");
 
         // =========================
         // Détection
@@ -162,7 +163,7 @@ namespace MyHomelabBrowser.classes.Import
                     continue;
 
                 bool isBar = root.Name == "bookmark_bar";
-                string rootName = GetString(root.Value, "name") ?? (root.Name == "synced" ? "Favoris mobiles" : "Autres favoris");
+                string rootName = GetString(root.Value, "name") ?? (root.Name == "synced" ? Tr("Favoris mobiles") : Tr("Autres favoris"));
 
                 if (root.Value.TryGetProperty("children", out JsonElement children))
                     WalkChromium(children, isBar ? null : rootName, isBar, result);
@@ -294,9 +295,9 @@ namespace MyHomelabBrowser.classes.Import
 
         private static string FirefoxRootName(string? guid) => guid switch
         {
-            "menu________" => "Menu des marque-pages",
-            "mobile______" => "Marque-pages mobiles",
-            _ => "Autres marque-pages"
+            "menu________" => Tr("Menu des marque-pages"),
+            "mobile______" => Tr("Marque-pages mobiles"),
+            _ => Tr("Autres marque-pages")
         };
 
         private static readonly Regex HtmlTokenRegex = new(

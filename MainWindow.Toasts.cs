@@ -5,6 +5,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -79,7 +80,7 @@ namespace MyHomelabBrowser
                 title,
                 message,
                 ToastKind.Success,
-                "Ouvrir le fichier",
+                Tr("Ouvrir le fichier"),
                 () => DownloadManager.Instance.OpenFile(item));
         }
 
@@ -134,7 +135,7 @@ namespace MyHomelabBrowser
             }
             catch (Exception ex)
             {
-                ShowToast("Action impossible", ex.Message, ToastKind.Warning);
+                ShowToast(Tr("Action impossible"), ex.Message, ToastKind.Warning);
             }
         }
 

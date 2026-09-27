@@ -3,6 +3,7 @@ using MyHomelabBrowser.controles;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -98,20 +99,20 @@ namespace MyHomelabBrowser
             if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
             {
                 state = "none";
-                tooltip = "Page interne";
+                tooltip = Tr("Page interne");
             }
             else if (uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
             {
                 state = "secure";
-                tooltip = "Connexion sécurisée (HTTPS)";
+                tooltip = Tr("Connexion sécurisée (HTTPS)");
             }
             else if (uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase))
             {
                 bool local = UrlResolver.IsLocalHost(uri.Host);
                 state = local ? "local" : "insecure";
                 tooltip = local
-                    ? "Service du réseau local (HTTP non chiffré)"
-                    : "Connexion non sécurisée (HTTP) : les données transitent en clair";
+                    ? Tr("Service du réseau local (HTTP non chiffré)")
+                    : Tr("Connexion non sécurisée (HTTP) : les données transitent en clair");
             }
             else
             {
@@ -263,7 +264,7 @@ namespace MyHomelabBrowser
                     {
                         Type = OmniboxItemType.Command,
                         Primary = ":" + c.Key,
-                        Secondary = c.Description,
+                        Secondary = Tr(c.Description),
                         Command = c
                     }));
             }
@@ -282,7 +283,7 @@ namespace MyHomelabBrowser
                     {
                         Type = OmniboxItemType.Tab,
                         Primary = header.TabTitle,
-                        Secondary = "Aller à l’onglet",
+                        Secondary = Tr("Aller à l’onglet"),
                         Tab = tab
                     });
                 }
@@ -302,7 +303,7 @@ namespace MyHomelabBrowser
                         {
                             Type = OmniboxItemType.Url,
                             Primary = directUrl,
-                            Secondary = "Ouvrir l’adresse",
+                            Secondary = Tr("Ouvrir l’adresse"),
                             Url = directUrl
                         });
                     }
@@ -359,7 +360,7 @@ namespace MyHomelabBrowser
                         {
                             Type = OmniboxItemType.Search,
                             Primary = text,
-                            Secondary = "Rechercher sur " + UrlResolver.GetSearchEngineName(_settings.Settings.Search),
+                            Secondary = Tr("Rechercher sur ") + UrlResolver.GetSearchEngineName(_settings.Settings.Search),
                             Url = UrlResolver.BuildSearchUrl(text, _settings.Settings.Search)
                         });
                     }
@@ -491,7 +492,7 @@ namespace MyHomelabBrowser
 
             if (!IsCommandEnabled(cmd))
             {
-                ShowToast("Commande inconnue", ":" + cmd, ToastKind.Warning);
+                ShowToast(Tr("Commande inconnue"), ":" + cmd, ToastKind.Warning);
                 return;
             }
 
@@ -590,7 +591,7 @@ namespace MyHomelabBrowser
             bool loading = Tabs.SelectedItem is TabItem { Tag: WebTabContent { IsLoading: true } };
             RefreshIcon.Visibility = loading ? Visibility.Collapsed : Visibility.Visible;
             StopIcon.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
-            RefreshBtn.ToolTip = loading ? "Arrêter le chargement (Échap)" : "Actualiser (F5)";
+            RefreshBtn.ToolTip = loading ? Tr("Arrêter le chargement (Échap)") : Tr("Actualiser (F5)");
         }
 
         void ReloadCurrentTab(bool ignoreCache)

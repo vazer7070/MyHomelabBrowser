@@ -5,6 +5,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -82,7 +83,7 @@ namespace MyHomelabBrowser
             var dlg = new LoginDialog(profile.Username)
             {
                 Owner = this,
-                Title = "Changer de profil",
+                Title = Tr("Changer de profil"),
                 ValidateLogin = (_, p) => _profileService.VerifyPassword(profile, p),
                 FailureMessageProvider = _ => BuildLoginFailureMessage(profile)
             };
@@ -97,7 +98,7 @@ namespace MyHomelabBrowser
         static string? BuildLoginFailureMessage(UserProfile? profile)
         {
             if (profile?.LoginLockUntilUtc is DateTime until && until > DateTime.UtcNow)
-                return $"Trop de tentatives. Réessayez après {until.ToLocalTime():HH:mm:ss}.";
+                return Tr("Trop de tentatives. Réessayez après {0:HH:mm:ss}.", until.ToLocalTime());
 
             return null;
         }
@@ -148,7 +149,7 @@ namespace MyHomelabBrowser
             {
                 parent.Items.Add(new MenuItem
                 {
-                    Header = "Aucun autre profil",
+                    Header = Tr("Aucun autre profil"),
                     IsEnabled = false
                 });
             }
@@ -183,13 +184,13 @@ namespace MyHomelabBrowser
             {
                 ProfileButton.Content = "👤";
                 ProfileButton.ClearValue(BackgroundProperty);
-                ProfileButton.ToolTip = "Profils : se connecter ou créer un profil";
+                ProfileButton.ToolTip = Tr("Profils : se connecter ou créer un profil");
                 return;
             }
 
             ProfileButton.Content = GetProfileInitial(current!.Username);
             ProfileButton.Background = GetAvatarBrush(current.Username);
-            ProfileButton.ToolTip = $"Profil : {current.Username}";
+            ProfileButton.ToolTip = Tr("Profil : {0}", current.Username);
         }
 
         void Profile_Login_Click(object sender, RoutedEventArgs e)
@@ -197,7 +198,7 @@ namespace MyHomelabBrowser
             var dlg = new LoginDialog
             {
                 Owner = this,
-                Title = "Connexion",
+                Title = Tr("Connexion"),
                 ValidateLogin = (u, p) =>
                 {
                     var profile = _profileService.FindProfile(u);
@@ -222,7 +223,7 @@ namespace MyHomelabBrowser
             var dlg = new CreateProfileDialog
             {
                 Owner = this,
-                Title = "Créer un profil",
+                Title = Tr("Créer un profil"),
                 UsernameExists = _profileService.ProfileExists
             };
 
@@ -236,7 +237,7 @@ namespace MyHomelabBrowser
             }
             catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
             {
-                MessageBox.Show(this, ex.Message, "Créer un profil", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, ex.Message, Tr("Créer un profil"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 

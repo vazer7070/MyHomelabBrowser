@@ -1,6 +1,7 @@
 using System;
 using System.Security.Cryptography;
 using System.Text;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes.Security
 {
@@ -25,7 +26,7 @@ namespace MyHomelabBrowser.classes.Security
 
             if (value.Length == 0)
             {
-                error = "La clé est vide.";
+                error = Tr("La clé est vide.");
                 return false;
             }
 
@@ -34,7 +35,7 @@ namespace MyHomelabBrowser.classes.Security
 
             if (!TryDecodeBase32(value, out byte[] secret) || secret.Length < 10)
             {
-                error = "Clé invalide : attendu une clé en base32 (lettres A à Z et chiffres 2 à 7) ou une adresse otpauth://.";
+                error = Tr("Clé invalide : attendu une clé en base32 (lettres A à Z et chiffres 2 à 7) ou une adresse otpauth://.");
                 return false;
             }
 
@@ -50,7 +51,7 @@ namespace MyHomelabBrowser.classes.Security
             if (!Uri.TryCreate(value, UriKind.Absolute, out Uri? uri) ||
                 !uri.Host.Equals("totp", StringComparison.OrdinalIgnoreCase))
             {
-                error = "Seules les adresses otpauth://totp/… sont prises en charge.";
+                error = Tr("Seules les adresses otpauth://totp/… sont prises en charge.");
                 return false;
             }
 
@@ -91,13 +92,13 @@ namespace MyHomelabBrowser.classes.Security
 
             if (algorithm is not ("SHA1" or "SHA256" or "SHA512"))
             {
-                error = "Algorithme non pris en charge : " + algorithm;
+                error = Tr("Algorithme non pris en charge : ") + algorithm;
                 return false;
             }
 
             if (secretText == null || !TryDecodeBase32(secretText, out byte[] secret) || secret.Length < 10)
             {
-                error = "L’adresse otpauth ne contient pas de clé valide.";
+                error = Tr("L’adresse otpauth ne contient pas de clé valide.");
                 return false;
             }
 

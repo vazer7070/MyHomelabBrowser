@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes.Workspaces
 {
@@ -59,7 +60,7 @@ namespace MyHomelabBrowser.classes.Workspaces
         {
             string trimmed = (name ?? string.Empty).Trim();
             if (trimmed.Length == 0)
-                throw new ArgumentException("Le nom de l’espace est obligatoire.", nameof(name));
+                throw new ArgumentException(Tr("Le nom de l’espace est obligatoire."), nameof(name));
 
             List<WorkspaceTab> list = tabs
                 .Where(t => Uri.TryCreate(t.Url, UriKind.Absolute, out Uri? uri) && uri.Scheme is "http" or "https" or "file")
@@ -68,7 +69,7 @@ namespace MyHomelabBrowser.classes.Workspaces
                 .ToList();
 
             if (list.Count == 0)
-                throw new ArgumentException("Aucun onglet web à enregistrer.", nameof(tabs));
+                throw new ArgumentException(Tr("Aucun onglet web à enregistrer."), nameof(tabs));
 
             lock (_gate)
             {

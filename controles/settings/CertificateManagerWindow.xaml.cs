@@ -10,6 +10,7 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles.settings
 {
@@ -119,14 +120,14 @@ namespace MyHomelabBrowser.controles.settings
 
         private async void ImportCertificate_Click(object sender, RoutedEventArgs e)
         {
-            string? filePath = SelectCertificateFile("Ajouter une autorité à PommeBrowser");
+            string? filePath = SelectCertificateFile(Tr("Ajouter une autorité à PommeBrowser"));
             if (filePath is null)
                 return;
 
             CertificateImportResult result = _certificateService.ImportAuthorityForBrowser(filePath);
             MessageBox.Show(
                 result.Message,
-                result.Success ? "Certificat ajouté" : "Import impossible",
+                result.Success ? Tr("Certificat ajouté") : Tr("Import impossible"),
                 MessageBoxButton.OK,
                 result.Success ? MessageBoxImage.Information : MessageBoxImage.Error);
 
@@ -144,9 +145,9 @@ namespace MyHomelabBrowser.controles.settings
                 return;
 
             MessageBoxResult confirmation = MessageBox.Show(
-                $"Retirer « {SelectedCertificate.DisplayName} » des autorités de confiance de ce profil PommeBrowser ?\n\n" +
-                "Les sites qui dépendent de cette CA pourront à nouveau afficher une erreur TLS.",
-                "Retirer l’autorité",
+                Tr("Retirer « {0} » des autorités de confiance de ce profil PommeBrowser ?\n\n", SelectedCertificate.DisplayName) +
+                Tr("Les sites qui dépendent de cette CA pourront à nouveau afficher une erreur TLS."),
+                Tr("Retirer l’autorité"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
 
@@ -158,7 +159,7 @@ namespace MyHomelabBrowser.controles.settings
 
             MessageBox.Show(
                 result.Message,
-                result.Success ? "Certificat retiré" : "Suppression impossible",
+                result.Success ? Tr("Certificat retiré") : Tr("Suppression impossible"),
                 MessageBoxButton.OK,
                 result.Success ? MessageBoxImage.Information : MessageBoxImage.Error);
 
@@ -172,15 +173,15 @@ namespace MyHomelabBrowser.controles.settings
 
         private void InstallInWindows_Click(object sender, RoutedEventArgs e)
         {
-            string? filePath = SelectCertificateFile("Installer une autorité dans Windows");
+            string? filePath = SelectCertificateFile(Tr("Installer une autorité dans Windows"));
             if (filePath is null)
                 return;
 
             MessageBoxResult confirmation = MessageBox.Show(
-                "Cette opération est différente de l’ajout à PommeBrowser.\n\n" +
-                "L’autorité sera installée dans le magasin Windows de l’utilisateur courant et pourra être utilisée par d’autres applications de ce compte.\n\n" +
-                "Continuer ?",
-                "Installer dans Windows",
+                Tr("Cette opération est différente de l’ajout à PommeBrowser.\n\n") +
+                Tr("L’autorité sera installée dans le magasin Windows de l’utilisateur courant et pourra être utilisée par d’autres applications de ce compte.\n\n") +
+                Tr("Continuer ?"),
+                Tr("Installer dans Windows"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
 
@@ -192,7 +193,7 @@ namespace MyHomelabBrowser.controles.settings
 
             MessageBox.Show(
                 result.Message,
-                result.Success ? "Certificat installé" : "Installation impossible",
+                result.Success ? Tr("Certificat installé") : Tr("Installation impossible"),
                 MessageBoxButton.OK,
                 result.Success ? MessageBoxImage.Information : MessageBoxImage.Error);
 
@@ -205,7 +206,7 @@ namespace MyHomelabBrowser.controles.settings
             var dialog = new OpenFileDialog
             {
                 Title = title,
-                Filter = "Certificats publics (*.cer;*.crt;*.der;*.pem)|*.cer;*.crt;*.der;*.pem|Tous les fichiers (*.*)|*.*",
+                Filter = Tr("Certificats publics (*.cer;*.crt;*.der;*.pem)|*.cer;*.crt;*.der;*.pem|Tous les fichiers (*.*)|*.*"),
                 CheckFileExists = true,
                 Multiselect = false
             };
@@ -233,8 +234,8 @@ namespace MyHomelabBrowser.controles.settings
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    $"Impossible d’ouvrir le gestionnaire Windows : {ex.Message}",
-                    "Certificats",
+                    Tr("Impossible d’ouvrir le gestionnaire Windows : {0}", ex.Message),
+                    Tr("Certificats"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }

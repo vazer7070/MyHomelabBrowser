@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -178,7 +179,7 @@ namespace MyHomelabBrowser
                 return;
 
             _homelabServices.Remove(id);
-            ShowToast("Service retiré", service.Name, ToastKind.Info, "Annuler", () => _homelabServices.AddOrUpdate(service));
+            ShowToast(Tr("Service retiré"), service.Name, ToastKind.Info, Tr("Annuler"), () => _homelabServices.AddOrUpdate(service));
         }
 
         void ImportLocalFavoritesAsServices()
@@ -197,7 +198,7 @@ namespace MyHomelabBrowser
             if (added > 0 && _serviceMonitor != null)
                 _ = _serviceMonitor.CheckAllAsync();
 
-            ShowToast("Services ajoutés", added == 1 ? "1 favori local ajouté." : $"{added} favoris locaux ajoutés.", ToastKind.Success);
+            ShowToast(Tr("Services ajoutés"), added == 1 ? Tr("1 favori local ajouté.") : Tr("{0} favoris locaux ajoutés.", added), ToastKind.Success);
         }
 
         /// <summary>
@@ -231,16 +232,16 @@ namespace MyHomelabBrowser
             {
                 ServiceCheckResult result = _serviceMonitor?.GetResult(service.Id) ?? ServiceCheckResult.Unknown;
                 ShowToast(
-                    $"{name} ne répond plus",
+                    Tr("{0} ne répond plus", name),
                     string.IsNullOrWhiteSpace(result.Error) ? service.Url : $"{service.Url} — {result.Error}",
                     ToastKind.Warning,
-                    "Ouvrir",
+                    Tr("Ouvrir"),
                     () => CreateTab(service.Url),
                     TimeSpan.FromSeconds(12));
             }
             else
             {
-                ShowToast($"{name} est de nouveau en ligne", service.Url, ToastKind.Success);
+                ShowToast(Tr("{0} est de nouveau en ligne", name), service.Url, ToastKind.Success);
             }
         }
 

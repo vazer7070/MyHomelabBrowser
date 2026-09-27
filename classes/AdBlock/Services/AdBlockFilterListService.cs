@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes.AdBlock.Services
 {
@@ -31,7 +32,7 @@ namespace MyHomelabBrowser.classes.AdBlock.Services
         {
             var result = new List<(string SourceName, string Content)>
             {
-                ("PommeBrowser intégré", BuiltInFallbackRules)
+                (Tr("PommeBrowser intégré"), BuiltInFallbackRules)
             };
 
             AdBlockSettings settings = _settingsService.Current;
@@ -78,7 +79,7 @@ namespace MyHomelabBrowser.classes.AdBlock.Services
             {
                 AdBlockSettings settings = _settingsService.Current;
                 if (!force && !NeedsUpdate(settings))
-                    return new AdBlockUpdateResult(true, 0, "Les listes sont déjà à jour.");
+                    return new AdBlockUpdateResult(true, 0, Tr("Les listes sont déjà à jour."));
 
                 string listDirectory = GetListDirectory();
                 Directory.CreateDirectory(listDirectory);
@@ -88,7 +89,7 @@ namespace MyHomelabBrowser.classes.AdBlock.Services
                 foreach (AdBlockSubscription subscription in settings.Subscriptions.Where(item => item.Enabled))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    StatusChanged?.Invoke($"Téléchargement de {subscription.Name}…");
+                    StatusChanged?.Invoke(Tr("Téléchargement de {0}…", subscription.Name));
 
                     try
                     {
@@ -97,7 +98,7 @@ namespace MyHomelabBrowser.classes.AdBlock.Services
                         string content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
                         if (!LooksLikeFilterList(content))
-                            throw new InvalidDataException("Le contenu reçu ne ressemble pas à une liste de filtres.");
+                            throw new InvalidDataException(Tr("Le contenu reçu ne ressemble pas à une liste de filtres."));
 
                         string path = GetSubscriptionPath(listDirectory, subscription);
                         string temporaryPath = path + ".tmp";
@@ -118,10 +119,10 @@ namespace MyHomelabBrowser.classes.AdBlock.Services
                 }
 
                 string message = errors.Count == 0
-                    ? $"{updated} liste{(updated > 1 ? "s" : string.Empty)} mise{(updated > 1 ? "s" : string.Empty)} à jour."
+                    ? Tr("{0} liste{1} mise{2} à jour.", updated, (updated > 1 ? "s" : string.Empty), (updated > 1 ? "s" : string.Empty))
                     : updated > 0
-                        ? $"{updated} liste(s) mise(s) à jour. {errors.Count} échec(s)."
-                        : "Impossible de mettre à jour les listes : " + string.Join(" | ", errors);
+                        ? Tr("{0} liste(s) mise(s) à jour. {1} échec(s).", updated, errors.Count)
+                        : Tr("Impossible de mettre à jour les listes : ") + string.Join(" | ", errors);
 
                 StatusChanged?.Invoke(message);
                 return new AdBlockUpdateResult(updated > 0 || errors.Count == 0, updated, message);

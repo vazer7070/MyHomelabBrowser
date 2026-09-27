@@ -4,6 +4,7 @@ using MyHomelabBrowser.classes.Security;
 using System;
 using System.Windows;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -63,7 +64,7 @@ namespace MyHomelabBrowser.controles
             int remaining = Totp.SecondsRemaining(_parameters, now);
             CodeText.Text = Totp.FormatForDisplay(Totp.Generate(_parameters, now));
             CountdownBar.Value = remaining;
-            CountdownText.Text = remaining == 1 ? "Nouveau code dans 1 seconde" : $"Nouveau code dans {remaining} secondes";
+            CountdownText.Text = remaining == 1 ? Tr("Nouveau code dans 1 seconde") : Tr("Nouveau code dans {0} secondes", remaining);
         }
 
         private void SecretBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
@@ -72,7 +73,7 @@ namespace MyHomelabBrowser.controles
             bool valid = Totp.TryParse(SecretBox.Text, out TotpParameters parameters, out _);
             SaveButton.IsEnabled = valid;
             PreviewText.Text = valid
-                ? $"Code actuel : {Totp.FormatForDisplay(Totp.Generate(parameters, DateTimeOffset.UtcNow))} — vérifiez qu’il correspond à celui du service."
+                ? Tr("Code actuel : {0} — vérifiez qu’il correspond à celui du service.", Totp.FormatForDisplay(Totp.Generate(parameters, DateTimeOffset.UtcNow)))
                 : string.Empty;
         }
 
@@ -112,11 +113,11 @@ namespace MyHomelabBrowser.controles
             string code = Totp.Generate(_parameters, DateTimeOffset.UtcNow);
             if (!ClipboardHelper.TryCopyWithAutoClear(code))
             {
-                ShowStatus("Le presse-papiers est momentanément indisponible.");
+                ShowStatus(Tr("Le presse-papiers est momentanément indisponible."));
                 return;
             }
 
-            ShowStatus("Code copié — le presse-papiers sera effacé dans 30 secondes.");
+            ShowStatus(Tr("Code copié — le presse-papiers sera effacé dans 30 secondes."));
         }
 
         private void ShowStatus(string message)

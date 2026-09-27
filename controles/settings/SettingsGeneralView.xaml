@@ -185,16 +185,13 @@
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
 
-                            <!-- Choix de la langue : affiché une fois l'interface traduite. -->
                             <TextBlock x:Name="LanguageLabel"
-                                       Visibility="Collapsed"
                                        Grid.Row="1"
                                        Text="Langue"
                                        Style="{StaticResource SettingsLabel}"
                                        VerticalAlignment="Center"
                                        Margin="0,10,0,0"/>
                             <ComboBox x:Name="LanguageBox"
-                                      Visibility="Collapsed"
                                       Grid.Row="1"
                                       Grid.Column="1"
                                       Margin="0,10,0,0"

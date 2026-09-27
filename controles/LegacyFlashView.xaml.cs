@@ -2,6 +2,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -42,7 +43,7 @@ namespace MyHomelabBrowser.controles
         public void SetLaunching()
         {
             ErrorText.Visibility = Visibility.Collapsed;
-            StatusText.Text = "Lancement de Basilisk…";
+            StatusText.Text = Tr("Lancement de Basilisk…");
             Spinner.Visibility = Visibility.Visible;
             _spinTimer.Start();
         }
@@ -51,14 +52,14 @@ namespace MyHomelabBrowser.controles
         {
             _spinTimer.Stop();
             Spinner.Visibility = Visibility.Collapsed;
-            StatusText.Text = $"Basilisk lancé ✅ (PID {pid})";
+            StatusText.Text = Tr("Basilisk lancé ✅ (PID {0})", pid);
         }
 
         public void SetError(string message)
         {
             _spinTimer.Stop();
             Spinner.Visibility = Visibility.Collapsed;
-            StatusText.Text = "Échec du lancement ❌";
+            StatusText.Text = Tr("Échec du lancement ❌");
             ErrorText.Text = message;
             ErrorText.Visibility = Visibility.Visible;
         }

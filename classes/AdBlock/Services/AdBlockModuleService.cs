@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes.AdBlock.Services
 {
@@ -13,7 +14,7 @@ namespace MyHomelabBrowser.classes.AdBlock.Services
         private long _sessionBlockedCount;
         private long _lastStatisticsNotificationTick;
         private bool _initialized;
-        private string _statusMessage = "Initialisation…";
+        private string _statusMessage = Tr("Initialisation…");
 
         public AdBlockSettingsService SettingsService { get; }
         public AdBlockFilterListService FilterLists { get; }
@@ -221,13 +222,13 @@ namespace MyHomelabBrowser.classes.AdBlock.Services
             await _reloadLock.WaitAsync().ConfigureAwait(false);
             try
             {
-                _statusMessage = "Chargement des règles…";
+                _statusMessage = Tr("Chargement des règles…");
                 StatusChanged?.Invoke(_statusMessage);
 
                 var sources = FilterLists.LoadAvailableLists();
                 await Task.Run(() => Engine.ReplaceRules(sources)).ConfigureAwait(false);
 
-                _statusMessage = $"{Engine.NetworkRuleCount:N0} règles réseau et {Engine.CosmeticRuleCount:N0} règles visuelles chargées.";
+                _statusMessage = Tr("{0:N0} règles réseau et {1:N0} règles visuelles chargées.", Engine.NetworkRuleCount, Engine.CosmeticRuleCount);
                 RulesChanged?.Invoke();
                 StatusChanged?.Invoke(_statusMessage);
                 StateChanged?.Invoke();

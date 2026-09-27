@@ -4,6 +4,7 @@ using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using MyHomelabBrowser.classes.Profiles;
 using MyHomelabBrowser.classes.Security;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes
 {
@@ -137,7 +138,7 @@ namespace MyHomelabBrowser.classes
 
                                 if (App.Current.MainWindow is MainWindow mw)
                                     mw.ShowToast(
-                                        "Téléchargement terminé",
+                                        Tr("Téléchargement terminé"),
                                         item.FileName,
                                         item
                                     );

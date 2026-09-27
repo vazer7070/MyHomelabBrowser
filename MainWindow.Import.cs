@@ -1,6 +1,7 @@
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Import;
 using MyHomelabBrowser.controles;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -29,15 +30,15 @@ namespace MyHomelabBrowser
 
             string message = added.Count switch
             {
-                0 => "Tous ces favoris étaient déjà présents.",
-                1 => "1 favori ajouté",
-                _ => $"{added.Count} favoris ajoutés"
+                0 => Tr("Tous ces favoris étaient déjà présents."),
+                1 => Tr("1 favori ajouté"),
+                _ => Tr("{0} favoris ajoutés", added.Count)
             };
 
             if (added.Count > 0 && skipped > 0)
-                message += $" ({skipped} déjà présent{(skipped > 1 ? "s" : "")})";
+                message += Tr(" ({0} déjà présent{1})", skipped, (skipped > 1 ? "s" : ""));
 
-            ShowToast("Import depuis " + dialog.SourceName, message, added.Count > 0 ? ToastKind.Success : ToastKind.Info);
+            ShowToast(Tr("Import depuis {0}", dialog.SourceName), message, added.Count > 0 ? ToastKind.Success : ToastKind.Info);
         }
     }
 }

@@ -10,6 +10,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Animation;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser
 {
@@ -322,7 +323,7 @@ namespace MyHomelabBrowser
 
 
                 // Statut initial
-                SetUpdateStatus("Prêt à vérifier les mises à jour.");
+                SetUpdateStatus(Tr("Prêt à vérifier les mises à jour."));
                 CheckUpdatesRequested?.Invoke();
             }
 
@@ -427,7 +428,7 @@ namespace MyHomelabBrowser
         {
             var dlg = new OpenFolderDialog
             {
-                Title = "Choisir le dossier de téléchargement",
+                Title = Tr("Choisir le dossier de téléchargement"),
                 InitialDirectory = string.IsNullOrWhiteSpace(_working.DownloadFolder)
                     ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads")
                     : _working.DownloadFolder
@@ -456,8 +457,8 @@ namespace MyHomelabBrowser
         void ClearFlashCompatibility_Click(object sender, RoutedEventArgs e)
         {
             MessageBoxResult result = MessageBox.Show(
-                "Effacer les choix Ruffle/Legacy appris pour le profil actuel ?",
-                "Compatibilité Flash",
+                Tr("Effacer les choix Ruffle/Legacy appris pour le profil actuel ?"),
+                Tr("Compatibilité Flash"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
 
@@ -466,8 +467,8 @@ namespace MyHomelabBrowser
 
             FlashCompatibilityMemory.ClearForCurrentProfile();
             MessageBox.Show(
-                "La compatibilité apprise a été réinitialisée.",
-                "Compatibilité Flash",
+                Tr("La compatibilité apprise a été réinitialisée."),
+                Tr("Compatibilité Flash"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
         }
@@ -484,8 +485,8 @@ namespace MyHomelabBrowser
 
             var dlg = new OpenFileDialog
             {
-                Title = "Choisir Basilisk-Portable.exe",
-                Filter = "Basilisk (Basilisk-Portable.exe)|Basilisk-Portable.exe|Tous les fichiers|*.*",
+                Title = Tr("Choisir Basilisk-Portable.exe"),
+                Filter = Tr("Basilisk (Basilisk-Portable.exe)|Basilisk-Portable.exe|Tous les fichiers|*.*"),
                 InitialDirectory = initialDir
             };
 
@@ -517,8 +518,8 @@ namespace MyHomelabBrowser
             if (!IsValidHost(host))
             {
                 MessageBox.Show(
-                    "Domaine invalide.\nExemple : jeu.exemple.com",
-                    "Erreur",
+                    Tr("Domaine invalide.\nExemple : jeu.exemple.com"),
+                    Tr("Erreur"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning
                 );

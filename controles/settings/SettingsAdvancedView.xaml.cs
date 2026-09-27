@@ -1,6 +1,7 @@
 using MyHomelabBrowser.classes.Flash;
 using System.Windows;
 using System.Windows.Controls;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles.settings
 {
@@ -17,15 +18,14 @@ namespace MyHomelabBrowser.controles.settings
             if (RuffleAssetService.HasLocalAssets)
             {
                 RuffleRuntimeStatusText.Text =
-                    $"Ruffle {RuffleAssetService.PinnedVersion} est embarqué localement. " +
-                    "Le navigateur ne dépend pas d’un CDN pour exécuter Flash.";
+                    Tr("Ruffle {0} est embarqué localement. ", RuffleAssetService.PinnedVersion) +
+                    Tr("Le navigateur ne dépend pas d’un CDN pour exécuter Flash.");
             }
             else
             {
                 RuffleRuntimeStatusText.Text =
-                    $"Les fichiers locaux Ruffle {RuffleAssetService.PinnedVersion} sont absents. " +
-                    "Le navigateur utilisera temporairement le CDN épinglé. Lance " +
-                    "install-ruffle-assets.ps1 avant de publier l’application.";
+                    Tr("Les fichiers locaux Ruffle {0} sont absents. ", RuffleAssetService.PinnedVersion) +
+                    Tr("Le navigateur utilisera temporairement le CDN épinglé. Lance install-ruffle-assets.ps1 avant de publier l’application.");
             }
         }
     }

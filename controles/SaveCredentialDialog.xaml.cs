@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using System.Windows;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -36,7 +37,7 @@ namespace MyHomelabBrowser.controles
 
             Host = host;
             Username = string.IsNullOrWhiteSpace(username)
-                ? "(aucun utilisateur)"
+                ? Tr("(aucun utilisateur)")
                 : username;
 
             DataContext = this;

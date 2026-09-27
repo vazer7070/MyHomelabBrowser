@@ -7,6 +7,7 @@ using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Threading;
 using System.Threading.Tasks;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes.Homelab
 {
@@ -49,7 +50,7 @@ namespace MyHomelabBrowser.classes.Homelab
         public async Task<ServiceCheckResult> CheckAsync(string url, CancellationToken cancellationToken = default)
         {
             if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri))
-                return new ServiceCheckResult(ServiceState.Offline, null, null, "adresse invalide", DateTime.Now);
+                return new ServiceCheckResult(ServiceState.Offline, null, null, Tr("adresse invalide"), DateTime.Now);
 
             var stopwatch = Stopwatch.StartNew();
             try
@@ -66,7 +67,7 @@ namespace MyHomelabBrowser.classes.Homelab
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                return new ServiceCheckResult(ServiceState.Offline, null, null, "pas de réponse", DateTime.Now);
+                return new ServiceCheckResult(ServiceState.Offline, null, null, Tr("pas de réponse"), DateTime.Now);
             }
             catch (HttpRequestException ex)
             {
@@ -81,22 +82,22 @@ namespace MyHomelabBrowser.classes.Homelab
                 switch (inner)
                 {
                     case SocketException { SocketErrorCode: SocketError.ConnectionRefused }:
-                        return "connexion refusée";
+                        return Tr("connexion refusée");
                     case SocketException { SocketErrorCode: SocketError.HostNotFound or SocketError.NoData }:
-                        return "nom introuvable";
+                        return Tr("nom introuvable");
                     case SocketException { SocketErrorCode: SocketError.TimedOut or SocketError.HostUnreachable or SocketError.NetworkUnreachable }:
-                        return "injoignable";
+                        return Tr("injoignable");
                     case AuthenticationException:
-                        return "certificat refusé";
+                        return Tr("certificat refusé");
                 }
             }
 
             return ex.HttpRequestError switch
             {
-                HttpRequestError.NameResolutionError => "nom introuvable",
-                HttpRequestError.ConnectionError => "injoignable",
-                HttpRequestError.SecureConnectionError => "erreur TLS",
-                _ => "erreur réseau"
+                HttpRequestError.NameResolutionError => Tr("nom introuvable"),
+                HttpRequestError.ConnectionError => Tr("injoignable"),
+                HttpRequestError.SecureConnectionError => Tr("erreur TLS"),
+                _ => Tr("erreur réseau")
             };
         }
 

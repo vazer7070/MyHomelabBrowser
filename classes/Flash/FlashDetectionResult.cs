@@ -1,3 +1,4 @@
+using static MyHomelabBrowser.classes.Localization.Loc;
 namespace MyHomelabBrowser.classes.Flash
 {
     public enum FlashEvidenceKind
@@ -31,7 +32,7 @@ namespace MyHomelabBrowser.classes.Flash
         public string Describe()
         {
             if (!Detected)
-                return "Aucun contenu Flash détecté";
+                return Tr("Aucun contenu Flash détecté");
 
             string source = string.IsNullOrWhiteSpace(SourceUrl)
                 ? string.Empty
@@ -39,14 +40,14 @@ namespace MyHomelabBrowser.classes.Flash
 
             return Evidence switch
             {
-                FlashEvidenceKind.Embed => "Élément Flash <embed>" + source,
-                FlashEvidenceKind.Object => "Élément Flash <object>" + source,
-                FlashEvidenceKind.ObjectParameter => "Paramètre Flash movie/src" + source,
-                FlashEvidenceKind.SwfObjectCall => "Initialisation dynamique swfobject.embedSWF" + source,
-                FlashEvidenceKind.NetworkRequest => "Ressource SWF chargée par la page" + source,
-                FlashEvidenceKind.ExistingRufflePlayer => "Lecteur Ruffle déjà présent",
-                FlashEvidenceKind.DirectSwfNavigation => "Fichier SWF ouvert directement" + source,
-                _ => "Contenu Flash détecté" + source
+                FlashEvidenceKind.Embed => Tr("Élément Flash <embed>") + source,
+                FlashEvidenceKind.Object => Tr("Élément Flash <object>") + source,
+                FlashEvidenceKind.ObjectParameter => Tr("Paramètre Flash movie/src") + source,
+                FlashEvidenceKind.SwfObjectCall => Tr("Initialisation dynamique swfobject.embedSWF") + source,
+                FlashEvidenceKind.NetworkRequest => Tr("Ressource SWF chargée par la page") + source,
+                FlashEvidenceKind.ExistingRufflePlayer => Tr("Lecteur Ruffle déjà présent"),
+                FlashEvidenceKind.DirectSwfNavigation => Tr("Fichier SWF ouvert directement") + source,
+                _ => Tr("Contenu Flash détecté") + source
             };
         }
     }

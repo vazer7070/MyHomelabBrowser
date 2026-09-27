@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes.Homelab
 {
@@ -121,7 +122,7 @@ namespace MyHomelabBrowser.classes.Homelab
                 !(uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) ||
                 uri.Host.Length == 0)
             {
-                return "L’adresse doit commencer par http:// ou https://.";
+                return Tr("L’adresse doit commencer par http:// ou https://.");
             }
 
             return null;

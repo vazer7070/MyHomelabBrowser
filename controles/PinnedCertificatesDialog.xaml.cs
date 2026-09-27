@@ -2,6 +2,7 @@ using MyHomelabBrowser.classes.Profiles;
 using MyHomelabBrowser.classes.Security;
 using System.Linq;
 using System.Windows;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.controles
 {
@@ -21,7 +22,7 @@ namespace MyHomelabBrowser.controles
             var items = _store.GetAll().Select(p => new
             {
                 p.Authority,
-                Detail = $"{p.Subject} · expire le {p.NotAfter:dd/MM/yyyy} · accepté le {p.PinnedAt:dd/MM/yyyy}"
+                Detail = Tr("{0} · expire le {1:dd/MM/yyyy} · accepté le {2:dd/MM/yyyy}", p.Subject, p.NotAfter, p.PinnedAt)
             }).ToList();
 
             PinsList.ItemsSource = items;

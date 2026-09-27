@@ -9,6 +9,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace MyHomelabBrowser.classes.Support.Transports
 {
@@ -48,7 +49,7 @@ namespace MyHomelabBrowser.classes.Support.Transports
                 new ProductInfoHeaderValue("PommeBrowser-Support", "1.0"));
         }
 
-        public string Name => "API de support";
+        public string Name => Tr("API de support");
 
         public bool CanAttempt => SupportApiConfiguration.ResolveReportUri() != null;
 
@@ -59,7 +60,7 @@ namespace MyHomelabBrowser.classes.Support.Transports
         {
             Uri reportUri = SupportApiConfiguration.ResolveReportUri()
                 ?? throw new SupportApiUnavailableException(
-                    "L’API de support n’est pas encore configurée dans PommeBrowser.");
+                    Tr("L’API de support n’est pas encore configurée dans PommeBrowser."));
 
             using var request = new HttpRequestMessage(HttpMethod.Post, reportUri);
             request.Headers.CacheControl = new CacheControlHeaderValue
@@ -99,12 +100,12 @@ namespace MyHomelabBrowser.classes.Support.Transports
             catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
             {
                 throw new SupportApiUnavailableException(
-                    "L’API de support ne répond pas dans le délai prévu.", ex);
+                    Tr("L’API de support ne répond pas dans le délai prévu."), ex);
             }
             catch (HttpRequestException ex)
             {
                 throw new SupportApiUnavailableException(
-                    "Connexion à l’API de support impossible.", ex);
+                    Tr("Connexion à l’API de support impossible."), ex);
             }
 
             using (response)
@@ -116,7 +117,7 @@ namespace MyHomelabBrowser.classes.Support.Transports
                 if (IsEndpointUnavailable(response.StatusCode))
                 {
                     throw new SupportApiUnavailableException(
-                        $"L’endpoint de support n’est pas disponible (HTTP {(int)response.StatusCode}).");
+                        Tr("L’endpoint de support n’est pas disponible (HTTP {0}).", (int)response.StatusCode));
                 }
 
                 if (!response.IsSuccessStatusCode)
@@ -134,7 +135,7 @@ namespace MyHomelabBrowser.classes.Support.Transports
                         ? report.ClientReportId
                         : apiResponse.ReportId.Trim(),
                     Message = string.IsNullOrWhiteSpace(apiResponse?.Message)
-                        ? "Le rapport a été transmis au support."
+                        ? Tr("Le rapport a été transmis au support.")
                         : apiResponse.Message.Trim(),
                     Channel = SupportDeliveryChannel.BackendApi,
                     UsedFallback = false
@@ -154,7 +155,7 @@ namespace MyHomelabBrowser.classes.Support.Transports
 
         private static string ReadSafeApiError(string responseBody, HttpStatusCode statusCode)
         {
-            string fallback = $"L’API de support a refusé le rapport (HTTP {(int)statusCode}).";
+            string fallback = Tr("L’API de support a refusé le rapport (HTTP {0}).", (int)statusCode);
             if (string.IsNullOrWhiteSpace(responseBody))
                 return fallback;
 
