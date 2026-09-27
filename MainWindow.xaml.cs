@@ -52,7 +52,6 @@ namespace MyHomelabBrowser
         private bool _backHoldTriggered;
         readonly LegacyLauncher _legacyLauncher;
         readonly Dictionary<string, CoreWebView2Environment> _envByProfile = new();
-        bool _historyLoaded;
         bool _favoritesLoaded;
 
         private UpdateService? _updates;
@@ -76,13 +75,6 @@ namespace MyHomelabBrowser
         static readonly JsonSerializerOptions JsonOpts = new()
         {
             WriteIndented = true,
-            PropertyNameCaseInsensitive = true
-        };
-
-        // L'historique peut compter des milliers d'entrées : écriture compacte.
-        static readonly JsonSerializerOptions HistoryJsonOpts = new()
-        {
-            WriteIndented = false,
             PropertyNameCaseInsensitive = true
         };
 
@@ -127,7 +119,6 @@ namespace MyHomelabBrowser
                 FlashCompatibilityMemory.ReloadForCurrentProfile();
                 RemovedFeatureCleanup.CleanCurrentRoot();
 
-                _historyLoaded = false;
                 _favoritesLoaded = false;
 
                 LoadHistory();
@@ -145,6 +136,9 @@ namespace MyHomelabBrowser
 
             Loaded += async (_, _) =>
             {
+                // Moteur web et listes du bloqueur préparés en parallèle.
+                Task engineWarmUp = WarmUpWebEngineAsync();
+
                 try
                 {
                     await _adBlock.InitializeAsync();
@@ -153,6 +147,8 @@ namespace MyHomelabBrowser
                 {
                     Debug.WriteLine("[AdBlock] Initialisation : " + ex.Message);
                 }
+
+                await engineWarmUp;
 
                 _vault.ReloadForCurrentProfile();
                 RefreshProfileUI();
@@ -192,7 +188,6 @@ namespace MyHomelabBrowser
 
             FaviconStore.FaviconUpdated += host => Dispatcher.BeginInvoke(() => OnFaviconStored(host));
 
-            _historyLoaded = false;
             _favoritesLoaded = false;
 
             LoadHistory();

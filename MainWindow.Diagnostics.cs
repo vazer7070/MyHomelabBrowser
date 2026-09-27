@@ -72,7 +72,7 @@ namespace MyHomelabBrowser
                 new(Tr("Profil"), _profileService.Current?.Username ?? Tr("par défaut")),
                 new(Tr("Données"), profileRoot),
                 new(Tr("Données web"), $"{webData} ({FormatBytes(webDataSize)})"),
-                new(Tr("Historique"), Tr("{0} entrées", _history.Count)),
+                new(Tr("Historique"), Tr("{0} entrées", _historyStore?.Count() ?? _history.Count)),
                 new(Tr("Favoris"), _favorites.Count.ToString()),
                 new(Tr("Coffre"), _vault.VaultExists ? (_vault.IsUnlocked ? Tr("déverrouillé") : Tr("verrouillé")) : Tr("non créé"))
             }));
