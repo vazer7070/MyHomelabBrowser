@@ -11,7 +11,7 @@
                        Foreground="White"/>
 
             <TextBlock Text="Options techniques réservées aux utilisateurs avancés."
-                       Foreground="#FFB4B4"
+                       Foreground="{StaticResource WarningBrush}"
                        Margin="0,6,0,20"/>
 
             <Border Style="{StaticResource SettingsCard}">

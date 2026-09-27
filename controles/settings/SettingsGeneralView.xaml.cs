@@ -49,6 +49,10 @@ namespace MyHomelabBrowser.controles.settings
                     "Personnalisé")
             };
 
+            SearchEngineBox.ItemsSource = Enum.GetValues<BrowserSettings.SearchEngine>()
+                .Select(engine => new DnsOption<BrowserSettings.SearchEngine>(engine, UrlResolver.GetSearchEngineName(engine)))
+                .ToArray();
+
             Loaded += SettingsGeneralView_Loaded;
         }
 

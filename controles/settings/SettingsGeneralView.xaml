@@ -151,7 +151,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Text=""
-                                       FontFamily="Segoe Fluent Icons"
+                                       FontFamily="{StaticResource IconFont}"
                                        FontSize="18"
                                        Foreground="{StaticResource AccentBrush}"
                                        VerticalAlignment="Center"/>
@@ -210,20 +210,38 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Text=""
-                                       FontFamily="Segoe Fluent Icons"
+                                       FontFamily="{StaticResource IconFont}"
                                        FontSize="18"
                                        Foreground="{StaticResource AccentBrush}"
                                        VerticalAlignment="Center"/>
                             <TextBlock Grid.Column="2"
-                                       Text="Nouveaux onglets"
+                                       Text="Recherche et nouveaux onglets"
                                        Style="{StaticResource SettingsTitle}"
                                        Margin="0"
                                        VerticalAlignment="Center"/>
                         </Grid>
 
-                        <TextBlock Text="Page ouverte lors de la création d’un nouvel onglet classique."
+                        <TextBlock Text="Moteur utilisé par la barre d’adresse et la page d’accueil."
                                    Style="{StaticResource SettingsLabel}"
                                    Margin="0,0,0,7"/>
+
+                        <ComboBox x:Name="SearchEngineBox"
+                                  Style="{StaticResource DnsComboBoxStyle}"
+                                  SelectedValuePath="Value"
+                                  SelectedValue="{Binding Search, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Label}"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+
+                        <TextBlock Text="Page ouverte lors de la création d’un nouvel onglet classique (laisser vide pour la page d’accueil PommeBrowser)."
+                                   Style="{StaticResource SettingsLabel}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,16,0,7"/>
 
                         <TextBox x:Name="NewTabPageBox"
                                  Text="{Binding NewTabPage, UpdateSourceTrigger=PropertyChanged}"/>
@@ -240,7 +258,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Text=""
-                                       FontFamily="Segoe Fluent Icons"
+                                       FontFamily="{StaticResource IconFont}"
                                        FontSize="18"
                                        Foreground="{StaticResource AccentBrush}"
                                        VerticalAlignment="Center"/>
@@ -303,7 +321,7 @@
                                        Margin="2,6,0,0"/>
                             <TextBlock x:Name="CustomDnsValidationText"
                                        FontSize="12"
-                                       Foreground="#FFFF8A8A"
+                                       Foreground="{StaticResource DangerBrush}"
                                        TextWrapping="Wrap"
                                        Margin="2,6,0,0"
                                        Visibility="Collapsed"/>
@@ -317,7 +335,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Text=""
-                                       FontFamily="Segoe Fluent Icons"
+                                       FontFamily="{StaticResource IconFont}"
                                        FontSize="14"
                                        Foreground="{StaticResource AccentBrush}"
                                        VerticalAlignment="Top"
@@ -354,7 +372,7 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text=""
-                                           FontFamily="Segoe Fluent Icons"
+                                           FontFamily="{StaticResource IconFont}"
                                            FontSize="18"
                                            Foreground="{StaticResource AccentBrush}"
                                            VerticalAlignment="Center"/>

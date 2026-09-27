@@ -92,7 +92,7 @@
                         Margin="16,-3,16,3"
                         Padding="14,6"
                         Foreground="{StaticResource DangerBrush}"
-                        Background="#332020"
+                        Background="{StaticResource DangerSoftBrush}"
                         BorderThickness="0"
                         Click="Delete_Click"/>
 

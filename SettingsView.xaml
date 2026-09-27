@@ -46,7 +46,7 @@
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
-                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="#31577D"/>
+                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{StaticResource AccentStrongBrush}"/>
                                 <Setter TargetName="SelectionMark" Property="Visibility" Value="Visible"/>
                                 <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
                                 <Setter Property="FontWeight" Value="SemiBold"/>

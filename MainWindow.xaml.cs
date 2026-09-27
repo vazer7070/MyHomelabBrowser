@@ -126,6 +126,7 @@ namespace MyHomelabBrowser
         public MainWindow()
         {
             InitializeComponent();
+            DarkTitleBar.Apply(this);
 
             _suspendTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
             _suspendTimer.Tick += (_, _) => AutoSuspendTabs();

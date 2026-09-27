@@ -196,10 +196,10 @@ namespace MyHomelabBrowser
             var icon = new TextBlock
             {
                 Text = "",
-                FontFamily = new System.Windows.Media.FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
                 FontSize = 30,
                 HorizontalAlignment = HorizontalAlignment.Center
             };
+            icon.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
             icon.SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
 
             var title = new TextBlock
