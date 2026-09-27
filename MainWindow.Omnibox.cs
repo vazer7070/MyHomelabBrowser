@@ -85,6 +85,7 @@ namespace MyHomelabBrowser
             UpdateSecurityIndicator(url);
             UpdateFavoriteButton();
             UpdateNavButtonsFast();
+            UpdateZoomIndicator();
         }
 
         void UpdateSecurityIndicator(string? url)

@@ -95,6 +95,7 @@ namespace MyHomelabBrowser
             _suspendTimer.Tick += (_, _) => AutoSuspendTabs();
 
             InitializeToasts();
+            InitializeFindBar();
             _ = LoadRemoteChangelogAsync();
 
             _vault = new CredentialVaultService(() => Path.Combine(AppDataContext.Root, "vault.json.enc"));

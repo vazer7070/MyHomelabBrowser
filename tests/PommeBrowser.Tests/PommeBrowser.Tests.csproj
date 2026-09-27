@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
@@ -30,6 +31,9 @@
     <Compile Include="..\..\classes\BrowserSettings.cs" Link="App\BrowserSettings.cs" />
     <Compile Include="..\..\classes\CommandSetting.cs" Link="App\CommandSetting.cs" />
     <Compile Include="..\..\classes\UrlResolver.cs" Link="App\UrlResolver.cs" />
+    <Compile Include="..\..\classes\FavoriteItem.cs" Link="App\FavoriteItem.cs" />
+    <Compile Include="..\..\classes\SiteZoomStore.cs" Link="App\SiteZoomStore.cs" />
+    <Compile Include="..\..\classes\Import\BookmarkImporter.cs" Link="App\Import\BookmarkImporter.cs" />
     <Compile Include="..\..\classes\Profiles\PasswordHasher.cs" Link="App\Profiles\PasswordHasher.cs" />
     <Compile Include="..\..\classes\Profiles\ProfileNameRules.cs" Link="App\Profiles\ProfileNameRules.cs" />
     <Compile Include="..\..\classes\Profiles\WebViewProfileData.cs" Link="App\Profiles\WebViewProfileData.cs" />

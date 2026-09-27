@@ -334,6 +334,7 @@ namespace MyHomelabBrowser
                 return content;
 
             InitializeFlashRuntimeForCore(content);
+            AttachSiteZoom(web, content);
 
             core.NavigationStarting += (_, e) =>
             {
@@ -342,7 +343,13 @@ namespace MyHomelabBrowser
                 header.SetLoading(true);
 
                 if (IsActiveTab(content))
+                {
                     UpdateNavButtonsFast();
+
+                    // Nouvelle page : les résultats de recherche ne s'appliquent plus.
+                    if (!e.IsRedirected && _findBarOpen)
+                        CloseFindBar(focusPage: false);
+                }
             };
 
             web.NavigationCompleted += async (_, e) =>

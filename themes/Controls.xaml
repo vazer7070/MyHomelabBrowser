@@ -1062,4 +1062,71 @@
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
         <Setter Property="Background" Value="Transparent"/>
     </Style>
+    <!-- ================================================================
+         BOÎTES DE DIALOGUE (controles:DialogWindow)
+         Fenêtre sans bordure système : carte arrondie, titre, bouton de
+         fermeture (commande Close) et ombre. Le contenu fournit ses boutons.
+         ================================================================ -->
+    <Style x:Key="DialogWindowStyle" TargetType="Window">
+        <Setter Property="WindowStyle" Value="None"/>
+        <Setter Property="AllowsTransparency" Value="True"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="ResizeMode" Value="NoResize"/>
+        <Setter Property="SizeToContent" Value="Height"/>
+        <Setter Property="ShowInTaskbar" Value="False"/>
+        <Setter Property="WindowStartupLocation" Value="CenterOwner"/>
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+        <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
+        <Setter Property="UseLayoutRounding" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Window">
+                    <Border Margin="18"
+                            CornerRadius="{StaticResource CardCornerRadius}"
+                            Background="{StaticResource PanelBrush}"
+                            BorderBrush="{StaticResource BorderStrongBrush}"
+                            BorderThickness="1"
+                            Effect="{StaticResource PopupShadow}">
+                        <DockPanel>
+                            <Grid DockPanel.Dock="Top" Height="52" Background="Transparent">
+                                <TextBlock Text="{TemplateBinding Title}"
+                                           Margin="20,0,56,0"
+                                           VerticalAlignment="Center"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <Button HorizontalAlignment="Right"
+                                        Margin="0,0,10,0"
+                                        Style="{StaticResource InlineIconButtonStyle}"
+                                        Foreground="{StaticResource TextSecondaryBrush}"
+                                        Command="ApplicationCommands.Close"
+                                        IsCancel="True"
+                                        ToolTip="Fermer">
+                                    <TextBlock Text="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="11"/>
+                                </Button>
+                            </Grid>
+                            <ContentPresenter Margin="20,0,20,20"/>
+                        </DockPanel>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Rangée de boutons en bas d'une boîte de dialogue. -->
+    <Style x:Key="DialogButtonBarStyle" TargetType="StackPanel">
+        <Setter Property="Orientation" Value="Horizontal"/>
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+        <Setter Property="Margin" Value="0,20,0,0"/>
+    </Style>
+
+    <Style x:Key="DialogHintStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="FontSize" Value="12.5"/>
+    </Style>
+
 </ResourceDictionary>

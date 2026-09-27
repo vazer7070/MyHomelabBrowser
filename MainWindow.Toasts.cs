@@ -62,6 +62,9 @@ namespace MyHomelabBrowser
         {
             ToastPopup.IsOpen = false;
             CommandSuggestionsPopup.IsOpen = false;
+
+            // La barre de recherche reste ouverte : elle réapparaît à la réactivation.
+            FindPopup.IsOpen = false;
         }
 
         public void ShowToast(string title, string message, DownloadItem? item)
