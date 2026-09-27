@@ -149,6 +149,8 @@ namespace MyHomelabBrowser
             // Les écritures différées (historique, favoris) visent le dossier du profil
             // courant : on les termine avant que le profil change.
             _profileService.ProfileChanging += FlushPersistentState;
+            _profileService.ProfileRenamed += OnProfileRenamed;
+            _profileService.ProfileDeleted += OnProfileDeleted;
 
             _profileService.ProfileChanged += changedProfile =>
             {

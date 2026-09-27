@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Tests de la logique sans interface. Les fichiers sont liés depuis l'application
+    plutôt que référencés : le projet reste en net10.0 et s'exécute sur n'importe quel
+    système (l'application, elle, cible net10.0-windows et WPF).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>PommeBrowser.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup Label="Sources de l'application">
+    <Compile Include="..\..\classes\AtomicFile.cs" Link="App\AtomicFile.cs" />
+    <Compile Include="..\..\classes\BrowserSettings.cs" Link="App\BrowserSettings.cs" />
+    <Compile Include="..\..\classes\CommandSetting.cs" Link="App\CommandSetting.cs" />
+    <Compile Include="..\..\classes\UrlResolver.cs" Link="App\UrlResolver.cs" />
+    <Compile Include="..\..\classes\Profiles\PasswordHasher.cs" Link="App\Profiles\PasswordHasher.cs" />
+    <Compile Include="..\..\classes\Profiles\ProfileNameRules.cs" Link="App\Profiles\ProfileNameRules.cs" />
+    <Compile Include="..\..\classes\Profiles\WebViewProfileData.cs" Link="App\Profiles\WebViewProfileData.cs" />
+    <Compile Include="..\..\classes\AdBlock\Models\AdBlockDomain.cs" Link="App\AdBlock\AdBlockDomain.cs" />
+    <Compile Include="..\..\classes\AdBlock\Models\AdBlockRequestContext.cs" Link="App\AdBlock\AdBlockRequestContext.cs" />
+    <Compile Include="..\..\classes\AdBlock\Models\AdBlockRuleModels.cs" Link="App\AdBlock\AdBlockRuleModels.cs" />
+    <Compile Include="..\..\classes\AdBlock\Models\AdBlockRuleParser.cs" Link="App\AdBlock\AdBlockRuleParser.cs" />
+    <Compile Include="..\..\classes\AdBlock\Services\AdBlockEngine.cs" Link="App\AdBlock\AdBlockEngine.cs" />
+    <Compile Include="..\..\classes\Support\ISupportTransport.cs" Link="App\Support\ISupportTransport.cs" />
+    <Compile Include="..\..\classes\Support\Models\SupportAttachment.cs" Link="App\Support\SupportAttachment.cs" />
+    <Compile Include="..\..\classes\Support\Models\SupportReportRequest.cs" Link="App\Support\SupportReportRequest.cs" />
+    <Compile Include="..\..\classes\Support\Models\SupportSubmissionResult.cs" Link="App\Support\SupportSubmissionResult.cs" />
+    <Compile Include="..\..\classes\Support\Transports\LocalSupportExportTransport.cs" Link="App\Support\LocalSupportExportTransport.cs" />
+  </ItemGroup>
+
+</Project>

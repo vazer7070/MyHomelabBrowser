@@ -13,6 +13,9 @@
 		<FileVersion>0.9.8.0</FileVersion>
 
 		<ApplicationIcon>PommeBrowser_desktop.ico</ApplicationIcon>
+
+		<!-- Le projet de tests vit dans le même dépôt : ses fichiers ne font pas partie de l'application. -->
+		<DefaultItemExcludes>$(DefaultItemExcludes);tests\**</DefaultItemExcludes>
 	</PropertyGroup>
 
 	<ItemGroup>

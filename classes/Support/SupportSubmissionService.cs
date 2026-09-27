@@ -7,22 +7,22 @@ using System.Threading.Tasks;
 namespace MyHomelabBrowser.classes.Support
 {
     /// <summary>
-    /// Routeur unique du support. L'interface ne connaît plus Discord ni l'API.
-    /// Le backend sera automatiquement utilisé dès qu'une URL valide sera fournie
-    /// dans SupportApiConfiguration ou POMMEBROWSER_SUPPORT_API_URL.
+    /// Routeur unique du support. Le service en ligne est utilisé dès qu'une URL valide
+    /// est fournie dans SupportApiConfiguration ou POMMEBROWSER_SUPPORT_API_URL ; sinon,
+    /// ou s'il est injoignable, le rapport est enregistré localement.
     /// </summary>
     public sealed class SupportSubmissionService : IDisposable
     {
         private readonly SupportApiTransport _apiTransport;
-        private readonly LegacyDiscordSupportTransport _legacyTransport;
+        private readonly ISupportTransport _localTransport;
         private bool _disposed;
 
         public SupportSubmissionService(
             SupportApiTransport? apiTransport = null,
-            LegacyDiscordSupportTransport? legacyTransport = null)
+            ISupportTransport? localTransport = null)
         {
             _apiTransport = apiTransport ?? new SupportApiTransport();
-            _legacyTransport = legacyTransport ?? new LegacyDiscordSupportTransport();
+            _localTransport = localTransport ?? new LocalSupportExportTransport();
         }
 
         public async Task<SupportSubmissionResult> SendAsync(
@@ -40,31 +40,25 @@ namespace MyHomelabBrowser.classes.Support
                     return await _apiTransport.SendAsync(report, attachment, cancellationToken)
                         .ConfigureAwait(false);
                 }
-                catch (SupportApiUnavailableException) when (
-                    SupportApiConfiguration.AllowLegacyDiscordFallback)
+                catch (SupportApiUnavailableException)
                 {
-                    SupportSubmissionResult fallback = await _legacyTransport
+                    SupportSubmissionResult local = await _localTransport
                         .SendAsync(report, attachment, cancellationToken)
                         .ConfigureAwait(false);
 
                     return new SupportSubmissionResult
                     {
-                        Success = fallback.Success,
-                        ReportId = fallback.ReportId,
-                        Message = fallback.Message,
-                        Channel = fallback.Channel,
+                        Success = local.Success,
+                        ReportId = local.ReportId,
+                        Message = local.Message,
+                        Channel = local.Channel,
+                        FilePath = local.FilePath,
                         UsedFallback = true
                     };
                 }
             }
 
-            if (!SupportApiConfiguration.AllowLegacyDiscordFallback)
-            {
-                throw new SupportTransportException(
-                    "Le service de support n’est pas encore disponible.");
-            }
-
-            return await _legacyTransport.SendAsync(report, attachment, cancellationToken)
+            return await _localTransport.SendAsync(report, attachment, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -75,7 +69,6 @@ namespace MyHomelabBrowser.classes.Support
 
             _disposed = true;
             _apiTransport.Dispose();
-            _legacyTransport.Dispose();
         }
     }
 }

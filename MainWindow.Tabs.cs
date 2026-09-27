@@ -86,18 +86,12 @@ namespace MyHomelabBrowser
 
         async Task<CoreWebView2Environment> GetEnvironmentForCurrentProfileAsync()
         {
-            var profileId = (_profileService.Current?.Username ?? "default").Trim().ToLowerInvariant();
+            var profileId = WebViewProfileData.NormalizeId(_profileService.Current?.Username);
 
             if (_envByProfile.TryGetValue(profileId, out var cached))
                 return cached;
 
-            string userData = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "PommeBrowser",
-                "Profiles",
-                profileId,
-                "WebView2"
-            );
+            string userData = WebViewProfileData.GetUserDataFolder(profileId);
 
             Directory.CreateDirectory(userData);
 

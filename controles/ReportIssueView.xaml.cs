@@ -84,7 +84,7 @@ namespace MyHomelabBrowser.controles
             }
 
             MessageBoxResult confirm = MessageBox.Show(
-                $"Envoyer ce rapport concernant {GetModuleLabel(module)} au support ?",
+                $"Envoyer ce rapport concernant {GetModuleLabel(module)} ?",
                 "Confirmation",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
@@ -132,9 +132,24 @@ namespace MyHomelabBrowser.controles
                 SupportSubmissionResult result = await SupportSubmissionHost.Current
                     .SendAsync(report, attachment);
 
-                ShowDialog(
-                    "Message envoyé",
-                    $"Merci pour le signalement.\n\nID du rapport : {result.ReportId}");
+                if (result.Channel == SupportDeliveryChannel.LocalFile && result.FilePath != null)
+                {
+                    string reason = result.UsedFallback
+                        ? "Le service de support est injoignable pour le moment."
+                        : "Le service de support n’est pas encore en ligne.";
+
+                    ShowDialog(
+                        "Rapport enregistré",
+                        $"{reason}\n\nLe rapport a été enregistré sur cet ordinateur :\n{result.FilePath}\n\nVous pouvez transmettre ce fichier au développeur.");
+
+                    RevealInExplorer(result.FilePath);
+                }
+                else
+                {
+                    ShowDialog(
+                        "Message envoyé",
+                        $"Merci pour le signalement.\n\nID du rapport : {result.ReportId}");
+                }
 
                 CloseRequested?.Invoke();
             }
@@ -354,6 +369,23 @@ Aucun log console n’a été généré pour cette session.
             TitleBox.IsEnabled = !sending;
             DescriptionBox.IsEnabled = !sending;
             SendingPanel.Visibility = sending ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private static void RevealInExplorer(string path)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{path}\"",
+                    UseShellExecute = true
+                });
+            }
+            catch
+            {
+                // Le chemin reste affiché dans la boîte de dialogue.
+            }
         }
 
         private void ShowDialog(string title, string message)
