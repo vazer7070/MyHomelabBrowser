@@ -75,7 +75,7 @@ namespace MyHomelabBrowser.classes.AdBlock.Models
                     .Select(item => item.Clone())
                     .ToList()
             };
-            copy.Normalize();
+            // Pas de Normalize : l'original l'est déjà (chargement et enregistrement normalisent).
             return copy;
         }
     }

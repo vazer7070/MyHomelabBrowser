@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 
 namespace MyHomelabBrowser.classes.AdBlock.Models
@@ -23,7 +22,15 @@ namespace MyHomelabBrowser.classes.AdBlock.Models
 
         public static string NormalizeHost(string? value)
         {
-            string input = (value ?? string.Empty).Trim().Trim('.').ToLowerInvariant();
+            if (string.IsNullOrEmpty(value))
+                return string.Empty;
+
+            // Chemin rapide : un nom d'hôte déjà propre (cas de chaque requête réseau)
+            // n'a pas besoin de passer par deux analyses d'URI.
+            if (TryNormalizeSimpleHost(value, out string simple))
+                return simple;
+
+            string input = value.Trim().Trim('.').ToLowerInvariant();
             if (input.Length == 0)
                 return string.Empty;
 
@@ -38,6 +45,32 @@ namespace MyHomelabBrowser.classes.AdBlock.Models
             return input.Trim().Trim('.').ToLowerInvariant();
         }
 
+        private static bool TryNormalizeSimpleHost(string value, out string result)
+        {
+            bool hasUpper = false;
+            foreach (char c in value)
+            {
+                if (c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '-' or '.' or '_')
+                    continue;
+
+                if (c is >= 'A' and <= 'Z')
+                {
+                    hasUpper = true;
+                    continue;
+                }
+
+                result = string.Empty;
+                return false;
+            }
+
+            string host = (hasUpper ? value.ToLowerInvariant() : value).Trim('.');
+            if (host.StartsWith("www.", StringComparison.Ordinal))
+                host = host[4..].Trim('.');
+
+            result = host;
+            return true;
+        }
+
         public static bool HostMatches(string? host, string? domain)
         {
             string normalizedHost = NormalizeHost(host);
@@ -45,8 +78,45 @@ namespace MyHomelabBrowser.classes.AdBlock.Models
             if (normalizedHost.Length == 0 || normalizedDomain.Length == 0)
                 return false;
 
-            return normalizedHost.Equals(normalizedDomain, StringComparison.OrdinalIgnoreCase)
-                || normalizedHost.EndsWith("." + normalizedDomain, StringComparison.OrdinalIgnoreCase);
+            return IsSameOrSubdomain(normalizedHost, normalizedDomain);
+        }
+
+        /// <summary>
+        /// Variante de <see cref="HostMatches"/> pour deux hôtes déjà normalisés.
+        /// </summary>
+        internal static bool IsSameOrSubdomain(string host, string domain)
+        {
+            if (host.Length == domain.Length)
+                return host.Equals(domain, StringComparison.OrdinalIgnoreCase);
+
+            return host.Length > domain.Length
+                && host[host.Length - domain.Length - 1] == '.'
+                && host.EndsWith(domain, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Indique si l'hôte normalisé ou l'un de ses domaines parents figure dans l'ensemble.
+        /// Recherche par suffixe : coût proportionnel au nombre de labels, pas à la taille de la liste.
+        /// L'ensemble doit utiliser un comparateur ordinal (insensible à la casse).
+        /// </summary>
+        internal static bool ContainsHostOrParent(HashSet<string> domains, string normalizedHost)
+        {
+            if (domains.Count == 0 || normalizedHost.Length == 0)
+                return false;
+
+            HashSet<string>.AlternateLookup<ReadOnlySpan<char>> lookup = domains.GetAlternateLookup<ReadOnlySpan<char>>();
+            ReadOnlySpan<char> current = normalizedHost;
+            while (true)
+            {
+                if (lookup.Contains(current))
+                    return true;
+
+                int dot = current.IndexOf('.');
+                if (dot < 0 || dot == current.Length - 1)
+                    return false;
+
+                current = current[(dot + 1)..];
+            }
         }
 
         public static IEnumerable<string> EnumerateHostSuffixes(string? host)
@@ -79,15 +149,21 @@ namespace MyHomelabBrowser.classes.AdBlock.Models
             if (normalized.Length == 0 || IPAddress.TryParse(normalized, out _))
                 return normalized;
 
-            string[] labels = normalized.Split('.', StringSplitOptions.RemoveEmptyEntries);
-            if (labels.Length <= 2)
+            // Appelé pour chaque requête : pas de Split, seulement des recherches de points.
+            int last = normalized.LastIndexOf('.');
+            if (last <= 0)
                 return normalized;
 
-            string lastTwo = labels[^2] + "." + labels[^1];
-            if (CommonTwoLevelSuffixes.Contains(lastTwo) && labels.Length >= 3)
-                return labels[^3] + "." + labels[^2] + "." + labels[^1];
+            int second = normalized.LastIndexOf('.', last - 1);
+            if (second < 0)
+                return normalized;
 
-            return lastTwo;
+            string lastTwo = normalized[(second + 1)..];
+            if (!CommonTwoLevelSuffixes.Contains(lastTwo))
+                return lastTwo;
+
+            int third = second > 0 ? normalized.LastIndexOf('.', second - 1) : -1;
+            return third < 0 ? normalized : normalized[(third + 1)..];
         }
 
         public static bool IsPrivateOrLocalHost(string? host)

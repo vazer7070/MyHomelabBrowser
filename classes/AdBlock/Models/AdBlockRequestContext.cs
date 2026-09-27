@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace MyHomelabBrowser.classes.AdBlock.Models
 {
@@ -23,9 +24,23 @@ namespace MyHomelabBrowser.classes.AdBlock.Models
 
     public sealed class AdBlockRequestContext
     {
+        private string? _requestHost;
+        private string? _requestUrl;
+        private List<string>? _urlTokens;
+
         public required Uri RequestUri { get; init; }
+
+        /// <summary>
+        /// Hôte du document, déjà normalisé.
+        /// </summary>
         public required string DocumentHost { get; init; }
+
         public required AdBlockResourceType ResourceType { get; init; }
         public bool IsThirdParty { get; init; }
+
+        // Valeurs calculées une seule fois par requête, partagées entre règles d'exception et de blocage.
+        public string RequestHost => _requestHost ??= AdBlockDomain.NormalizeHost(RequestUri.Host);
+        public string RequestUrl => _requestUrl ??= RequestUri.AbsoluteUri;
+        internal IReadOnlyList<string> UrlTokens => _urlTokens ??= AdBlockRuleParser.TokenizeUrl(RequestUrl);
     }
 }

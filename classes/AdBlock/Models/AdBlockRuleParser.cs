@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -12,21 +11,28 @@ namespace MyHomelabBrowser.classes.AdBlock.Models
             "^\\|\\|(?<host>[a-z0-9._-]+)\\^(?:\\|)?$",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-        private static readonly Regex TokenRegex = new(
-            "[a-z0-9%_-]{5,}",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        // Longueur minimale d'un jeton d'indexation (identique pour les motifs et les URL).
+        private const int MinimumTokenLength = 3;
 
         private static readonly HashSet<string> WeakTokens = new(StringComparer.OrdinalIgnoreCase)
         {
-            "https", "http", "www", "image", "images", "script", "content", "static",
+            "https", "http", "www", "com", "net", "org", "html", "htm", "php", "js",
+            "css", "jpg", "png", "gif", "svg", "webp", "json",
+            "image", "images", "script", "content", "static",
             "assets", "media", "common", "source", "index", "pixel", "request"
+        };
+
+        private static readonly string[] UnsupportedSelectorTokens =
+        {
+            ":-abp-", ":has-text(", ":matches-css(", ":matches-path(", ":xpath(",
+            ":upward(", ":remove(", ":style(", ":watch-attr(", ":others()", ":min-text-length("
         };
 
         public static AdBlockRuleSet Parse(IEnumerable<(string SourceName, string Content)> sources)
         {
             var blocking = new AdBlockRuleIndex();
             var exceptions = new AdBlockRuleIndex();
-            var cosmetics = new List<AdBlockCosmeticRule>();
+            var cosmetics = new AdBlockCosmeticIndex();
             var pageExceptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var genericHideExceptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -60,6 +66,9 @@ namespace MyHomelabBrowser.classes.AdBlock.Models
                     (rule.IsException ? exceptions : blocking).Add(rule);
                 }
             }
+
+            blocking.Prepare();
+            exceptions.Prepare();
 
             return new AdBlockRuleSet
             {
@@ -133,13 +142,12 @@ namespace MyHomelabBrowser.classes.AdBlock.Models
             if (string.IsNullOrWhiteSpace(selector) || selector.Length > 2048)
                 return false;
 
-            string[] unsupported =
+            foreach (string token in UnsupportedSelectorTokens)
             {
-                ":-abp-", ":has-text(", ":matches-css(", ":matches-path(", ":xpath(",
-                ":upward(", ":remove(", ":style(", ":watch-attr(", ":others()", ":min-text-length("
-            };
-
-            return !unsupported.Any(token => selector.Contains(token, StringComparison.OrdinalIgnoreCase));
+                if (selector.Contains(token, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+            return true;
         }
 
         private static bool TryParseNetworkRule(
@@ -259,34 +267,47 @@ namespace MyHomelabBrowser.classes.AdBlock.Models
             }
 
             string? hostSuffix = null;
+            string? literal = null;
+            string? regexSource = null;
             Regex? regex = null;
 
             if (TryExtractSimpleHostRule(pattern, out string? simpleHost))
             {
                 hostSuffix = simpleHost;
             }
-            else
+            else if (IsRegexPattern(pattern))
             {
+                // Expression écrite à la main : validée dès le chargement (une règle invalide est ignorée)
+                // et compilée, car sans jeton d'index elle est évaluée pour chaque requête.
                 try
                 {
-                    string regexText = ConvertPatternToRegex(pattern);
-                    var options = RegexOptions.CultureInvariant;
+                    var options = RegexOptions.CultureInvariant | RegexOptions.Compiled;
                     if (!matchCase)
                         options |= RegexOptions.IgnoreCase;
-                    regex = new Regex(regexText, options, TimeSpan.FromMilliseconds(40));
+                    regex = new Regex(pattern[1..^1], options, TimeSpan.FromMilliseconds(40));
                 }
-                catch
+                catch (ArgumentException)
                 {
                     return false;
                 }
+            }
+            else if (IsPlainPattern(pattern))
+            {
+                literal = pattern;
+            }
+            else
+            {
+                // Toujours valide (caractères échappés) : la Regex sera construite à la demande.
+                regexSource = ConvertPatternToRegex(pattern);
             }
 
             result = new AdBlockNetworkRule
             {
                 Id = id,
-                OriginalText = line,
                 IsException = exception,
                 HostSuffix = hostSuffix,
+                Literal = literal,
+                RegexSource = regexSource,
                 Regex = regex,
                 MatchCase = matchCase,
                 ThirdPartyOnly = thirdPartyOnly,
@@ -294,10 +315,18 @@ namespace MyHomelabBrowser.classes.AdBlock.Models
                 ExcludedTypes = excludedTypes,
                 IncludedDomains = includedDomains,
                 ExcludedDomains = excludedDomains,
-                IndexToken = hostSuffix == null ? ExtractIndexToken(pattern) : null
+                IndexToken = hostSuffix == null && regex == null ? ExtractIndexToken(pattern) : null
             };
             return true;
         }
+
+        private static bool IsRegexPattern(string pattern)
+            => pattern.Length > 2 && pattern[0] == '/' && pattern[^1] == '/';
+
+        private static bool IsPlainPattern(string pattern)
+            => pattern.IndexOfAny(PatternSpecialCharacters) < 0;
+
+        private static readonly char[] PatternSpecialCharacters = { '*', '^', '|' };
 
         private static int FindOptionSeparator(string line)
         {
@@ -345,9 +374,6 @@ namespace MyHomelabBrowser.classes.AdBlock.Models
 
         private static string ConvertPatternToRegex(string pattern)
         {
-            if (pattern.Length > 2 && pattern[0] == '/' && pattern[^1] == '/')
-                return pattern[1..^1];
-
             bool domainAnchor = pattern.StartsWith("||", StringComparison.Ordinal);
             bool startAnchor = !domainAnchor && pattern.StartsWith('|');
             bool endAnchor = pattern.EndsWith('|') && !pattern.EndsWith("||", StringComparison.Ordinal);
@@ -384,30 +410,87 @@ namespace MyHomelabBrowser.classes.AdBlock.Models
             return builder.ToString();
         }
 
+        private static bool IsTokenChar(char c)
+            => c is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9') or '%' or '_' or '-';
+
+        /// <summary>
+        /// Choisit le jeton qui sert à indexer la règle. Il doit être délimité des deux côtés
+        /// par un caractère qui n'appartient pas à un jeton : sans cela, l'URL peut contenir
+        /// une séquence plus longue (« top-ad-banner » pour le motif « -ad-banner ») et la
+        /// règle ne serait jamais évaluée.
+        /// </summary>
         private static string? ExtractIndexToken(string pattern)
         {
+            bool domainAnchor = pattern.StartsWith("||", StringComparison.Ordinal);
+            bool startAnchor = !domainAnchor && pattern.StartsWith('|');
+            bool endAnchor = pattern.EndsWith('|') && !pattern.EndsWith("||", StringComparison.Ordinal);
+
+            int bodyStart = domainAnchor ? 2 : startAnchor ? 1 : 0;
+            int bodyEnd = endAnchor ? pattern.Length - 1 : pattern.Length;
+
             string? best = null;
-            foreach (Match match in TokenRegex.Matches(pattern))
+            int i = bodyStart;
+            while (i < bodyEnd)
             {
-                string candidate = match.Value.ToLowerInvariant();
-                if (WeakTokens.Contains(candidate))
+                if (!IsTokenChar(pattern[i]))
+                {
+                    i++;
+                    continue;
+                }
+
+                int tokenStart = i;
+                while (i < bodyEnd && IsTokenChar(pattern[i]))
+                    i++;
+
+                int length = i - tokenStart;
+                if (length < MinimumTokenLength || (best != null && length <= best.Length))
                     continue;
 
-                if (best == null || candidate.Length > best.Length)
+                bool leftBounded = tokenStart > bodyStart
+                    ? pattern[tokenStart - 1] != '*'
+                    : domainAnchor || startAnchor;
+                bool rightBounded = i < bodyEnd
+                    ? pattern[i] != '*'
+                    : endAnchor;
+
+                if (!leftBounded || !rightBounded)
+                    continue;
+
+                string candidate = pattern.Substring(tokenStart, length).ToLowerInvariant();
+                if (!WeakTokens.Contains(candidate))
                     best = candidate;
             }
+
             return best;
         }
 
-        internal static IEnumerable<string> TokenizeUrl(string url)
+        /// <summary>
+        /// Découpe l'URL en jetons distincts, en minuscules (sans Regex : appelé pour chaque requête).
+        /// </summary>
+        internal static List<string> TokenizeUrl(string url)
         {
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (Match match in TokenRegex.Matches(url))
+            var tokens = new List<string>();
+            int i = 0;
+            while (i < url.Length)
             {
-                string token = match.Value.ToLowerInvariant();
-                if (seen.Add(token))
-                    yield return token;
+                if (!IsTokenChar(url[i]))
+                {
+                    i++;
+                    continue;
+                }
+
+                int start = i;
+                while (i < url.Length && IsTokenChar(url[i]))
+                    i++;
+
+                if (i - start < MinimumTokenLength)
+                    continue;
+
+                string token = url.Substring(start, i - start).ToLowerInvariant();
+                if (!tokens.Contains(token))
+                    tokens.Add(token);
             }
+            return tokens;
         }
 
         private static void ParseDomainList(

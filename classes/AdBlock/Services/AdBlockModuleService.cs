@@ -37,7 +37,10 @@ namespace MyHomelabBrowser.classes.AdBlock.Services
             };
         }
 
-        public AdBlockSettings Settings => SettingsService.Current;
+        /// <summary>
+        /// Paramètres courants, en lecture seule : passer par les méthodes Set… pour les modifier.
+        /// </summary>
+        public AdBlockSettings Settings => SettingsService.Snapshot;
 
         public async Task InitializeAsync()
         {
@@ -81,7 +84,18 @@ namespace MyHomelabBrowser.classes.AdBlock.Services
             if (settings.BypassPrivateNetworks && AdBlockDomain.IsPrivateOrLocalHost(normalized))
                 return false;
 
-            return !settings.AllowlistedDomains.Any(domain => AdBlockDomain.HostMatches(normalized, domain));
+            return !IsAllowlisted(settings, normalized);
+        }
+
+        // Les domaines autorisés sont normalisés à l'enregistrement.
+        private static bool IsAllowlisted(AdBlockSettings settings, string normalizedHost)
+        {
+            foreach (string domain in settings.AllowlistedDomains)
+            {
+                if (AdBlockDomain.IsSameOrSubdomain(normalizedHost, domain))
+                    return true;
+            }
+            return false;
         }
 
         public bool ShouldBlock(Uri requestUri, string documentHost, AdBlockResourceType resourceType)
@@ -96,12 +110,13 @@ namespace MyHomelabBrowser.classes.AdBlock.Services
             if (resourceType == AdBlockResourceType.Document)
                 return false;
 
+            string normalizedDocumentHost = AdBlockDomain.NormalizeHost(documentHost);
             var context = new AdBlockRequestContext
             {
                 RequestUri = requestUri,
-                DocumentHost = AdBlockDomain.NormalizeHost(documentHost),
+                DocumentHost = normalizedDocumentHost,
                 ResourceType = resourceType,
-                IsThirdParty = !AdBlockDomain.IsSameSite(documentHost, requestUri.Host)
+                IsThirdParty = !AdBlockDomain.IsSameSite(normalizedDocumentHost, requestUri.Host)
             };
 
             return Engine.ShouldBlock(context);
@@ -174,7 +189,7 @@ namespace MyHomelabBrowser.classes.AdBlock.Services
         public bool IsSiteAllowed(string host)
         {
             string normalized = AdBlockDomain.NormalizeHost(host);
-            return Settings.AllowlistedDomains.Any(domain => AdBlockDomain.HostMatches(normalized, domain));
+            return normalized.Length > 0 && IsAllowlisted(Settings, normalized);
         }
 
         public void RecordBlockedRequest()

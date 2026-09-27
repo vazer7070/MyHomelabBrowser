@@ -3,6 +3,7 @@ using MyHomelabBrowser.classes.Profiles;
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 
 namespace MyHomelabBrowser.classes.AdBlock.Services
 {
@@ -20,6 +21,9 @@ namespace MyHomelabBrowser.classes.AdBlock.Services
 
         public event Action<AdBlockSettings>? SettingsChanged;
 
+        /// <summary>
+        /// Copie modifiable des paramètres.
+        /// </summary>
         public AdBlockSettings Current
         {
             get
@@ -27,6 +31,19 @@ namespace MyHomelabBrowser.classes.AdBlock.Services
                 EnsureCurrentProfile();
                 lock (_gate)
                     return _settings.Clone();
+            }
+        }
+
+        /// <summary>
+        /// Instance partagée, en lecture seule (jamais modifiée : elle est remplacée à chaque
+        /// enregistrement). Lue pour chaque requête réseau, elle évite un clonage à chaque appel.
+        /// </summary>
+        public AdBlockSettings Snapshot
+        {
+            get
+            {
+                EnsureCurrentProfile();
+                return Volatile.Read(ref _settings);
             }
         }
 
