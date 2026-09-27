@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Serveur de support de PommeBrowser : reçoit les rapports envoyés par le navigateur
+    (Aide › Signaler un problème) et les transmet sur Discord. Les webhooks restent ici,
+    jamais dans l'application distribuée.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <RootNamespace>PommeBrowser.SupportServer</RootNamespace>
+  </PropertyGroup>
+
+</Project>

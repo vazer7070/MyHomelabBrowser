@@ -1,18 +1,21 @@
 ﻿using System;
+using System.Linq;
+using System.Reflection;
 
 namespace MyHomelabBrowser.classes.Support
 {
     /// <summary>
-    /// Point unique à modifier lorsque le backend de support sera disponible.
-    /// Tant que CompiledApiBaseUrl est vide, les rapports sont enregistrés dans une
-    /// archive locale. Une URL peut aussi être fournie temporairement via la
-    /// variable POMMEBROWSER_SUPPORT_API_URL pour tester le backend sans recompiler.
+    /// Adresse du serveur de support (dossier support-server du dépôt). Elle est fixée à la
+    /// compilation par la propriété SupportApiUrl de MyHomelabBrowser.csproj ; tant qu'elle
+    /// est vide, les rapports sont enregistrés dans une archive locale. La variable
+    /// POMMEBROWSER_SUPPORT_API_URL permet de viser un autre serveur sans recompiler.
     /// </summary>
     public static class SupportApiConfiguration
     {
-        // À renseigner lors du déploiement du backend, par exemple :
-        // public const string CompiledApiBaseUrl = "https://support.example.tld";
-        public const string CompiledApiBaseUrl = "";
+        public static string CompiledApiBaseUrl { get; } =
+            typeof(SupportApiConfiguration).Assembly
+                .GetCustomAttributes<AssemblyMetadataAttribute>()
+                .FirstOrDefault(a => a.Key == "SupportApiUrl")?.Value ?? string.Empty;
 
         public const string ReportPath = "/api/v1/support/reports";
 

@@ -70,6 +70,8 @@ namespace MyHomelabBrowser.classes.Support.Transports
             };
             request.Headers.TryAddWithoutValidation("X-PommeBrowser-Version", report.ClientVersion);
             request.Headers.TryAddWithoutValidation("X-PommeBrowser-Report-Id", report.ClientReportId);
+            // Le serveur répond dans la langue de l'interface.
+            request.Headers.AcceptLanguage.Add(new StringWithQualityHeaderValue(Language));
 
             using var form = new MultipartFormDataContent();
             string reportJson = JsonSerializer.Serialize(report, JsonOptions);

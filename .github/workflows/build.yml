@@ -49,3 +49,23 @@ jobs:
           name: resultats-tests
           path: TestResults
           if-no-files-found: ignore
+
+  support-server:
+    name: Serveur de support
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Tests (serveur et contrat avec le navigateur)
+        run: dotnet test support-server/tests/PommeBrowser.SupportServer.Tests --configuration Release
+
+      - name: Image Docker
+        run: docker build --tag pommebrowser-support:ci support-server
