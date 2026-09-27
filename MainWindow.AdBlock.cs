@@ -3,11 +3,9 @@ using MyHomelabBrowser.classes.AdBlock.Integration;
 using MyHomelabBrowser.classes.AdBlock.Models;
 using MyHomelabBrowser.classes.AdBlock.Services;
 using MyHomelabBrowser.controles.AdBlock;
-using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Threading.Tasks;
 
 namespace MyHomelabBrowser
 {

@@ -1,8 +1,6 @@
 using Microsoft.Web.WebView2.Wpf;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.controles;
-using System;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -61,6 +59,28 @@ namespace MyHomelabBrowser
                 Url = url,
                 Title = title
             });
+        }
+
+        void AddFavorite(FavoriteItem fav)
+        {
+            // éviter doublons
+            if (_favorites.Any(f => string.Equals(f.Url, fav.Url, StringComparison.OrdinalIgnoreCase)))
+                return;
+
+            _favorites.Add(fav);
+            SaveFavorites();
+
+            RefreshFavoritesBar();
+            UpdateFavoriteButton();
+        }
+
+        void RemoveFavorite(FavoriteItem fav)
+        {
+            _favorites.Remove(fav);
+            SaveFavorites();
+
+            RefreshFavoritesBar();
+            UpdateFavoriteButton();
         }
     }
 }

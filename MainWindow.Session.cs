@@ -1,8 +1,6 @@
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Session;
 using MyHomelabBrowser.controles;
-using System;
-using System.Threading.Tasks;
 using System.Windows.Controls;
 using static MyHomelabBrowser.classes.BrowserSettings;
 

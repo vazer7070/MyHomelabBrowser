@@ -1,6 +1,5 @@
 using MyHomelabBrowser.classes.Flash;
 using MyHomelabBrowser.controles;
-using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;

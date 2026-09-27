@@ -1,11 +1,8 @@
 using Microsoft.Web.WebView2.Core;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.controles;
-using System;
 using System.ComponentModel;
-using System.Linq;
 using System.Text.Json;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
