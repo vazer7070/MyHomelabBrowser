@@ -1,9 +1,13 @@
 # Installe la version auto-hébergée de Ruffle utilisée par PommeBrowser.
+# La compilation (MyHomelabBrowser.csproj) fait déjà la même chose ; ce script sert à
+# réinstaller les fichiers à la main. L'archive est vérifiée par SHA-256.
 # Run: powershell -ExecutionPolicy Bypass -File .\install-ruffle-assets.ps1
 
 $ErrorActionPreference = "Stop"
 
 $version = "0.3.0"
+# Même valeur que RuffleSha256 dans MyHomelabBrowser.csproj.
+$expectedSha256 = "9cdc5baac95dea452d2ef4a3859f3a4c8576dd3377bb40849e41fb6359170d7d"
 $archiveName = "ruffle-$version-web-selfhosted.zip"
 $downloadUrl = "https://github.com/ruffle-rs/ruffle/releases/download/v$version/$archiveName"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -18,6 +22,11 @@ try {
     Write-Host "Téléchargement de Ruffle $version..." -ForegroundColor Cyan
     Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -UseBasicParsing
 
+    $actualSha256 = (Get-FileHash -Path $archivePath -Algorithm SHA256).Hash
+    if ($actualSha256 -ne $expectedSha256) {
+        throw "Empreinte SHA-256 inattendue pour $archiveName : $actualSha256. L'archive n'est pas installée."
+    }
+
     Write-Host "Extraction..." -ForegroundColor Cyan
     Expand-Archive -Path $archivePath -DestinationPath $extractDir -Force
 
@@ -26,7 +35,7 @@ try {
         throw "ruffle.js est introuvable dans l'archive téléchargée."
     }
 
-    Get-ChildItem -Path $assetDir -Force | Remove-Item -Recurse -Force
+    Get-ChildItem -Path $assetDir -Force | Where-Object { $_.Name -ne "README.txt" } | Remove-Item -Recurse -Force
 
     $sourceRoot = $ruffleJs.Directory.FullName
     Copy-Item -Path (Join-Path $sourceRoot "*") -Destination $assetDir -Recurse -Force

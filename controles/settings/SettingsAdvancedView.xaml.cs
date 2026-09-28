@@ -18,14 +18,14 @@ namespace MyHomelabBrowser.controles.settings
             if (RuffleAssetService.HasLocalAssets)
             {
                 RuffleRuntimeStatusText.Text =
-                    Tr("Ruffle {0} est embarqué localement. ", RuffleAssetService.PinnedVersion) +
+                    Tr("Ruffle {0} est embarqué localement. ", RuffleAssetService.InstalledVersion ?? RuffleAssetService.PinnedVersion) +
                     Tr("Le navigateur ne dépend pas d’un CDN pour exécuter Flash.");
             }
             else
             {
                 RuffleRuntimeStatusText.Text =
                     Tr("Les fichiers locaux Ruffle {0} sont absents. ", RuffleAssetService.PinnedVersion) +
-                    Tr("Le navigateur utilisera temporairement le CDN épinglé. Lance install-ruffle-assets.ps1 avant de publier l’application.");
+                    Tr("Les contenus Flash ne peuvent pas être lus avec Ruffle : réinstallez PommeBrowser, ou recompilez-le avec un accès à Internet.");
             }
         }
     }

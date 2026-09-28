@@ -1,4 +1,6 @@
+using Microsoft.Data.Sqlite;
 using MyHomelabBrowser.classes;
+using MyHomelabBrowser.classes.History;
 using MyHomelabBrowser.controles;
 using System.IO;
 using System.Text.Json;
@@ -10,8 +12,10 @@ namespace MyHomelabBrowser
 {
     public partial class MainWindow
     {
-        private DispatcherTimer? _historySaveTimer;
-        private readonly SemaphoreSlim _historyWriteLock = new(1, 1);
+        /// <summary>Visites gardées en mémoire (omnibox, page d'accueil, vue Historique).</summary>
+        const int HistoryInMemory = 5000;
+
+        HistoryStore? _historyStore;
 
         string GetProfileDataDir()
         {
@@ -29,108 +33,46 @@ namespace MyHomelabBrowser
         }
 
         // ---------------------------
-        // Historique
+        // Historique (base SQLite du profil)
         // ---------------------------
         void LoadHistory()
         {
             _history.Clear();
+            _historyStore?.Dispose();
+            _historyStore = null;
 
             try
             {
-                if (File.Exists(HistoryPath))
-                {
-                    var json = File.ReadAllText(HistoryPath);
-                    var items = JsonSerializer.Deserialize<List<HistoryEntry>>(json, HistoryJsonOpts);
+                var store = new HistoryStore(Path.Combine(GetProfileDataDir(), "history.db"));
 
-                    // L'ordre chronologique est un invariant utilisé par l'omnibox.
-                    if (items != null)
-                        _history.AddRange(items.Where(h => !string.IsNullOrWhiteSpace(h.Url)).OrderBy(h => h.VisitedAt));
-                }
+                // Ancien format : history.json est repris une fois, puis gardé en .bak.
+                store.ImportLegacyJson(HistoryPath);
+                store.Trim();
+
+                // L'ordre chronologique est un invariant utilisé par l'omnibox.
+                _history.AddRange(store.LoadRecent(HistoryInMemory));
+                _historyStore = store;
             }
-            catch
+            catch (Exception ex) when (ex is SqliteException or IOException or UnauthorizedAccessException)
             {
-                _history.Clear();
-            }
-            finally
-            {
-                _historyLoaded = true;
+                // Base illisible : la navigation continue, sans enregistrement de l'historique.
+                RuntimeLogBuffer.Append("[Historique] " + ex.Message);
             }
         }
 
-        /// <summary>
-        /// Regroupe les écritures : une navigation active ne déclenche qu'une écriture
-        /// toutes les quelques secondes, sur un thread de fond.
-        /// </summary>
-        void ScheduleHistorySave()
+        void AddHistoryEntry(HistoryEntry entry)
         {
-            if (_historySaveTimer == null)
-            {
-                _historySaveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
-                _historySaveTimer.Tick += (_, _) =>
-                {
-                    _historySaveTimer.Stop();
-                    _ = SaveHistoryAsync();
-                };
-            }
+            _history.Add(entry);
+            _historyStore?.Add(entry);
 
-            _historySaveTimer.Stop();
-            _historySaveTimer.Start();
-        }
-
-        async Task SaveHistoryAsync()
-        {
-            // Ne jamais écraser le fichier avant le premier chargement.
-            if (!_historyLoaded)
-                return;
-
-            // Instantané pris sur le thread UI, sérialisation et écriture en arrière-plan.
-            string path = HistoryPath;
-            HistoryEntry[] snapshot = _history.ToArray();
-
-            await _historyWriteLock.WaitAsync().ConfigureAwait(false);
-            try
-            {
-                await Task.Run(() =>
-                {
-                    string json = JsonSerializer.Serialize(snapshot, HistoryJsonOpts);
-                    AtomicFile.WriteAllText(path, json);
-                }).ConfigureAwait(false);
-            }
-            catch
-            {
-                // Écriture impossible (disque plein, antivirus) : nouvel essai à la prochaine visite.
-            }
-            finally
-            {
-                _historyWriteLock.Release();
-            }
-        }
-
-        void SaveHistoryNow()
-        {
-            _historySaveTimer?.Stop();
-
-            if (!_historyLoaded)
-                return;
-
-            _historyWriteLock.Wait();
-            try
-            {
-                AtomicFile.WriteAllText(HistoryPath, JsonSerializer.Serialize(_history, HistoryJsonOpts));
-            }
-            catch
-            {
-            }
-            finally
-            {
-                _historyWriteLock.Release();
-            }
+            if (_history.Count > HistoryInMemory)
+                _history.RemoveRange(0, _history.Count - HistoryInMemory);
         }
 
         void RemoveHistoryEntry(HistoryEntry entry)
         {
             _history.Remove(entry);
-            ScheduleHistorySave();
+            _historyStore?.Remove(new[] { entry });
         }
 
         void RemoveHistoryEntries(IReadOnlyCollection<HistoryEntry> entries)
@@ -139,9 +81,24 @@ namespace MyHomelabBrowser
                 return;
 
             var toRemove = new HashSet<HistoryEntry>(entries);
+            bool everything = _history.All(toRemove.Contains);
+
             _history.RemoveAll(toRemove.Contains);
             _lastHistoryUrl = "";
-            ScheduleHistorySave();
+
+            // Tout ce qui est affiché est effacé : les visites plus anciennes de la base aussi.
+            if (everything)
+                _historyStore?.Clear();
+            else
+                _historyStore?.Remove(toRemove);
+        }
+
+        /// <summary>Efface les visites depuis <paramref name="since"/> (tout si DateTime.MinValue).</summary>
+        void RemoveHistorySince(DateTime since)
+        {
+            _history.RemoveAll(h => h.VisitedAt >= since);
+            _lastHistoryUrl = "";
+            _historyStore?.RemoveSince(since);
         }
 
         void OpenHistory()
@@ -214,7 +171,7 @@ namespace MyHomelabBrowser
         /// </summary>
         void FlushPersistentState()
         {
-            SaveHistoryNow();
+            _historyStore?.Flush();
             SaveFavorites();
             DownloadManager.Instance.SaveHistory();
         }

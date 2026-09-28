@@ -54,11 +54,7 @@ namespace MyHomelabBrowser
             }
 
             if (choice.ClearHistory)
-            {
-                var removed = _history.Where(h => h.VisitedAt >= since).ToList();
-                if (removed.Count > 0)
-                    RemoveHistoryEntries(removed);
-            }
+                RemoveHistorySince(since);
 
             if (choice.ClearDownloads)
             {

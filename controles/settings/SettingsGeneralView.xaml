@@ -388,6 +388,62 @@
                     </StackPanel>
                 </Border>
 
+                <!-- SÉCURITÉ DE LA NAVIGATION -->
+                <Border Style="{StaticResource SettingsCard}">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="&#xE72E;"
+                                       FontFamily="{StaticResource IconFont}"
+                                       FontSize="18"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2"
+                                       Text="Sécurité de la navigation"
+                                       Style="{StaticResource SettingsTitle}"
+                                       Margin="0"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <CheckBox Content="Passer automatiquement les sites en HTTPS"
+                                  IsChecked="{Binding HttpsUpgrade}"/>
+                        <TextBlock Text="Une adresse http:// est d’abord essayée en https://, et un avertissement s’affiche si le site ne propose pas HTTPS. Le réseau local et les ports explicites (…:8080) ne sont pas concernés."
+                                   Style="{StaticResource SettingsLabel}"
+                                   TextWrapping="Wrap"
+                                   Margin="24,2,0,14"/>
+
+                        <TextBlock Text="Protection contre le pistage"
+                                   Style="{StaticResource SettingsLabel}"
+                                   Margin="0,0,0,7"/>
+                        <ComboBox x:Name="TrackingPreventionBox"
+                                  Width="320"
+                                  HorizontalAlignment="Left"
+                                  Style="{StaticResource DnsComboBoxStyle}"
+                                  SelectedValuePath="Value"
+                                  SelectedValue="{Binding TrackingPrevention, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Label}" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <TextBlock Text="« Stricte » bloque davantage de traqueurs, mais certains sites peuvent mal s’afficher."
+                                   Style="{StaticResource SettingsLabel}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,6,0,8"/>
+
+                        <Button Content="Autorisations des sites…"
+                                Style="{StaticResource TextButtonStyle}"
+                                HorizontalAlignment="Left"
+                                Margin="-8,0,0,0"
+                                Click="OpenSitePermissions_Click"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- DNS -->
                 <Border Style="{StaticResource SettingsCard}">
                     <StackPanel>

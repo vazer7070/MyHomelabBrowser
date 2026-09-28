@@ -35,7 +35,14 @@ namespace MyHomelabBrowser
             public bool IsCustomView { get; set; }
             public Func<UserControl>? CreateView { get; set; }
 
-            public Process? LegacyProc { get; set; }
+            public LegacyProcess? LegacyProc { get; set; }
+            /// <summary>Onglet Legacy restauré : Basilisk sera lancé à sa première ouverture.</summary>
+            public Uri? PendingLegacyUri { get; set; }
+
+            // Passage en HTTPS en cours, et avertissement affiché si le site n'a pas de HTTPS.
+            internal HttpsUpgradeAttempt? HttpsUpgrade { get; set; }
+            public string? HttpsInterstitialUrl { get; set; }
+            public string? HttpsInterstitialNonce { get; set; }
             public LegacyProfileLease? LegacyProfileLease { get; set; }
             public IntPtr LegacyTopHwnd { get; set; } = IntPtr.Zero;
             public bool ForceLegacyOnce { get; set; } = false;

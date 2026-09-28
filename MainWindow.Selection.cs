@@ -126,6 +126,12 @@ namespace MyHomelabBrowser
             var legacyView = webTab.LegacyView;
             legacyView.SetUrl(webTab.LegacyUrl ?? webTab.Web?.Source?.AbsoluteUri ?? "");
 
+            if (webTab.PendingLegacyUri != null)
+            {
+                legacyView.SetLaunching();
+                Dispatcher.BeginInvoke(() => LaunchPendingLegacyIfNeeded(tab, webTab), DispatcherPriority.Background);
+            }
+
             if (webTab.IsLegacyLaunching)
                 legacyView.SetLaunching();
             else if (webTab.LegacyPid.HasValue)
@@ -212,11 +218,13 @@ namespace MyHomelabBrowser
 
                 oldState.FlashOverlay?.DeactivateTabVisuals();
 
-                // Basilisk est masqué quand on quitte son onglet.
+                // Basilisk est masqué quand on quitte son onglet, et passe en arrière-plan.
                 if (oldState.LegacyHost != null)
                     oldState.LegacyHost.HideDock();
                 else if (oldState.LegacyHwnd != IntPtr.Zero)
                     ShowWindow(oldState.LegacyHwnd, SW_HIDE);
+
+                try { oldState.LegacyProc?.SetBackground(true); } catch { }
 
                 // Un plein écran vidéo ne survit pas à un changement d'onglet.
                 ExitHtmlFullscreenIfNeeded();
@@ -231,6 +239,11 @@ namespace MyHomelabBrowser
 
             if (Tabs.SelectedItem is TabItem tab)
             {
+                if (tab.Tag is WebTabContent { LegacyProc: { } selectedLegacy })
+                {
+                    try { selectedLegacy.SetBackground(false); } catch { }
+                }
+
                 SyncWebHostWithSelection();
 
                 if (tab.Tag is WebTabContent wt &&

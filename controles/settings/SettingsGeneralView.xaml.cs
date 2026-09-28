@@ -50,6 +50,14 @@ namespace MyHomelabBrowser.controles.settings
                     Tr("Personnalisé"))
             };
 
+            TrackingPreventionBox.ItemsSource = new[]
+            {
+                new DnsOption<BrowserSettings.TrackingProtection>(BrowserSettings.TrackingProtection.Off, Tr("Désactivée")),
+                new DnsOption<BrowserSettings.TrackingProtection>(BrowserSettings.TrackingProtection.Basic, Tr("De base")),
+                new DnsOption<BrowserSettings.TrackingProtection>(BrowserSettings.TrackingProtection.Balanced, Tr("Équilibrée (recommandée)")),
+                new DnsOption<BrowserSettings.TrackingProtection>(BrowserSettings.TrackingProtection.Strict, Tr("Stricte"))
+            };
+
             ThemeBox.ItemsSource = new[]
             {
                 new DnsOption<AppTheme>(AppTheme.System, Tr("Comme Windows")),
@@ -267,6 +275,9 @@ namespace MyHomelabBrowser.controles.settings
             if (Application.Current.MainWindow is MainWindow main)
                 main.RestartApplication();
         }
+
+        private void OpenSitePermissions_Click(object sender, RoutedEventArgs e)
+            => new SitePermissionsDialog(MyHomelabBrowser.classes.Security.SiteSecurityStore.Current).ShowFor(Window.GetWindow(this));
 
         private void OpenPinnedCertificates_Click(object sender, RoutedEventArgs e)
             => new PinnedCertificatesDialog().ShowFor(Window.GetWindow(this));

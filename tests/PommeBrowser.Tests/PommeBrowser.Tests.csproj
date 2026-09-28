@@ -17,6 +17,8 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <!-- Même bibliothèque SQLite native que l'application (la version tirée par défaut est vulnérable). -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="System.Reflection.MetadataLoadContext" Version="10.0.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -44,7 +46,17 @@
     <Compile Include="..\..\classes\Homelab\ServiceMonitor.cs" Link="App\Homelab\ServiceMonitor.cs" />
     <Compile Include="..\..\classes\Workspaces\WorkspaceStore.cs" Link="App\Workspaces\WorkspaceStore.cs" />
     <Compile Include="..\..\classes\AppearanceSettings.cs" Link="App\AppearanceSettings.cs" />
+    <Compile Include="..\..\classes\Profiles\AppDataContext.cs" Link="App\Profiles\AppDataContext.cs" />
+    <Compile Include="..\..\classes\Security\HttpsUpgradePolicy.cs" Link="App\Security\HttpsUpgradePolicy.cs" />
+    <Compile Include="..\..\classes\Security\SiteSecurityStore.cs" Link="App\Security\SiteSecurityStore.cs" />
+    <Compile Include="..\..\classes\HistoryEntry.cs" Link="App\HistoryEntry.cs" />
+    <Compile Include="..\..\classes\History\HistoryStore.cs" Link="App\History\HistoryStore.cs" />
     <Compile Include="..\..\classes\Profiles\PasswordHasher.cs" Link="App\Profiles\PasswordHasher.cs" />
+    <Compile Include="..\..\classes\Flash\WindowsCommandLine.cs" Link="App\Flash\WindowsCommandLine.cs" />
+    <Compile Include="..\..\classes\Flash\LegacyProfilePreferences.cs" Link="App\Flash\LegacyProfilePreferences.cs" />
+    <Compile Include="..\..\classes\Flash\LegacyProfileManager.cs" Link="App\Flash\LegacyProfileManager.cs" />
+    <Compile Include="..\..\classes\Flash\LegacyProfileLease.cs" Link="App\Flash\LegacyProfileLease.cs" />
+    <Compile Include="..\..\classes\Flash\LegacyProcess.cs" Link="App\Flash\LegacyProcess.cs" />
     <Compile Include="..\..\classes\Profiles\ProfileNameRules.cs" Link="App\Profiles\ProfileNameRules.cs" />
     <Compile Include="..\..\classes\Profiles\WebViewProfileData.cs" Link="App\Profiles\WebViewProfileData.cs" />
     <Compile Include="..\..\classes\AdBlock\Models\AdBlockDomain.cs" Link="App\AdBlock\AdBlockDomain.cs" />

@@ -1,3 +1,4 @@
+using MyHomelabBrowser.classes.Flash;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Session;
 using MyHomelabBrowser.controles;
@@ -165,7 +166,21 @@ namespace MyHomelabBrowser
                 }
 
                 if (t.IsLegacy && Uri.TryCreate(t.LegacyUrl ?? t.Url, UriKind.Absolute, out var legacyUri))
-                    _ = LaunchLegacyIntoInternalTabAsync(content, legacyUri, header);
+                {
+                    if (isSelected)
+                    {
+                        _ = LaunchLegacyIntoInternalTabAsync(content, legacyUri, header);
+                    }
+                    else
+                    {
+                        // Basilisk ne sera lancé qu'à la première ouverture de l'onglet.
+                        content.PendingLegacyUri = legacyUri;
+                        content.IsLegacyExternal = true;
+                        content.LegacyUrl = legacyUri.AbsoluteUri;
+                        content.FlashMode = FlashMode.Legacy;
+                        header.SetTitle(string.IsNullOrWhiteSpace(t.Title) ? "Legacy Flash" : t.Title);
+                    }
+                }
             }
 
             if (Tabs.Items.Count == 0)

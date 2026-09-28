@@ -82,6 +82,8 @@ namespace MyHomelabBrowser
             }
         }
 
+        readonly Dictionary<string, Task<CoreWebView2Environment>> _envCreation = new();
+
         async Task<CoreWebView2Environment> GetEnvironmentForCurrentProfileAsync()
         {
             var profileId = WebViewProfileData.NormalizeId(_profileService.Current?.Username);
@@ -89,18 +91,44 @@ namespace MyHomelabBrowser
             if (_envByProfile.TryGetValue(profileId, out var cached))
                 return cached;
 
-            string userData = WebViewProfileData.GetUserDataFolder(profileId);
+            // Création déjà lancée (préparation au démarrage) : le premier onglet l'attend
+            // au lieu d'en créer une seconde.
+            if (!_envCreation.TryGetValue(profileId, out Task<CoreWebView2Environment>? pending))
+            {
+                string userData = WebViewProfileData.GetUserDataFolder(profileId);
+                Directory.CreateDirectory(userData);
 
-            Directory.CreateDirectory(userData);
+                pending = CoreWebView2Environment.CreateAsync(null, userData, CreateWebViewEnvironmentOptions());
+                _envCreation[profileId] = pending;
+            }
 
-            var env = await CoreWebView2Environment.CreateAsync(
-                null,
-                userData,
-                CreateWebViewEnvironmentOptions()
-            );
+            try
+            {
+                var env = await pending;
+                _envByProfile[profileId] = env;
+                return env;
+            }
+            finally
+            {
+                _envCreation.Remove(profileId);
+            }
+        }
 
-            _envByProfile[profileId] = env;
-            return env;
+        /// <summary>
+        /// Prépare le moteur web du profil pendant l'ouverture de la fenêtre, en même
+        /// temps que le chargement des listes du bloqueur : le premier onglet s'ouvre plus vite.
+        /// </summary>
+        async Task WarmUpWebEngineAsync()
+        {
+            try
+            {
+                await GetEnvironmentForCurrentProfileAsync();
+            }
+            catch (Exception ex)
+            {
+                // L'erreur (WebView2 absent…) sera montrée à l'ouverture du premier onglet.
+                RuntimeLogBuffer.Append("[WebView2] Préparation : " + ex.Message);
+            }
         }
 
         CoreWebView2ControllerOptions CreatePrivateControllerOptions(CoreWebView2Environment environment)
@@ -348,6 +376,7 @@ namespace MyHomelabBrowser
 
             InitializeFlashRuntimeForCore(content);
             AttachSiteZoom(web, content);
+            AttachNavigationSecurity(content, core, isPrivate);
 
             core.NavigationStarting += (_, e) =>
             {
@@ -576,14 +605,8 @@ namespace MyHomelabBrowser
                 VisitedAt = now
             };
 
-            _history.Add(entry);
+            AddHistoryEntry(entry);
             content.LastHistoryEntry = entry;
-
-            const int max = 5000;
-            if (_history.Count > max)
-                _history.RemoveRange(0, _history.Count - max);
-
-            ScheduleHistorySave();
         }
 
         /// <summary>
@@ -601,7 +624,7 @@ namespace MyHomelabBrowser
                 return;
 
             entry.Title = title;
-            ScheduleHistorySave();
+            _historyStore?.UpdateTitle(entry);
         }
 
         // ---------------------------

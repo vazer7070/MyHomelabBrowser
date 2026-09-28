@@ -85,6 +85,12 @@
                                 Padding="16,6"/>
                     </StackPanel>
 
+                    <TextBlock x:Name="BasiliskStatusText"
+                               FontSize="12"
+                               TextWrapping="Wrap"
+                               Margin="0,6,0,0"
+                               Foreground="{StaticResource TextSecondaryBrush}"/>
+
                     <TextBlock Text="En mode automatique, PommeBrowser tente Ruffle avec les paramètres du lecteur d’origine. Le moteur Legacy n’est utilisé automatiquement que si ce même contenu a échoué plusieurs fois avec Ruffle et a déjà fonctionné avec Basilisk."
                                Foreground="{StaticResource TextSecondaryBrush}"
                                FontSize="12"

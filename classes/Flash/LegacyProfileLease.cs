@@ -4,14 +4,20 @@ using System.Threading.Tasks;
 
 namespace MyHomelabBrowser.classes.Flash
 {
+    /// <summary>
+    /// Profil Basilisk réservé à un onglet. À la libération, l'emplacement redevient
+    /// disponible ; un profil jetable (onglet privé) est supprimé.
+    /// </summary>
     public sealed class LegacyProfileLease : IDisposable
     {
+        private readonly Action? _release;
         private bool _disposed;
 
-        internal LegacyProfileLease(string profilePath, bool isTemporary)
+        internal LegacyProfileLease(string profilePath, bool isTemporary, Action? release)
         {
             ProfilePath = profilePath;
             IsTemporary = isTemporary;
+            _release = release;
         }
 
         public string ProfilePath { get; }
@@ -23,11 +29,10 @@ namespace MyHomelabBrowser.classes.Flash
                 return;
 
             _disposed = true;
-            if (!IsTemporary)
-                return;
+            _release?.Invoke();
 
-            _ = Task.Run(() => DeleteDirectoryWithRetries(ProfilePath));
-            GC.SuppressFinalize(this);
+            if (IsTemporary)
+                _ = Task.Run(() => DeleteDirectoryWithRetries(ProfilePath));
         }
 
         private static void DeleteDirectoryWithRetries(string path)

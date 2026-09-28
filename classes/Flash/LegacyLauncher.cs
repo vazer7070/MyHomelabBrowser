@@ -1,15 +1,26 @@
 using MyHomelabBrowser.classes;
+using MyHomelabBrowser.classes.Flash;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices;
-using System.Windows;
 
 namespace MyHomelabBrowser
 {
+    /// <summary>
+    /// Lance Basilisk pour un onglet Legacy : profil dédié durci, arguments passés un
+    /// par un, processus enfermé dans un job Windows (voir LegacyProcess).
+    /// </summary>
     public class LegacyLauncher
     {
+        // Pas de fenêtre de rapport de plantage ni d'envoi à Mozilla.
+        static readonly IReadOnlyDictionary<string, string> LaunchEnvironment = new Dictionary<string, string>
+        {
+            ["MOZ_CRASHREPORTER_DISABLE"] = "1",
+            ["MOZ_CRASHREPORTER_NO_REPORT"] = "1",
+            ["MOZ_NO_REMOTE"] = "1"
+        };
+
         private readonly SettingsService _settings;
         public event Action<string>? OnDebug;
         private void Dbg(string msg) => OnDebug?.Invoke(msg);
@@ -19,210 +30,72 @@ namespace MyHomelabBrowser
             _settings = settings;
         }
 
-        // ===============================
-        // VERIFICATION
-        // ===============================
         public bool CanLaunch()
         {
             var s = _settings.Settings;
-
-            if (!s.EnableFlashSupport)
-                return false;
-
-            if (string.IsNullOrWhiteSpace(s.BasiliskPath))
-                return false;
-
-            return File.Exists(s.BasiliskPath);
+            return s.EnableFlashSupport && BasiliskExecutable.IsLaunchable(s.BasiliskPath);
         }
 
-        // =====================
-        // EnumWindows
-        // =====================
-        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-        [DllImport("user32.dll")]
-        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
-        [DllImport("user32.dll")]
-        private static extern bool IsWindowVisible(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-
-        [DllImport("user32.dll")]
-        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct RECT
-        {
-            public int Left;
-            public int Top;
-            public int Right;
-            public int Bottom;
-        }
-
-       
-
-        private void EnsureLegacyProfileReady(string profileDir)
-        {
-            void Log(string s) => Dbg("[LegacyProfile] " + s);
-
-            if (string.IsNullOrWhiteSpace(profileDir))
-            {
-                Log("profileDir vide -> skip");
-                return;
-            }
-
-            try
-            {
-                Log("Init profile: " + profileDir);
-
-                Directory.CreateDirectory(profileDir);
-
-                // chrome/
-                string chromeDir = Path.Combine(profileDir, "chrome");
-                Directory.CreateDirectory(chromeDir);
-
-                // userChrome.css (WriteIfMissing)
-                string userChromePath = Path.Combine(chromeDir, "userChrome.css");
-                if (!File.Exists(userChromePath))
-                {
-                    File.WriteAllText(userChromePath,
-        @"#navigator-toolbox { visibility: collapse !important; }
-#TabsToolbar { visibility: collapse !important; }
-#nav-bar { visibility: collapse !important; }
-#toolbar-menubar { visibility: collapse !important; }
-#PersonalToolbar { visibility: collapse !important; }
-");
-                    Log("Créé: chrome/userChrome.css");
-                }
-                else
-                {
-                    Log("Existe déjà: chrome/userChrome.css (pas écrasé)");
-                }
-
-                // user.js (WriteIfMissing)
-                string userJsPath = Path.Combine(profileDir, "user.js");
-                if (!File.Exists(userJsPath))
-                {
-                    File.WriteAllText(userJsPath,
-        @"user_pref(""toolkit.legacyUserProfileCustomizations.stylesheets"", true);
-user_pref(""browser.tabs.autoHide"", true);
-user_pref(""browser.fullscreen.autohide"", true);
-user_pref(""app.update.auto"", false);
-user_pref(""app.update.enabled"", false);
-");
-                    Log("Créé: user.js");
-                }
-                else
-                {
-                    Log("Existe déjà: user.js (pas écrasé)");
-                }
-
-                // prefs.js (ne pas écraser, juste garantir les prefs)
-                string prefsJsPath = Path.Combine(profileDir, "prefs.js");
-                if (!File.Exists(prefsJsPath))
-                {
-                    File.WriteAllText(prefsJsPath, "// created by MyHomelabBrowser\n");
-                    Log("Créé: prefs.js");
-                }
-                else
-                {
-                    Log("Existe déjà: prefs.js");
-                }
-
-                // lire prefs.js
-                string prefsContent = "";
-                try { prefsContent = File.ReadAllText(prefsJsPath); }
-                catch (Exception ex)
-                {
-                    Log("Impossible de lire prefs.js: " + ex.Message);
-                    prefsContent = "";
-                }
-
-                // ✅ garantir userChrome enabled
-                if (!prefsContent.Contains("toolkit.legacyUserProfileCustomizations.stylesheets", StringComparison.Ordinal))
-                {
-                    File.AppendAllText(prefsJsPath,
-                        "user_pref(\"toolkit.legacyUserProfileCustomizations.stylesheets\", true);\n");
-                    Log("Ajout pref dans prefs.js: toolkit.legacyUserProfileCustomizations.stylesheets=true");
-                }
-                else
-                {
-                    Log("Pref déjà présente dans prefs.js");
-                }
-
-                // ✅ garantir stop updates (backup dans prefs.js)
-                if (!prefsContent.Contains("app.update.auto", StringComparison.Ordinal))
-                {
-                    File.AppendAllText(prefsJsPath, "user_pref(\"app.update.auto\", false);\n");
-                    Log("Ajout pref dans prefs.js: app.update.auto=false");
-                }
-
-                if (!prefsContent.Contains("app.update.enabled", StringComparison.Ordinal))
-                {
-                    File.AppendAllText(prefsJsPath, "user_pref(\"app.update.enabled\", false);\n");
-                    Log("Ajout pref dans prefs.js: app.update.enabled=false");
-                }
-
-                DeleteIfExists(Path.Combine(profileDir, "parent.lock"), Log);
-                DeleteIfExists(Path.Combine(profileDir, "lock"), Log);
-                DeleteIfExists(Path.Combine(profileDir, ".parentlock"), Log);
-
-                Log("OK");
-            }
-            catch (Exception ex)
-            {
-                Log("FAILED: " + ex);
-            }
-        }
-
-        private static void DeleteIfExists(string path, Action<string> log)
-        {
-            try
-            {
-                if (File.Exists(path))
-                {
-                    File.Delete(path);
-                    log("Supprimé lock: " + Path.GetFileName(path));
-                }
-            }
-            catch (Exception ex)
-            {
-                log("Impossible de supprimer " + Path.GetFileName(path) + ": " + ex.Message);
-            }
-        }
-
-        // ===============================
-        // LANCEMENT
-        // ===============================
-        public Process? Launch(string url, string profileDir)
+        public LegacyProcess? Launch(string url, string profileDir, bool isPrivate)
         {
             if (!CanLaunch())
                 return null;
 
-            var exe = _settings.Settings.BasiliskPath;
-
             if (string.IsNullOrWhiteSpace(profileDir))
                 throw new ArgumentException(nameof(profileDir));
 
-            // ✅ préparer le profil fourni par l'appelant
-            EnsureLegacyProfileReady(profileDir);
-
-            // ✅ args : PROFIL EXPLICITE
-            string args = $"-new-instance -no-remote  -profile \"{profileDir}\" \"{url}\"";
-
-
-            return Process.Start(new ProcessStartInfo
+            if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
             {
-                FileName = exe,
-                Arguments = args,
-                UseShellExecute = false
-            });
+                throw new ArgumentException("Adresse Legacy invalide : " + url, nameof(url));
+            }
+
+            LegacyProfilePreferences.Apply(profileDir, isPrivate);
+            Dbg("[LegacyProfile] Réglages appliqués : " + profileDir);
+
+            string exe = Path.GetFullPath(_settings.Settings.BasiliskPath!);
+            var arguments = new List<string> { "-new-instance", "-no-remote", "-profile", profileDir, uri.AbsoluteUri };
+
+            LegacyProcess process = LegacyProcess.Start(exe, arguments, LaunchEnvironment);
+            Dbg($"[Legacy] Basilisk lancé (PID {process.Id}) : {uri.Host}");
+            return process;
+        }
+    }
+
+    /// <summary>Vérification du chemin de Basilisk choisi dans les paramètres.</summary>
+    public static class BasiliskExecutable
+    {
+        public static bool IsLaunchable(string? path)
+            => !string.IsNullOrWhiteSpace(path) &&
+               string.Equals(Path.GetExtension(path), ".exe", StringComparison.OrdinalIgnoreCase) &&
+               File.Exists(path);
+
+        /// <summary>Produit et version lus dans l'exécutable, pour les afficher dans les paramètres.</summary>
+        public static (string? Product, string? Version) Describe(string? path)
+        {
+            if (!IsLaunchable(path))
+                return (null, null);
+
+            try
+            {
+                FileVersionInfo info = FileVersionInfo.GetVersionInfo(path!);
+                string? product = string.IsNullOrWhiteSpace(info.ProductName) ? null : info.ProductName.Trim();
+                string? version = string.IsNullOrWhiteSpace(info.ProductVersion) ? null : info.ProductVersion.Trim();
+                return (product, version);
+            }
+            catch
+            {
+                return (null, null);
+            }
         }
 
-
-
-
+        /// <summary>Navigateur de la famille Gecko/UXP capable de lancer le plugin Flash NPAPI.</summary>
+        public static bool LooksLikeUxpBrowser(string? product)
+            => product != null &&
+               (product.Contains("Basilisk", StringComparison.OrdinalIgnoreCase) ||
+                product.Contains("Pale Moon", StringComparison.OrdinalIgnoreCase) ||
+                product.Contains("Serpent", StringComparison.OrdinalIgnoreCase) ||
+                product.Contains("Waterfox", StringComparison.OrdinalIgnoreCase) ||
+                product.Contains("Firefox", StringComparison.OrdinalIgnoreCase));
     }
 }
