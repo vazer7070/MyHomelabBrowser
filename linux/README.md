@@ -3,12 +3,13 @@
 Édition Linux de PommeBrowser, distribuée en **AppImage** : un seul fichier, sans installation.
 
 Elle partage avec l'édition Windows la logique du navigateur :
-- l'historique ;
-- les favoris ;
+- les profils protégés par mot de passe et le coffre à identifiants ;
+- l'historique, les favoris et les espaces de travail ;
 - les services du homelab ;
 - l'anti-pub ;
-- l'HTTPS automatique ;
-- les certificats approuvés ;
+- l'HTTPS automatique et les certificats approuvés ;
+- les réglages de Basilisk pour le Flash d'origine ;
+- le formulaire « Signaler un problème » ;
 - les traductions.
 
 L'interface est écrite avec **GTK 4 / libadwaita** et le moteur est **WebKitGTK 6.0**, le moteur de GNOME Web (Epiphany).
@@ -45,12 +46,34 @@ Pour ajouter PommeBrowser au menu des applications, utilisez [Gear Lever](https:
 
 L'AppImage n'a pas besoin de `libfuse2`. Sans FUSE (conteneur…), lancez-la avec `--appimage-extract-and-run`.
 
+Les versions suivantes s'installent toutes seules (voir **Mises à jour** plus bas) : gardez l'AppImage dans un dossier où vous pouvez écrire, par exemple `~/Applications`.
+
+### 3. Basilisk (facultatif)
+
+Pour les contenus Flash que Ruffle ne lit pas :
+1. téléchargez Basilisk pour Linux sur [basilisk-browser.org](https://www.basilisk-browser.org/download.shtml) et décompressez l'archive dans `~/.local/share/basilisk` (ou indiquez l'emplacement de `basilisk` dans les préférences) ;
+2. copiez le module Flash `libflashplayer.so` dans `~/.local/share/pommebrowser/plugins` (ou `~/.mozilla/plugins`).
+
 ## Fonctions
 
 **Navigation**
 - Onglets réorganisables et épinglables. `Ctrl+Maj+T` rouvre le dernier fermé.
 - Reprise de la session au démarrage.
 - Fenêtre privée (`Ctrl+Maj+N`).
+- Vue côte à côte : deux onglets affichés ensemble (menu principal, ou « Afficher à côté » dans le menu d'un onglet). Un clic dans un volet le rend actif.
+- Espaces de travail : les onglets ouverts, enregistrés sous un nom (« Réseau », « Médias »…) et rouverts d'un clic. Même fichier que l'édition Windows.
+
+**Profils**
+- Profils protégés par mot de passe, avec leurs propres réglages, favoris, historique, cookies et mots de passe. Même fichier `profiles.json` que l'édition Windows.
+- Menu du profil dans la barre d'en-tête : changer de profil, créer, renommer, changer le mot de passe, supprimer. Changer de profil relance PommeBrowser, qui rouvre les onglets de ce profil.
+- Le profil par défaut n'a pas de mot de passe.
+
+**Mots de passe**
+- Coffre chiffré (AES-GCM, clé dérivée du mot de passe du coffre), au même format que sous Windows.
+- Après une connexion, PommeBrowser propose d'enregistrer le mot de passe (« Jamais pour ce site », « Toujours »). Les formulaires sont ensuite remplis à l'ouverture de la page.
+- La clé de la barre d'adresse remplit l'identifiant, ou le code de double authentification sur la page qui le demande.
+- Page « Mots de passe » : recherche, affichage, copie (effacée du presse-papiers après 30 s), suppression, codes 2FA (TOTP) en direct.
+- Les scripts du coffre tournent à l'écart de la page (monde isolé de WebKit) : une page ne peut ni envoyer de faux identifiants ni intercepter ceux qui sont remplis.
 
 **Barre d'adresse**
 - Propositions au fil de la saisie : services du homelab, favoris, puis pages les plus visitées.
@@ -76,6 +99,8 @@ L'AppImage n'a pas besoin de `libfuse2`. Sans FUSE (conteneur…), lancez-la ave
 **Flash**
 - Contenus lus avec Ruffle, intégré et vérifié par SHA-256 à la compilation.
 - Ruffle n'est chargé que sur les pages qui contiennent du Flash.
+- Basilisk pour le reste : « Ouvrir dans Basilisk » (menu principal) ouvre la page dans une fenêtre Basilisk, avec le lecteur Flash d'origine. « Toujours » l'y ouvre d'office ensuite.
+- Profils Basilisk durcis, un par site (jetable en navigation privée), communs avec l'édition Windows. Basilisk se ferme avec son onglet, et avec PommeBrowser même en cas d'arrêt brutal.
 
 **Sécurité**
 - HTTPS automatique, avec une page claire quand un site ne propose pas HTTPS.
@@ -86,28 +111,32 @@ L'AppImage n'a pas besoin de `libfuse2`. Sans FUSE (conteneur…), lancez-la ave
 **Téléchargements**
 - Enregistrés dans le dossier Téléchargements, sans jamais écraser un fichier existant.
 
+**Mises à jour**
+- Au démarrage, PommeBrowser cherche une nouvelle version sur le dépôt des versions (le même que l'édition Windows).
+- L'AppImage est téléchargée à côté de l'ancienne, vérifiée (taille, empreinte SHA-256 publiée avec la version, format AppImage), puis la remplace d'un seul coup. Elle s'applique au redémarrage.
+- Réglage et bouton « Vérifier » dans les préférences. Si le dossier de l'AppImage n'est pas modifiable, PommeBrowser indique seulement la nouvelle version.
+
+**Signaler un problème**
+- Même rapport que l'édition Windows, envoyé au serveur de support s'il est configuré, sinon enregistré dans `Documents/PommeBrowser/Rapports`.
+- Journal, informations système et page affichée (sans ses paramètres) joints au choix. Aucun mot de passe ni cookie.
+
 **Autres**
 - Recherche dans la page, zoom mémorisé par site, impression, outils de développement.
 - Thème clair, sombre ou celui du système. Interface en français ou en anglais.
-
-### Pas encore dans l'édition Linux
-
-- Basilisk (Flash d'origine) : c'est un programme Windows. Ruffle lit la grande majorité des contenus.
-- Profils protégés par mot de passe, coffre à identifiants, codes TOTP.
-- Espaces de travail et vue côte à côte.
-- Formulaire « Signaler un problème ».
-- Mise à jour automatique : remplacez l'AppImage par la nouvelle version.
 
 ## Où sont les données ?
 
 | Emplacement | Contenu |
 |---|---|
-| `~/.config/MyHomelabBrowser/` | Apparence et langue |
-| `~/.config/MyHomelabBrowser/profiles/default/` | Réglages (`settings-linux.json`), favoris, services, autorisations, certificats approuvés, zoom, anti-pub |
-| `~/.local/share/pommebrowser/` | Historique (`history.db`), cookies et stockage des sites, session |
-| `~/.cache/pommebrowser/` | Cache web, règles anti-pub compilées |
+| `~/.config/MyHomelabBrowser/` | Apparence et langue, liste des profils (`profiles.json`, mots de passe hachés) et dernier profil ouvert |
+| `~/.config/MyHomelabBrowser/profiles/default/` | Profil par défaut : réglages (`settings-linux.json`), favoris, services, espaces de travail, coffre (`vault.json.enc`), autorisations, certificats approuvés, zoom, anti-pub, règles Flash |
+| `~/.config/MyHomelabBrowser/profiles/<nom>/` | Même contenu, pour un profil créé |
+| `~/.local/share/pommebrowser/` | Profil par défaut : historique (`history.db`), cookies et stockage des sites, session, profils Basilisk (`basilisk/`) |
+| `~/.local/share/pommebrowser/profiles/<nom>/` | Même contenu, pour un profil créé |
+| `~/.local/share/pommebrowser/plugins/` | Module Flash pour Basilisk (`libflashplayer.so`) |
+| `~/.cache/pommebrowser/` | Cache web, règles anti-pub compilées (`profiles/<nom>/` pour un profil créé) |
 
-Les fichiers de `profiles/<nom>/` ont le même format que sous Windows. Vous pouvez copier `favorites.json` et `services.json` d'un système à l'autre.
+Les fichiers de `profiles/<nom>/` ont le même format que sous Windows. Vous pouvez copier `favorites.json`, `services.json`, `workspaces.json` ou `vault.json.enc` d'un système à l'autre.
 
 ## Compiler
 
@@ -118,11 +147,16 @@ dotnet run --project linux                      # lancer depuis les sources
 linux/packaging/build-appimage.sh               # AppImage x86_64
 linux/packaging/build-appimage.sh all           # x86_64 et aarch64
 linux/packaging/smoke-test.sh linux/packaging/out/PommeBrowser-*-x86_64.AppImage
+linux/packaging/publish-release.sh              # AppImage ajoutées à la version GitHub
 ```
 
 Le script télécharge `appimagetool` et le runtime AppImage dans une version fixée et vérifie leur empreinte SHA-256. Ruffle est téléchargé et vérifié de la même façon ; le fichier `build/Ruffle.targets` est commun aux deux éditions.
 
-Les tests de la logique sans interface (conversion des listes anti-pub, barre d'adresse, favoris, historique, session…) font partie de `tests/PommeBrowser.Tests` :
+**Publier une version** : publiez d'abord l'édition Windows (`build-pack-velopack.ps1`), puis lancez `publish-release.sh` (GitHub CLI connecté). Les AppImage et leurs fichiers `.sha256` sont ajoutés à la version du même numéro sur `vazer7070/PommeBrowser-release` : c'est là que PommeBrowser cherche ses mises à jour.
+
+**Serveur de support** : comme pour l'édition Windows, `-p:SupportApiUrl=https://…` (ou la variable `POMMEBROWSER_SUPPORT_API_URL`) à la compilation. Sans adresse, les rapports sont enregistrés localement.
+
+Les tests de la logique sans interface (conversion des listes anti-pub, barre d'adresse, favoris, historique, session, profils, relance, mise à jour de l'AppImage, Basilisk, rapports, scripts du coffre…) font partie de `tests/PommeBrowser.Tests` :
 
 ```bash
 dotnet test tests/PommeBrowser.Tests
@@ -132,9 +166,9 @@ dotnet test tests/PommeBrowser.Tests
 
 | Dossier | Contenu |
 |---|---|
-| `Core/` | Logique sans interface, testée : conversion des listes anti-pub en règles WebKit, propositions de la barre d'adresse, favoris, historique, session, réglages, emplacements XDG |
-| `Web/` | Moteur : sessions réseau, bloqueur, Ruffle (schéma `pomme-ruffle://`), téléchargements, appels directs à WebKitGTK |
-| `Ui/` | Interface GTK 4 / libadwaita : fenêtres, onglets, barre d'adresse, pages internes, préférences |
+| `Core/` | Logique sans interface, testée : conversion des listes anti-pub en règles WebKit, propositions de la barre d'adresse, favoris, historique, session, réglages, emplacements XDG, dossiers des profils, relance, mise à jour de l'AppImage, détection de Basilisk, rapport de support |
+| `Web/` | Moteur : sessions réseau, bloqueur, Ruffle (schéma `pomme-ruffle://`), capture des identifiants, téléchargements, Basilisk, mise à jour, appels directs à WebKitGTK |
+| `Ui/` | Interface GTK 4 / libadwaita : fenêtres, onglets, vue côte à côte, espaces de travail, barre d'adresse, pages internes (dont « Mots de passe »), profils, coffre, préférences, rapport |
 | `packaging/` | AppImage : lanceur, `.desktop`, métadonnées AppStream, icônes, scripts |
 
 Le reste du code partagé vient de `../classes/`, lié dans le projet et non copié.

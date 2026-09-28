@@ -65,8 +65,8 @@ namespace MyHomelabBrowser.classes.Flash
         /// </summary>
         internal static bool IsLockedByAnotherProcess(string profilePath)
         {
-            if (OperatingSystem.IsLinux())
-                return IsLockedOnLinux(profilePath);
+            if (OperatingSystem.IsLinux() && IsLockedOnLinux(profilePath))
+                return true;
 
             string lockFile = Path.Combine(profilePath, "parent.lock");
             if (!File.Exists(lockFile))

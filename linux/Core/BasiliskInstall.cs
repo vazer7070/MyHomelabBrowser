@@ -39,7 +39,7 @@ namespace PommeBrowser.Linux.Core
         /// <summary>Fichier exécutable (bit x pour l'utilisateur).</summary>
         public static bool IsLaunchable(string? path)
         {
-            if (string.IsNullOrWhiteSpace(path) || !Path.IsPathRooted(path) || !File.Exists(path))
+            if (!OperatingSystem.IsLinux() || string.IsNullOrWhiteSpace(path) || !Path.IsPathRooted(path) || !File.Exists(path))
                 return false;
             try
             {

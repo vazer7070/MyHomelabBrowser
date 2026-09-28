@@ -70,6 +70,9 @@
     <Compile Include="..\..\classes\Support\Models\SupportSubmissionResult.cs" Link="App\Support\SupportSubmissionResult.cs" />
     <Compile Include="..\..\classes\Support\Transports\LocalSupportExportTransport.cs" Link="App\Support\LocalSupportExportTransport.cs" />
     <Compile Include="..\..\classes\RuntimeLogBuffer.cs" Link="App\RuntimeLogBuffer.cs" />
+    <Compile Include="..\..\classes\Profiles\Credentials\CredentialCandidate.cs" Link="App\Profiles\Credentials\CredentialCandidate.cs" />
+    <Compile Include="..\..\classes\Profiles\Credentials\CredentialOrigin.cs" Link="App\Profiles\Credentials\CredentialOrigin.cs" />
+    <Compile Include="..\..\classes\Profiles\Credentials\CredentialScripts.cs" Link="App\Profiles\Credentials\CredentialScripts.cs" />
   </ItemGroup>
 
   <ItemGroup Label="Édition Linux (logique sans interface)">

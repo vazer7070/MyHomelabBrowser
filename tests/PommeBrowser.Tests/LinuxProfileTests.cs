@@ -70,7 +70,7 @@ public sealed class LinuxProfileTests : IDisposable
         Assert.Equal(new[] { "-c", AppRestart.WaitScript, "pommebrowser-restart", "4242", "/apps/Pomme Browser.AppImage" }, start.ArgumentList);
     }
 
-    [Fact]
+    [LinuxFact]
     public void TheWaitScriptRunsTheCommandOnceTheProcessHasExited()
     {
         string marker = Path.Combine(_directory, "relaunched");

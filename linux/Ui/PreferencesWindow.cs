@@ -123,7 +123,7 @@ namespace PommeBrowser.Linux.Ui
 
             var status = Adw.ActionRow.New();
             status.SetTitle(Tr("PommeBrowser {0}", Updater.Current.ToString(3)));
-            var check = Gtk.Button.NewWithLabel(Tr("Rechercher"));
+            var check = Gtk.Button.NewWithLabel(Tr("Vérifier"));
             check.SetValign(Gtk.Align.Center);
             check.OnClicked += (_, _) =>
             {
@@ -139,7 +139,7 @@ namespace PommeBrowser.Linux.Ui
             {
                 status.SetSubtitle(GLib.Functions.MarkupEscapeText(updater.Status, -1));
                 check.SetSensitive(!updater.IsBusy);
-                check.SetLabel(updater.Installed != null ? Tr("Redémarrer") : Tr("Rechercher"));
+                check.SetLabel(updater.Installed != null ? Tr("Redémarrer") : Tr("Vérifier"));
                 if (updater.Installed != null)
                     check.AddCssClass("suggested-action");
             }
