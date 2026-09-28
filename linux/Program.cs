@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Localization;
+using MyHomelabBrowser.classes.Profiles;
 using PommeBrowser.Linux.Core;
 using PommeBrowser.Linux.Ui;
 
@@ -17,6 +18,14 @@ namespace PommeBrowser.Linux
         {
             RuntimeLogBuffer.Init();
             LinuxPaths.Initialize();
+
+            // Dernier profil ouvert (même fichier profiles.json que l'édition Windows).
+            var profiles = new ProfileService(AppDataContext.GlobalRoot);
+            ProfileData.ApplyPendingMoves();
+            ProfileData.RemoveOrphans(name =>
+                profiles.ProfileExists(name) ||
+                Directory.Exists(Path.Combine(AppDataContext.GlobalRoot, "profiles", name)));
+            LinuxPaths.UseProfile(profiles.Current?.Username);
 
             AppearanceSettings appearance = LoadAppearance();
             InitializeLanguage(appearance.Language);
@@ -33,7 +42,7 @@ namespace PommeBrowser.Linux
             WebKit.Module.Initialize();
             Adw.Module.Initialize();
 
-            var application = new BrowserApplication(appearance);
+            var application = new BrowserApplication(appearance, profiles);
             return application.Run(args);
         }
 

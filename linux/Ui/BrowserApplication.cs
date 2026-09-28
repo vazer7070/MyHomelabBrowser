@@ -20,9 +20,10 @@ namespace PommeBrowser.Linux.Ui
         readonly string _settingsPath = LinuxPaths.Profile("settings-linux.json");
         bool _quitting;
 
-        public BrowserApplication(AppearanceSettings appearance)
+        public BrowserApplication(AppearanceSettings appearance, ProfileService profiles)
         {
             Appearance = appearance;
+            Profiles = profiles;
             Settings = LinuxSettings.Load(_settingsPath);
 
             App = Adw.Application.New(LinuxPaths.AppId, Gio.ApplicationFlags.HandlesOpen);
@@ -34,6 +35,7 @@ namespace PommeBrowser.Linux.Ui
 
         public Adw.Application App { get; }
         public AppearanceSettings Appearance { get; }
+        public ProfileService Profiles { get; }
         public LinuxSettings Settings { get; private set; }
 
         public WebEngine Engine { get; private set; } = null!;
@@ -130,13 +132,45 @@ namespace PommeBrowser.Linux.Ui
             return window;
         }
 
-        public void Quit()
+        public void Quit() => Quit(saveSession: true);
+
+        void Quit(bool saveSession)
         {
             _quitting = true;
-            SaveSession(_windows.Where(w => !w.IsPrivate).ToList());
+            if (saveSession)
+                SaveSession(_windows.Where(w => !w.IsPrivate).ToList());
             foreach (BrowserWindow window in _windows.ToList())
                 window.Window.Destroy();
             App.Quit();
+        }
+
+        /// <summary>
+        /// Change de profil (connexion, création, renommage, suppression) puis relance PommeBrowser.
+        /// La session du profil quitté est enregistrée avant le changement. Si <paramref name="change"/>
+        /// échoue, l'exception remonte à l'appelant et rien n'est relancé ; sinon la relance a lieu
+        /// juste après, une fois la boîte de dialogue refermée.
+        /// </summary>
+        public void ChangeProfile(Action change)
+        {
+            SaveSession(_windows.Where(w => !w.IsPrivate).ToList());
+            History.Flush();
+            change();
+            MainThread.Post(() => Restart(saveSession: false));
+        }
+
+        /// <summary>Relance PommeBrowser (nouveau profil, mise à jour installée).</summary>
+        public void Restart(bool saveSession = true)
+        {
+            try
+            {
+                AppRestart.Schedule();
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or System.IO.IOException)
+            {
+                // PommeBrowser se ferme quand même : le prochain lancement ouvrira le bon profil.
+                RuntimeLogBuffer.Append("[Relance] " + ex.Message);
+            }
+            Quit(saveSession);
         }
 
         void SaveSession(IReadOnlyCollection<BrowserWindow> windows)

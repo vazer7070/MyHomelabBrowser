@@ -157,6 +157,8 @@ namespace PommeBrowser.Linux.Ui
             menuButton.SetPrimary(true);
             menuButton.SetPopover(BuildMainMenu());
             header.PackEnd(menuButton);
+            if (!isPrivate)
+                header.PackEnd(ProfileMenu.CreateButton(app, this));
 
             _downloadsButton = Gtk.MenuButton.New();
             _downloadsButton.SetIconName("folder-download-symbolic");

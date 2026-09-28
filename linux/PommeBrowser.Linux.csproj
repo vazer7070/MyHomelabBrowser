@@ -47,6 +47,10 @@
 		<Compile Include="../classes/SiteZoomStore.cs" Link="Shared/SiteZoomStore.cs" />
 		<Compile Include="../classes/Import/BookmarkImporter.cs" Link="Shared/Import/BookmarkImporter.cs" />
 		<Compile Include="../classes/Profiles/AppDataContext.cs" Link="Shared/Profiles/AppDataContext.cs" />
+		<Compile Include="../classes/Profiles/ProfileService.cs" Link="Shared/Profiles/ProfileService.cs" />
+		<Compile Include="../classes/Profiles/UserProfile.cs" Link="Shared/Profiles/UserProfile.cs" />
+		<Compile Include="../classes/Profiles/PasswordHasher.cs" Link="Shared/Profiles/PasswordHasher.cs" />
+		<Compile Include="../classes/Profiles/ProfileNameRules.cs" Link="Shared/Profiles/ProfileNameRules.cs" />
 		<Compile Include="../classes/Homelab/HomelabService.cs" Link="Shared/Homelab/HomelabService.cs" />
 		<Compile Include="../classes/Homelab/HomelabServiceStore.cs" Link="Shared/Homelab/HomelabServiceStore.cs" />
 		<Compile Include="../classes/Homelab/ServiceHealthChecker.cs" Link="Shared/Homelab/ServiceHealthChecker.cs" />
