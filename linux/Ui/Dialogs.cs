@@ -116,6 +116,27 @@ namespace PommeBrowser.Linux.Ui
             dialog.Present(parent);
         }
 
+        /// <summary>Basilisk introuvable : où le trouver et comment l'installer.</summary>
+        public static void BasiliskMissing(BrowserApplication app, BrowserWindow window)
+        {
+            string plugins = PommeBrowser.Linux.Core.LinuxPaths.SharedData("plugins");
+            var dialog = Adw.AlertDialog.New(Tr("Basilisk n'est pas installé"),
+                Tr("Basilisk lit les contenus Flash avec le lecteur d'origine, dans sa propre fenêtre.\n\n1. Téléchargez Basilisk pour Linux sur basilisk-browser.org.\n2. Décompressez l'archive dans ~/.local/share/basilisk, ou indiquez l'emplacement de basilisk dans les préférences.\n3. Copiez le module Flash libflashplayer.so dans {0}.", plugins));
+            dialog.AddResponse("site", Tr("Site de Basilisk"));
+            dialog.AddResponse("preferences", Tr("Préférences"));
+            dialog.AddResponse("close", Tr("Fermer"));
+            dialog.SetDefaultResponse("close");
+            dialog.SetCloseResponse("close");
+            dialog.OnResponse += (_, args) =>
+            {
+                if (args.Response == "site")
+                    window.OpenInNewTab("https://www.basilisk-browser.org/download.shtml", background: false);
+                else if (args.Response == "preferences")
+                    PreferencesWindow.Show(app, window);
+            };
+            dialog.Present(window.Window);
+        }
+
         public static bool IsWebAddress(string? text)
             => Uri.TryCreate(text?.Trim(), UriKind.Absolute, out Uri? uri) &&
                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeFile);

@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.AdBlock.Models;
+using MyHomelabBrowser.classes.Flash;
 using MyHomelabBrowser.classes.Security;
 using PommeBrowser.Linux.Core;
 using PommeBrowser.Linux.Web;
@@ -20,7 +21,7 @@ namespace PommeBrowser.Linux.Ui
             dialog.SetSearchEnabled(true);
             dialog.Add(GeneralPage(app, dialog));
             dialog.Add(PrivacyPage(app, dialog));
-            dialog.Add(FlashAndServicesPage(app));
+            dialog.Add(FlashAndServicesPage(app, dialog));
             dialog.Present(window?.Window);
         }
 
@@ -296,7 +297,7 @@ namespace PommeBrowser.Linux.Ui
         // Flash et services
         // ---------------------------------------------------------------
 
-        static Adw.PreferencesPage FlashAndServicesPage(BrowserApplication app)
+        static Adw.PreferencesPage FlashAndServicesPage(BrowserApplication app, Adw.PreferencesDialog dialog)
         {
             LinuxSettings settings = app.Settings;
             RuffleSupport ruffle = app.Engine.Ruffle;
@@ -314,6 +315,7 @@ namespace PommeBrowser.Linux.Ui
             ruffleRow.SetSensitive(ruffle.IsAvailable);
             flash.Add(ruffleRow);
             page.Add(flash);
+            page.Add(BasiliskGroup(app, dialog));
 
             var services = Group(Tr("Services du homelab"));
             services.Add(Switch(Tr("Surveiller les services"), Tr("Vérifie régulièrement qu'ils répondent"), settings.ServiceMonitoring, value =>
@@ -339,6 +341,101 @@ namespace PommeBrowser.Linux.Ui
             }));
             page.Add(services);
             return page;
+        }
+
+        /// <summary>
+        /// Basilisk (Flash d'origine, fenêtre séparée) : emplacement, module Flash et sites
+        /// ouverts d'office dans Basilisk.
+        /// </summary>
+        static Adw.PreferencesGroup BasiliskGroup(BrowserApplication app, Adw.PreferencesDialog dialog)
+        {
+            LinuxSettings settings = app.Settings;
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string plugins = LinuxPaths.SharedData("plugins");
+
+            var group = Group(Tr("Basilisk (Flash d'origine)"));
+            group.SetDescription(Tr("Pour les contenus que Ruffle ne lit pas : la page s'ouvre dans une fenêtre Basilisk, avec le lecteur Flash d'origine. Menu principal → Ouvrir dans Basilisk."));
+
+            var location = Adw.ActionRow.New();
+            location.SetTitle(Tr("Basilisk"));
+            void ShowLocation()
+            {
+                string? executable = app.BasiliskExecutable;
+                (string? name, string? version) = BasiliskInstall.Describe(executable);
+                location.SetSubtitle(GLib.Functions.MarkupEscapeText(executable == null
+                    ? Tr("Introuvable : téléchargez Basilisk pour Linux sur basilisk-browser.org.")
+                    : $"{name ?? "Basilisk"} {version} — {executable}".Replace("  ", " "), -1));
+            }
+            var choose = Gtk.Button.NewWithLabel(Tr("Choisir…"));
+            choose.SetValign(Gtk.Align.Center);
+            choose.OnClicked += async (_, _) =>
+            {
+                try
+                {
+                    var picker = Gtk.FileDialog.New();
+                    picker.SetTitle(Tr("Exécutable de Basilisk"));
+                    Gio.File? file = await picker.OpenAsync(dialog.GetRoot() as Gtk.Window);
+                    if (file?.GetPath() is not { } path)
+                        return;
+                    if (!BasiliskInstall.IsLaunchable(path))
+                    {
+                        dialog.AddToast(Adw.Toast.New(Tr("Ce fichier n'est pas un programme exécutable.")));
+                        return;
+                    }
+                    settings.BasiliskPath = path;
+                    app.SaveSettings();
+                    ShowLocation();
+                }
+                catch (GLib.GException)
+                {
+                    // Sélection annulée.
+                }
+            };
+            location.AddSuffix(choose);
+            ShowLocation();
+            group.Add(location);
+
+            var plugin = Adw.ActionRow.New();
+            plugin.SetTitle(Tr("Module Flash"));
+            string? found = BasiliskInstall.FindFlashPlugin(home, plugins);
+            plugin.SetSubtitle(GLib.Functions.MarkupEscapeText(found ?? Tr("Absent : copiez libflashplayer.so dans {0}", plugins), -1));
+            var open = Gtk.Button.NewWithLabel(Tr("Ouvrir le dossier"));
+            open.SetValign(Gtk.Align.Center);
+            open.OnClicked += async (_, _) =>
+            {
+                try
+                {
+                    System.IO.Directory.CreateDirectory(plugins);
+                    await Gtk.FileLauncher.New(Gio.FileHelper.NewForPath(plugins)).LaunchAsync(dialog.GetRoot() as Gtk.Window);
+                }
+                catch (Exception ex) when (ex is GLib.GException or System.IO.IOException or UnauthorizedAccessException)
+                {
+                    dialog.AddToast(Adw.Toast.New(plugins));
+                }
+            };
+            plugin.AddSuffix(open);
+            group.Add(plugin);
+
+            // Sites ouverts d'office dans Basilisk (réglage mémorisé depuis le menu).
+            foreach ((string host, FlashRuleMode mode) in FlashDomainRules.GetAll().Where(r => r.Value == FlashRuleMode.Legacy).OrderBy(r => r.Key))
+            {
+                var row = Adw.ActionRow.New();
+                row.SetTitle(GLib.Functions.MarkupEscapeText(host, -1));
+                row.SetSubtitle(Tr("Toujours ouvert dans Basilisk"));
+                var remove = Gtk.Button.NewFromIconName("user-trash-symbolic");
+                remove.AddCssClass("flat");
+                remove.SetValign(Gtk.Align.Center);
+                remove.SetTooltipText(Tr("Ne plus ouvrir ce site dans Basilisk"));
+                remove.OnClicked += (_, _) =>
+                {
+                    if (Uri.TryCreate("https://" + host + "/", UriKind.Absolute, out Uri? uri))
+                        FlashDomainRules.RemoveRule(uri);
+                    group.Remove(row);
+                };
+                row.AddSuffix(remove);
+                group.Add(row);
+            }
+            return group;
         }
 
         // ---------------------------------------------------------------

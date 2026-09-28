@@ -103,12 +103,18 @@ namespace MyHomelabBrowser.classes.Flash
             return builder.ToString();
         }
 
-        /// <summary>Écrit user.js et userChrome.css dans le profil (création si besoin).</summary>
-        public static void Apply(string profileDirectory, bool isPrivate)
+        /// <summary>Fenêtre séparée (édition Linux) : les barres d'outils restent visibles.</summary>
+        public const string SeparateWindowChrome = "/* Fichier géré par PommeBrowser. */\n";
+
+        /// <summary>
+        /// Écrit user.js et userChrome.css dans le profil (création si besoin). Sous Windows, Basilisk
+        /// est intégré à l'onglet (<paramref name="embedded"/>) ; sous Linux, il garde sa propre fenêtre.
+        /// </summary>
+        public static void Apply(string profileDirectory, bool isPrivate, bool embedded = true)
         {
             Directory.CreateDirectory(Path.Combine(profileDirectory, "chrome"));
             AtomicFile.WriteAllText(Path.Combine(profileDirectory, "user.js"), BuildUserJs(isPrivate));
-            AtomicFile.WriteAllText(Path.Combine(profileDirectory, "chrome", "userChrome.css"), UserChrome);
+            AtomicFile.WriteAllText(Path.Combine(profileDirectory, "chrome", "userChrome.css"), embedded ? UserChrome : SeparateWindowChrome);
         }
 
         static string Format(object value) => value switch

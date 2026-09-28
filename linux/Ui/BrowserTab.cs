@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using MyHomelabBrowser.classes;
+using MyHomelabBrowser.classes.Flash;
 using MyHomelabBrowser.classes.Profiles.Credentials;
 using MyHomelabBrowser.classes.Security;
 using PommeBrowser.Linux.Core;
@@ -17,6 +18,7 @@ namespace PommeBrowser.Linux.Ui
         Favorites,
         Services,
         Passwords,
+        Legacy,
         Error
     }
 
@@ -52,6 +54,8 @@ namespace PommeBrowser.Linux.Ui
         string? _errorUri;
         bool _ruffleAttached;
         bool _webShownOnce;
+        BasiliskProcess? _basilisk;
+        Uri? _legacyUri;
 
         public BrowserTab(BrowserApplication app, BrowserWindow window, WebKit.WebView? related = null)
         {
@@ -138,6 +142,8 @@ namespace PommeBrowser.Linux.Ui
         {
             get
             {
+                if (Content == TabContent.Legacy && _legacyUri != null)
+                    return _legacyUri.Host + " — Basilisk";
                 if (Content != TabContent.Web)
                     return ContentTitle(Content);
                 string? title = Web.Title();
@@ -155,6 +161,7 @@ namespace PommeBrowser.Linux.Ui
         {
             TabContent.Web => Web.Url() ?? _pendingUri ?? string.Empty,
             TabContent.Error => _errorUri ?? string.Empty,
+            TabContent.Legacy => _legacyUri?.AbsoluteUri ?? string.Empty,
             _ => string.Empty
         };
 
@@ -187,6 +194,11 @@ namespace PommeBrowser.Linux.Ui
         {
             _pendingUri = null;
             _pendingTitle = null;
+            if (WantsBasilisk(url, out Uri? legacy))
+            {
+                OpenInBasilisk(legacy);
+                return;
+            }
             TryUpgrade(ref url);
             _expectedMainUri = url;
             ApplyFilter(url);
@@ -236,6 +248,8 @@ namespace PommeBrowser.Linux.Ui
             {
                 if (Content == TabContent.Error && WebUri.Length > 0)
                     Navigate(WebUri);
+                else if (Content == TabContent.Legacy && _legacyUri != null && _basilisk == null)
+                    OpenInBasilisk(_legacyUri);
                 return;
             }
 
@@ -295,8 +309,12 @@ namespace PommeBrowser.Linux.Ui
             _dialogs.Clear();
         }
 
-        /// <summary>Onglet fermé.</summary>
-        public void OnClosed() => CloseDialogs();
+        /// <summary>Onglet fermé : ses boîtes et son Basilisk se ferment aussi.</summary>
+        public void OnClosed()
+        {
+            CloseDialogs();
+            StopBasilisk();
+        }
 
         Gtk.Box _holder;
 
@@ -338,6 +356,11 @@ namespace PommeBrowser.Linux.Ui
 
         public void ShowWeb()
         {
+            if (Content == TabContent.Legacy)
+            {
+                StopBasilisk();
+                _legacyUri = null;
+            }
             Content = TabContent.Web;
             _webShownOnce = true;
             _stack.SetVisibleChildName("web");
@@ -377,6 +400,11 @@ namespace PommeBrowser.Linux.Ui
         void ShowError(string? uri, string icon, string title, string description, params (string Label, string? Style, Action Action)[] buttons)
         {
             _errorUri = uri;
+            ShowStatus(TabContent.Error, icon, title, description, buttons);
+        }
+
+        void ShowStatus(TabContent content, string icon, string title, string description, params (string Label, string? Style, Action Action)[] buttons)
+        {
             var status = Adw.StatusPage.New();
             status.SetIconName(icon);
             status.SetTitle(title);
@@ -395,7 +423,102 @@ namespace PommeBrowser.Linux.Ui
             }
             status.SetChild(box);
 
-            ShowPage(TabContent.Error, status);
+            ShowPage(content, status);
+        }
+
+        // ---------------------------------------------------------------
+        // Basilisk (Flash d'origine)
+        // ---------------------------------------------------------------
+
+        /// <summary>Site réglé sur « toujours dans Basilisk », et Basilisk installé.</summary>
+        bool WantsBasilisk(string? url, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Uri? uri)
+        {
+            uri = null;
+            if (!BasiliskInstall.IsOpenable(url, out Uri parsed) || FlashDomainRules.GetRule(parsed) != FlashRuleMode.Legacy)
+                return false;
+            if (_app.BasiliskExecutable == null)
+                return false;
+            uri = parsed;
+            return true;
+        }
+
+        /// <summary>Ouvre la page dans une fenêtre Basilisk ; l'onglet affiche son état.</summary>
+        public void OpenInBasilisk(Uri uri)
+        {
+            if (_app.BasiliskExecutable is not { } executable)
+            {
+                Dialogs.BasiliskMissing(_app, Window);
+                return;
+            }
+
+            StopBasilisk();
+            Web.StopLoading();
+            _legacyUri = uri;
+            try
+            {
+                _basilisk = BasiliskProcess.Start(executable, uri, IsPrivate);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or System.IO.IOException or UnauthorizedAccessException)
+            {
+                RuntimeLogBuffer.Append("[Basilisk] " + ex.Message);
+                ShowError(uri.AbsoluteUri, "dialog-warning-symbolic", Tr("Impossible de lancer Basilisk"), ex.Message,
+                    (Tr("Réessayer"), "suggested-action", () => OpenInBasilisk(uri)),
+                    (Tr("Lire avec Ruffle"), null, () => BackToRuffle(uri)));
+                return;
+            }
+
+            BasiliskProcess started = _basilisk;
+            started.Exited += () =>
+            {
+                if (_basilisk == started)
+                {
+                    _basilisk = null;
+                    if (Content == TabContent.Legacy)
+                        ShowLegacyPage(running: false);
+                }
+            };
+            if (!IsPrivate)
+                _app.History.Record(uri.AbsoluteUri, uri.Host);
+            ShowLegacyPage(running: true);
+        }
+
+        void ShowLegacyPage(bool running)
+        {
+            if (_legacyUri is not { } uri)
+                return;
+
+            Uri target = uri;
+            if (running)
+            {
+                ShowStatus(TabContent.Legacy, "applications-games-symbolic",
+                    Tr("Ouvert dans Basilisk"),
+                    Tr("{0} s'affiche dans une fenêtre Basilisk, avec le lecteur Flash d'origine. Fermer cet onglet ferme aussi Basilisk.", uri.Host),
+                    (Tr("Fermer Basilisk"), null, StopBasilisk),
+                    (Tr("Lire avec Ruffle"), null, () => BackToRuffle(target)));
+            }
+            else
+            {
+                ShowStatus(TabContent.Legacy, "applications-games-symbolic",
+                    Tr("Basilisk est fermé"),
+                    Tr("La fenêtre Basilisk de {0} a été fermée.", uri.Host),
+                    (Tr("Rouvrir dans Basilisk"), "suggested-action", () => OpenInBasilisk(target)),
+                    (Tr("Lire avec Ruffle"), null, () => BackToRuffle(target)));
+            }
+        }
+
+        void StopBasilisk()
+        {
+            _basilisk?.Close();
+        }
+
+        /// <summary>Retour à la page dans PommeBrowser (Ruffle) ; le site n'est plus ouvert d'office dans Basilisk.</summary>
+        void BackToRuffle(Uri uri)
+        {
+            if (FlashDomainRules.GetRule(uri) == FlashRuleMode.Legacy)
+                FlashDomainRules.RemoveRule(uri);
+            StopBasilisk();
+            _basilisk = null;
+            Navigate(uri.AbsoluteUri);
         }
 
         void GoBackOrHome()
@@ -481,6 +604,13 @@ namespace PommeBrowser.Linux.Ui
             switch (loadEvent)
             {
                 case WebKit.LoadEvent.Started:
+                    // Lien vers un site réglé sur Basilisk : la page s'y ouvre.
+                    if (WantsBasilisk(uri, out Uri? legacy))
+                    {
+                        OpenInBasilisk(legacy);
+                        return;
+                    }
+
                     // Seule la page principale émet cet événement : les cadres passent aussi par
                     // decide-policy, sans pouvoir y être distingués.
                     if (uri != null && uri != _expectedMainUri)
@@ -692,7 +822,13 @@ namespace PommeBrowser.Linux.Ui
 
         void OnRuffleMessage(string? status)
         {
-            if (status == "blocked")
+            if (status != "blocked")
+                return;
+
+            // Basilisk lit le Flash sans dépendre de la page : proposé quand il est installé.
+            if (_app.BasiliskExecutable != null && BasiliskInstall.IsOpenable(Web.Url(), out Uri uri))
+                Window.ShowToast(Tr("Ce site empêche Ruffle de démarrer : le contenu Flash ne peut pas être lu."), Tr("Ouvrir dans Basilisk"), () => OpenInBasilisk(uri));
+            else
                 Window.ShowToast(Tr("Ce site empêche Ruffle de démarrer : le contenu Flash ne peut pas être lu."));
         }
 
@@ -711,7 +847,7 @@ namespace PommeBrowser.Linux.Ui
 
         public SessionTab? GetSessionTab()
         {
-            string url = WebUri;
+            string url = Content == TabContent.Legacy && _legacyUri != null ? _legacyUri.AbsoluteUri : WebUri;
             return SessionStore.IsRestorable(url) ? new SessionTab { Url = url, Title = Web.Title() ?? _pendingTitle } : null;
         }
     }

@@ -34,6 +34,9 @@ namespace PommeBrowser.Linux.Core
 
         public bool EnableRuffle { get; set; } = true;
 
+        /// <summary>Exécutable de Basilisk ; vide : recherché aux emplacements habituels.</summary>
+        public string? BasiliskPath { get; set; }
+
         public bool ServiceMonitoring { get; set; } = true;
         public int ServiceCheckIntervalSeconds { get; set; } = 60;
         public bool ServiceAlerts { get; set; } = true;
@@ -49,6 +52,8 @@ namespace PommeBrowser.Linux.Core
             ServiceCheckIntervalSeconds = Math.Clamp(ServiceCheckIntervalSeconds, 15, 3600);
             if (string.IsNullOrWhiteSpace(DownloadDirectory) || !Path.IsPathRooted(DownloadDirectory))
                 DownloadDirectory = null;
+            if (string.IsNullOrWhiteSpace(BasiliskPath) || !Path.IsPathRooted(BasiliskPath))
+                BasiliskPath = null;
         }
 
         public static LinuxSettings Load(string path)

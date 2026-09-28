@@ -19,7 +19,7 @@ namespace MyHomelabBrowser.classes.Flash
         static readonly object Sync = new();
         static readonly HashSet<string> Leased = new(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>Dossier racine des profils ; modifiable par les tests.</summary>
+        /// <summary>Dossier racine des profils ; modifiable par les tests et par l'édition Linux.</summary>
         internal static string? RootOverride { get; set; }
 
         static string Root => RootOverride ?? Path.Combine(AppDataContext.Root, "flash", "legacy");
@@ -65,6 +65,9 @@ namespace MyHomelabBrowser.classes.Flash
         /// </summary>
         internal static bool IsLockedByAnotherProcess(string profilePath)
         {
+            if (OperatingSystem.IsLinux())
+                return IsLockedOnLinux(profilePath);
+
             string lockFile = Path.Combine(profilePath, "parent.lock");
             if (!File.Exists(lockFile))
                 return false;
@@ -81,6 +84,31 @@ namespace MyHomelabBrowser.classes.Flash
             catch (UnauthorizedAccessException)
             {
                 return true;
+            }
+        }
+
+        /// <summary>
+        /// Sous Linux, Basilisk signale un profil ouvert par le lien symbolique « lock » vers
+        /// « adresse:+PID ». Un lien laissé par un Basilisk arrêté brutalement ne bloque pas le profil.
+        /// </summary>
+        internal static bool IsLockedOnLinux(string profilePath)
+        {
+            try
+            {
+                string? target = new FileInfo(Path.Combine(profilePath, "lock")).LinkTarget;
+                int plus = target?.LastIndexOf('+') ?? -1;
+                return plus >= 0 &&
+                       int.TryParse(target![(plus + 1)..], out int pid) &&
+                       pid > 0 &&
+                       Directory.Exists("/proc/" + pid);
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
             }
         }
 

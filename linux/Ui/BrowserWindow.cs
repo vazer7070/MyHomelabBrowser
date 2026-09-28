@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.AdBlock.Models;
+using MyHomelabBrowser.classes.Flash;
 using MyHomelabBrowser.classes.Homelab;
 using MyHomelabBrowser.classes.Profiles.Credentials;
 using PommeBrowser.Linux.Core;
@@ -425,6 +426,7 @@ namespace PommeBrowser.Linux.Ui
             TabContent.Favorites => "user-bookmarks-symbolic",
             TabContent.Services => "network-server-symbolic",
             TabContent.Passwords => "dialog-password-symbolic",
+            TabContent.Legacy => "applications-games-symbolic",
             TabContent.Error => "dialog-warning-symbolic",
             _ => "go-home-symbolic"
         };
@@ -571,6 +573,28 @@ namespace PommeBrowser.Linux.Ui
             foreach (BrowserTab tab in Tabs)
                 tab.OnSettingsChanged();
             UpdateChrome();
+        }
+
+        /// <summary>Menu « Ouvrir dans Basilisk » : puis, au choix, toujours pour ce site.</summary>
+        void OpenCurrentInBasilisk()
+        {
+            if (Current is not { } tab || !BasiliskInstall.IsOpenable(tab.Uri, out Uri uri))
+            {
+                ShowToast(Tr("Seules les pages web s'ouvrent dans Basilisk."));
+                return;
+            }
+            if (_app.BasiliskExecutable == null)
+            {
+                Dialogs.BasiliskMissing(_app, this);
+                return;
+            }
+
+            tab.OpenInBasilisk(uri);
+            if (FlashDomainRules.GetRule(uri) != FlashRuleMode.Legacy)
+            {
+                ShowToast(Tr("Toujours ouvrir {0} dans Basilisk ?", uri.Host), Tr("Toujours"),
+                    () => FlashDomainRules.SetRule(uri, FlashRuleMode.Legacy), timeout: 8);
+            }
         }
 
         void ShowSecurityInfo()
@@ -760,6 +784,7 @@ namespace PommeBrowser.Linux.Ui
 
             var tools = Gio.Menu.New();
             tools.Append(Tr("Vue côte à côte"), "win.split");
+            tools.Append(Tr("Ouvrir dans Basilisk"), "win.open-in-basilisk");
             tools.Append(Tr("Rechercher dans la page…"), "win.find");
             tools.Append(Tr("Imprimer…"), "win.print");
             tools.Append(Tr("Outils de développement"), "win.inspector");
@@ -830,6 +855,7 @@ namespace PommeBrowser.Linux.Ui
             Add("home", () => { Current?.ShowHome(); _omnibox.Focus(); });
             Add("find", OpenFind);
             Add("split", ToggleSplit);
+            Add("open-in-basilisk", OpenCurrentInBasilisk);
             AddWorkspaceActions();
             Add("find-next", () => FindNext(1));
             Add("find-previous", () => FindNext(-1));

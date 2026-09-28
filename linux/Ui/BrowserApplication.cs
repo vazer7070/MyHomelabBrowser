@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using MyHomelabBrowser.classes;
+using MyHomelabBrowser.classes.Flash;
 using MyHomelabBrowser.classes.Homelab;
 using MyHomelabBrowser.classes.Security;
 using MyHomelabBrowser.classes.Workspaces;
@@ -41,6 +42,12 @@ namespace PommeBrowser.Linux.Ui
         public Vault Vault { get; } = new();
         public WorkspaceStore Workspaces { get; } = new(() => LinuxPaths.Profile("workspaces.json"));
         public Updater Updater { get; } = new();
+
+        /// <summary>Basilisk choisi dans les préférences, sinon trouvé à un emplacement habituel (null : absent).</summary>
+        public string? BasiliskExecutable
+            => BasiliskInstall.IsLaunchable(Settings.BasiliskPath)
+                ? Settings.BasiliskPath
+                : BasiliskInstall.Detect(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.GetEnvironmentVariable("PATH"));
         public LinuxSettings Settings { get; private set; }
 
         public WebEngine Engine { get; private set; } = null!;
@@ -72,6 +79,9 @@ namespace PommeBrowser.Linux.Ui
             Styles.Load();
             Gtk.Window.SetDefaultIconName(LinuxPaths.AppId);
             ApplyTheme();
+
+            // Profils Basilisk avec les données du profil PommeBrowser (et non dans ~/.config) : ils contiennent un cache.
+            LegacyProfileManager.RootOverride = LinuxPaths.Data("basilisk");
 
             Favorites = new FavoritesStore(LinuxPaths.Profile("favorites.json"));
             History = new HistoryService(LinuxPaths.Data("history.db"));
@@ -218,6 +228,7 @@ namespace PommeBrowser.Linux.Ui
 
         void Shutdown()
         {
+            BasiliskProcess.CloseAll();
             History?.Flush();
             History?.Dispose();
             Monitor?.Dispose();
