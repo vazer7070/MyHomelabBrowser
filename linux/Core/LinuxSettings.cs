@@ -38,6 +38,9 @@ namespace PommeBrowser.Linux.Core
         public int ServiceCheckIntervalSeconds { get; set; } = 60;
         public bool ServiceAlerts { get; set; } = true;
 
+        /// <summary>Rechercher une nouvelle version au démarrage (AppImage seulement).</summary>
+        public bool AutoUpdate { get; set; } = true;
+
         /// <summary>Vide : dossier Téléchargements de l'utilisateur.</summary>
         public string? DownloadDirectory { get; set; }
 

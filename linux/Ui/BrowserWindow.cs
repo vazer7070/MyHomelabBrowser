@@ -541,10 +541,11 @@ namespace PommeBrowser.Linux.Ui
         // Notifications
         // ---------------------------------------------------------------
 
-        public void ShowToast(string text, string? buttonLabel = null, Action? action = null)
+        /// <summary>Message en bas de la fenêtre ; <paramref name="timeout"/> à 0 : affiché jusqu'à ce qu'on le ferme.</summary>
+        public void ShowToast(string text, string? buttonLabel = null, Action? action = null, uint timeout = 4)
         {
             var toast = Adw.Toast.New(text);
-            toast.SetTimeout(4);
+            toast.SetTimeout(timeout);
             if (buttonLabel != null && action != null)
             {
                 toast.SetButtonLabel(buttonLabel);
@@ -766,6 +767,7 @@ namespace PommeBrowser.Linux.Ui
 
             var app = Gio.Menu.New();
             app.Append(Tr("Préférences"), "app.preferences");
+            app.Append(Tr("Signaler un problème…"), "app.report");
             app.Append(Tr("À propos de PommeBrowser"), "app.about");
             app.Append(Tr("Quitter"), "app.quit");
             menu.AppendSection(null, app);

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Homelab;
 using MyHomelabBrowser.classes.Security;
@@ -39,6 +40,7 @@ namespace PommeBrowser.Linux.Ui
         public ProfileService Profiles { get; }
         public Vault Vault { get; } = new();
         public WorkspaceStore Workspaces { get; } = new(() => LinuxPaths.Profile("workspaces.json"));
+        public Updater Updater { get; } = new();
         public LinuxSettings Settings { get; private set; }
 
         public WebEngine Engine { get; private set; } = null!;
@@ -93,6 +95,31 @@ namespace PommeBrowser.Linux.Ui
 
             AddActions();
             _ = Engine.AdBlocker.StartAsync();
+
+            // Recherche de mise à jour peu après le démarrage, pour ne pas ralentir l'ouverture des pages.
+            if (Settings.AutoUpdate && Updater.AppImagePath != null)
+            {
+                GLib.Functions.TimeoutAddSeconds(0, 20, () =>
+                {
+                    _ = CheckForUpdatesAsync(manual: false);
+                    return false;
+                });
+            }
+        }
+
+        /// <summary>Recherche (et installe, pour l'AppImage) une nouvelle version, puis propose de redémarrer.</summary>
+        public async Task CheckForUpdatesAsync(bool manual)
+        {
+            await Updater.CheckAsync();
+            if (Updater.Installed is { } installed)
+            {
+                ActiveWindow?.ShowToast(Tr("PommeBrowser {0} est installé.", installed.ToString(3)), Tr("Redémarrer"), () => Restart(), timeout: 0);
+            }
+            else if (!manual && Updater.Available is { PageUrl: { } page } available)
+            {
+                ActiveWindow?.ShowToast(Tr("PommeBrowser {0} est disponible.", available.Version.ToString(3)), Tr("Voir"),
+                    () => ActiveWindow?.OpenInNewTab(page, background: false));
+            }
         }
 
         void Activate()
@@ -195,6 +222,7 @@ namespace PommeBrowser.Linux.Ui
             History?.Dispose();
             Monitor?.Dispose();
             Engine?.Dispose();
+            Updater.Dispose();
         }
 
         public void SaveSettings()
@@ -264,6 +292,11 @@ namespace PommeBrowser.Linux.Ui
             AddAction("new-private-window", () => { BrowserWindow w = CreateWindow(true); w.OpenHomeTab(); w.Window.Present(); }, "<Control><Shift>n", "<Control><Shift>p");
             AddAction("preferences", () => PreferencesWindow.Show(this, ActiveWindow), "<Control>comma");
             AddAction("about", ShowAbout);
+            AddAction("report", () =>
+            {
+                if (ActiveWindow is { } window)
+                    ReportDialog.Show(this, window);
+            });
             AddAction("quit", Quit, "<Control>q");
 
             var openUrl = Gio.SimpleAction.New("open-url", GLib.VariantType.New("s"));

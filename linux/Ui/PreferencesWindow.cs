@@ -102,7 +102,51 @@ namespace PommeBrowser.Linux.Ui
             };
             appearance.Add(language);
             page.Add(appearance);
+            page.Add(UpdatesGroup(app, dialog));
             return page;
+        }
+
+        /// <summary>Mises à jour : automatiques pour l'AppImage (téléchargée, vérifiée, appliquée au redémarrage).</summary>
+        static Adw.PreferencesGroup UpdatesGroup(BrowserApplication app, Adw.PreferencesDialog dialog)
+        {
+            LinuxSettings settings = app.Settings;
+            Updater updater = app.Updater;
+            var group = Group(Tr("Mises à jour"));
+            group.Add(Switch(Tr("Rechercher les mises à jour au démarrage"),
+                Updater.AppImagePath != null ? Tr("La nouvelle version est installée automatiquement, puis appliquée au redémarrage.") : Tr("Pour l'AppImage uniquement."),
+                settings.AutoUpdate, value =>
+                {
+                    settings.AutoUpdate = value;
+                    app.SaveSettings();
+                }));
+
+            var status = Adw.ActionRow.New();
+            status.SetTitle(Tr("PommeBrowser {0}", Updater.Current.ToString(3)));
+            var check = Gtk.Button.NewWithLabel(Tr("Rechercher"));
+            check.SetValign(Gtk.Align.Center);
+            check.OnClicked += (_, _) =>
+            {
+                if (updater.Installed != null)
+                    app.Restart();
+                else
+                    _ = app.CheckForUpdatesAsync(manual: true);
+            };
+            status.AddSuffix(check);
+            group.Add(status);
+
+            void Refresh()
+            {
+                status.SetSubtitle(GLib.Functions.MarkupEscapeText(updater.Status, -1));
+                check.SetSensitive(!updater.IsBusy);
+                check.SetLabel(updater.Installed != null ? Tr("Redémarrer") : Tr("Rechercher"));
+                if (updater.Installed != null)
+                    check.AddCssClass("suggested-action");
+            }
+            Action changed = Refresh;
+            updater.Changed += changed;
+            dialog.OnClosed += (_, _) => updater.Changed -= changed;
+            Refresh();
+            return group;
         }
 
         // ---------------------------------------------------------------

@@ -83,12 +83,17 @@ namespace PommeBrowser.Linux.Core
         /// Dossier « Téléchargements » de l'utilisateur (XDG_DOWNLOAD_DIR de ~/.config/user-dirs.dirs,
         /// traduit selon la langue du système), sinon ~/Downloads.
         /// </summary>
-        public static string DefaultDownloadDirectory()
+        public static string DefaultDownloadDirectory() => UserDirectory("XDG_DOWNLOAD_DIR", "Downloads");
+
+        /// <summary>Dossier « Documents » de l'utilisateur (rapports enregistrés), sinon ~/Documents.</summary>
+        public static string DocumentsDirectory() => UserDirectory("XDG_DOCUMENTS_DIR", "Documents");
+
+        static string UserDirectory(string key, string fallback)
         {
             try
             {
                 string file = Path.Combine(ConfigDirectory, "user-dirs.dirs");
-                if (File.Exists(file) && ParseUserDirs(File.ReadAllLines(file), Home).TryGetValue("XDG_DOWNLOAD_DIR", out string? dir))
+                if (File.Exists(file) && ParseUserDirs(File.ReadAllLines(file), Home).TryGetValue(key, out string? dir))
                     return dir;
             }
             catch (IOException)
@@ -98,7 +103,7 @@ namespace PommeBrowser.Linux.Core
             {
             }
 
-            return Path.Combine(Home, "Downloads");
+            return Path.Combine(Home, fallback);
         }
 
         /// <summary>Lecture du format de user-dirs.dirs : XDG_DOWNLOAD_DIR="$HOME/Téléchargements".</summary>

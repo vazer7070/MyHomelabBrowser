@@ -62,6 +62,7 @@
 		<Compile Include="../classes/Profiles/Credentials/VaultSecurityState.cs" Link="Shared/Profiles/Credentials/VaultSecurityState.cs" />
 		<Compile Include="../classes/Security/Totp.cs" Link="Shared/Security/Totp.cs" />
 		<Compile Include="../classes/Workspaces/WorkspaceStore.cs" Link="Shared/Workspaces/WorkspaceStore.cs" />
+		<Compile Include="../classes/Support/**/*.cs" Link="Shared/Support/%(RecursiveDir)%(Filename)%(Extension)" />
 		<Compile Include="../classes/Homelab/HomelabService.cs" Link="Shared/Homelab/HomelabService.cs" />
 		<Compile Include="../classes/Homelab/HomelabServiceStore.cs" Link="Shared/Homelab/HomelabServiceStore.cs" />
 		<Compile Include="../classes/Homelab/ServiceHealthChecker.cs" Link="Shared/Homelab/ServiceHealthChecker.cs" />
@@ -74,6 +75,18 @@
 		<Compile Include="../classes/AdBlock/Models/AdBlockSubscription.cs" Link="Shared/AdBlock/AdBlockSubscription.cs" />
 		<Compile Include="../classes/AdBlock/Services/AdBlockSettingsService.cs" Link="Shared/AdBlock/AdBlockSettingsService.cs" />
 		<Compile Include="../classes/AdBlock/Services/AdBlockFilterListService.cs" Link="Shared/AdBlock/AdBlockFilterListService.cs" />
+	</ItemGroup>
+
+	<PropertyGroup>
+		<!--
+			Adresse du serveur de support (support-server/), comme pour l'édition Windows.
+			Vide : les rapports sont enregistrés dans Documents/PommeBrowser/Rapports.
+		-->
+		<SupportApiUrl Condition="'$(SupportApiUrl)' == ''">$(POMMEBROWSER_SUPPORT_API_URL)</SupportApiUrl>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<AssemblyMetadata Include="SupportApiUrl" Value="$(SupportApiUrl)" />
 	</ItemGroup>
 
 	<ItemGroup>
