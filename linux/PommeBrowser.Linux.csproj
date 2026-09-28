@@ -61,6 +61,7 @@
 		<Compile Include="../classes/Profiles/Credentials/VaultPayload.cs" Link="Shared/Profiles/Credentials/VaultPayload.cs" />
 		<Compile Include="../classes/Profiles/Credentials/VaultSecurityState.cs" Link="Shared/Profiles/Credentials/VaultSecurityState.cs" />
 		<Compile Include="../classes/Security/Totp.cs" Link="Shared/Security/Totp.cs" />
+		<Compile Include="../classes/Workspaces/WorkspaceStore.cs" Link="Shared/Workspaces/WorkspaceStore.cs" />
 		<Compile Include="../classes/Homelab/HomelabService.cs" Link="Shared/Homelab/HomelabService.cs" />
 		<Compile Include="../classes/Homelab/HomelabServiceStore.cs" Link="Shared/Homelab/HomelabServiceStore.cs" />
 		<Compile Include="../classes/Homelab/ServiceHealthChecker.cs" Link="Shared/Homelab/ServiceHealthChecker.cs" />

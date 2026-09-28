@@ -15,7 +15,7 @@ namespace PommeBrowser.Linux.Ui
     /// Fenêtre du navigateur : barre d'en-tête (navigation, adresse, favoris, bloqueur, services,
     /// téléchargements, menu), onglets et barre de recherche dans la page.
     /// </summary>
-    sealed class BrowserWindow
+    sealed partial class BrowserWindow
     {
         static bool _acceleratorsRegistered;
 
@@ -65,6 +65,7 @@ namespace PommeBrowser.Linux.Ui
             {
                 if (TabFor(args.Page) is { } tab)
                 {
+                    LeaveSplitIfShown(tab);
                     _closing.Add(tab);
                     if (tab.GetSessionTab() is { } closed && !IsPrivate)
                         _closedTabs.Push(closed);
@@ -80,7 +81,11 @@ namespace PommeBrowser.Linux.Ui
                     case "selected-page":
                         OnSelectionChanged();
                         break;
-                    case "is-transferring-page" when !_tabs.GetIsTransferringPage() && _tabs.GetNPages() == 0:
+                    case "is-transferring-page" when _tabs.GetIsTransferringPage():
+                        // Un onglet est glissé : ses pages reviennent d'abord dans leurs onglets.
+                        ExitSplit();
+                        break;
+                    case "is-transferring-page" when _tabs.GetNPages() == 0:
                         // Dernier onglet glissé vers une autre fenêtre.
                         Window.Close();
                         break;
@@ -229,7 +234,7 @@ namespace PommeBrowser.Linux.Ui
 
             // --- Assemblage ---
             _toasts = Adw.ToastOverlay.New();
-            _toasts.SetChild(_tabs);
+            _toasts.SetChild(CreateContentArea());
 
             _toolbar = Adw.ToolbarView.New();
             _toolbar.AddTopBar(header);
@@ -377,6 +382,7 @@ namespace PommeBrowser.Linux.Ui
             if (page.GetChild() is not { } child || !_tabsByWidget.Remove(child, out BrowserTab? tab))
                 return;
 
+            LeaveSplitIfShown(tab);
             tab.Changed -= OnTabChanged;
             _pageIcons.Remove(page);
             if (_closing.Remove(tab))
@@ -409,6 +415,8 @@ namespace PommeBrowser.Linux.Ui
 
             if (tab == Current)
                 UpdateChrome();
+            if (IsSplit)
+                UpdateSplitHeaders();
         }
 
         static string ContentIcon(TabContent content) => content switch
@@ -427,6 +435,8 @@ namespace PommeBrowser.Linux.Ui
             if (tab == null)
                 return;
 
+            tab.LastActivated = DateTime.Now;
+            OnSplitSelectionChanged(tab);
             tab.LoadPendingIfNeeded();
             if (_findBar.GetSearchMode())
                 CloseFind();
@@ -740,9 +750,15 @@ namespace PommeBrowser.Linux.Ui
             pages.Append(Tr("Favoris"), "win.favorites");
             pages.Append(Tr("Services du homelab"), "win.services");
             pages.Append(Tr("Mots de passe"), "win.passwords");
+            if (!IsPrivate)
+            {
+                _workspacesMenu = Gio.Menu.New();
+                pages.AppendSubmenu(Tr("Espaces de travail"), _workspacesMenu);
+            }
             menu.AppendSection(null, pages);
 
             var tools = Gio.Menu.New();
+            tools.Append(Tr("Vue côte à côte"), "win.split");
             tools.Append(Tr("Rechercher dans la page…"), "win.find");
             tools.Append(Tr("Imprimer…"), "win.print");
             tools.Append(Tr("Outils de développement"), "win.inspector");
@@ -755,6 +771,7 @@ namespace PommeBrowser.Linux.Ui
             menu.AppendSection(null, app);
 
             var popover = Gtk.PopoverMenu.NewFromModel(menu);
+            popover.OnShow += (_, _) => RebuildWorkspacesMenu();
 
             var zoomBox = Gtk.Box.New(Gtk.Orientation.Horizontal, 0);
             zoomBox.AddCssClass("linked");
@@ -784,6 +801,7 @@ namespace PommeBrowser.Linux.Ui
             first.Append(Tr("Recharger"), "tab.reload");
             first.Append(Tr("Dupliquer"), "tab.duplicate");
             first.Append(Tr("Épingler / détacher"), "tab.pin");
+            first.Append(Tr("Afficher à côté"), "tab.side-by-side");
             menu.AppendSection(null, first);
             var second = Gio.Menu.New();
             second.Append(Tr("Fermer les autres onglets"), "tab.close-others");
@@ -809,6 +827,8 @@ namespace PommeBrowser.Linux.Ui
             Add("forward", () => Current?.GoForward());
             Add("home", () => { Current?.ShowHome(); _omnibox.Focus(); });
             Add("find", OpenFind);
+            Add("split", ToggleSplit);
+            AddWorkspaceActions();
             Add("find-next", () => FindNext(1));
             Add("find-previous", () => FindNext(-1));
             Add("zoom-in", () => Zoom(1));
@@ -872,6 +892,13 @@ namespace PommeBrowser.Linux.Ui
             {
                 if (tab.Page != null)
                     _tabs.SetPagePinned(tab.Page, !tab.Page.GetPinned());
+            });
+            AddTabAction("side-by-side", tab =>
+            {
+                if (tab == Current)
+                    ToggleSplit();
+                else
+                    ShowSideBySide(tab);
             });
             AddTabAction("close-others", tab =>
             {

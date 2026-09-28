@@ -37,6 +37,7 @@ namespace PommeBrowser.Linux.Ui
     sealed class BrowserTab
     {
         readonly BrowserApplication _app;
+        readonly Gtk.Box _slot;
         readonly Gtk.Stack _stack;
         readonly Gtk.Label _linkStatus;
         readonly WebKit.UserContentManager _content;
@@ -99,13 +100,26 @@ namespace PommeBrowser.Linux.Ui
             _stack.SetTransitionType(Gtk.StackTransitionType.Crossfade);
             _stack.SetTransitionDuration(120);
             _stack.AddNamed(overlay, "web");
+            _stack.SetVexpand(true);
+            _stack.SetHexpand(true);
+
+            // L'onglet affiche son contenu dans son emplacement, sauf en vue côte à côte où le
+            // contenu passe dans un volet (voir BrowserWindow.Split).
+            _slot = Gtk.Box.New(Gtk.Orientation.Vertical, 0);
+            _slot.Append(_stack);
+            _holder = _slot;
 
             ConnectWebSignals();
             ApplyFilter(null);
         }
 
         public BrowserWindow Window { get; set; }
-        public Gtk.Widget Widget => _stack;
+
+        /// <summary>Emplacement de l'onglet dans la vue des onglets (Adw.TabView).</summary>
+        public Gtk.Widget Widget => _slot;
+
+        /// <summary>Dernière sélection (onglet associé par défaut à la vue côte à côte).</summary>
+        public DateTime LastActivated { get; set; } = DateTime.MinValue;
         /// <summary>Page de l'onglet dans sa fenêtre (null une fois l'onglet fermé).</summary>
         public Adw.TabPage? Page { get; set; }
         public WebKit.WebView Web { get; }
@@ -283,6 +297,21 @@ namespace PommeBrowser.Linux.Ui
 
         /// <summary>Onglet fermé.</summary>
         public void OnClosed() => CloseDialogs();
+
+        Gtk.Box _holder;
+
+        /// <summary>Place le contenu de l'onglet dans un volet de la vue côte à côte (null : son emplacement).</summary>
+        public void MoveViewTo(Gtk.Box? holder)
+        {
+            holder ??= _slot;
+            if (ReferenceEquals(holder, _holder))
+                return;
+            _holder.Remove(_stack);
+            holder.Append(_stack);
+            _holder = holder;
+        }
+
+        public bool IsViewInSlot => ReferenceEquals(_holder, _slot);
 
         public void OnSettingsChanged()
         {

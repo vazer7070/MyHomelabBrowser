@@ -4,6 +4,7 @@ using System.Linq;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Homelab;
 using MyHomelabBrowser.classes.Security;
+using MyHomelabBrowser.classes.Workspaces;
 using PommeBrowser.Linux.Core;
 using PommeBrowser.Linux.Web;
 using static MyHomelabBrowser.classes.Localization.Loc;
@@ -37,6 +38,7 @@ namespace PommeBrowser.Linux.Ui
         public AppearanceSettings Appearance { get; }
         public ProfileService Profiles { get; }
         public Vault Vault { get; } = new();
+        public WorkspaceStore Workspaces { get; } = new(() => LinuxPaths.Profile("workspaces.json"));
         public LinuxSettings Settings { get; private set; }
 
         public WebEngine Engine { get; private set; } = null!;

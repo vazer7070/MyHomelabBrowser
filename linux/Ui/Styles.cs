@@ -27,6 +27,12 @@ namespace PommeBrowser.Linux.Ui
                 background-color: mix(@headerbar_bg_color, #6a4c9c, 0.28);
             }
             .private-badge { font-weight: 700; color: #b69ae8; }
+
+            .split-header { padding: 2px 4px 2px 12px; min-height: 30px; font-size: smaller;
+                            background-color: @headerbar_bg_color; border-bottom: 2px solid transparent; }
+            .split-header label { opacity: 0.7; }
+            .split-header.active { border-bottom-color: @accent_color; }
+            .split-header.active label { opacity: 1; font-weight: 600; }
             """;
 
         public static void Load()
