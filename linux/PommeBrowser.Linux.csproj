@@ -1,0 +1,72 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+		PommeBrowser pour Linux : interface GTK 4 / libadwaita, moteur WebKitGTK 6.0.
+		Le moteur et l'interface viennent de la distribution (mises à jour de sécurité
+		comprises) ; la logique du navigateur est partagée avec l'édition Windows.
+		Paquet AppImage : packaging/build-appimage.sh.
+	-->
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<RootNamespace>PommeBrowser.Linux</RootNamespace>
+		<AssemblyName>pommebrowser</AssemblyName>
+
+		<Version>0.9.8</Version>
+		<AssemblyVersion>0.9.8.0</AssemblyVersion>
+		<FileVersion>0.9.8.0</FileVersion>
+
+		<SatelliteResourceLanguages>fr;en</SatelliteResourceLanguages>
+		<InvariantGlobalization>false</InvariantGlobalization>
+		<TieredPGO>true</TieredPGO>
+		<RuffleAssetDir>$(MSBuildProjectDirectory)/Assets/Ruffle</RuffleAssetDir>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="GirCore.Adw-1" Version="0.8.1" />
+		<PackageReference Include="GirCore.WebKit-6.0" Version="0.8.1" />
+		<PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+		<!-- Même bibliothèque SQLite native que l'édition Windows (la version tirée par défaut est vulnérable). -->
+		<PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
+	</ItemGroup>
+
+	<ItemGroup Label="Cœur partagé avec l'édition Windows">
+		<Compile Include="../classes/AtomicFile.cs" Link="Shared/AtomicFile.cs" />
+		<Compile Include="../classes/RuntimeLogBuffer.cs" Link="Shared/RuntimeLogBuffer.cs" />
+		<Compile Include="../classes/Localization/Loc.cs" Link="Shared/Localization/Loc.cs" />
+		<Compile Include="../classes/AppearanceSettings.cs" Link="Shared/AppearanceSettings.cs" />
+		<Compile Include="../classes/BrowserSettings.cs" Link="Shared/BrowserSettings.cs" />
+		<Compile Include="../classes/CommandSetting.cs" Link="Shared/CommandSetting.cs" />
+		<Compile Include="../classes/UrlResolver.cs" Link="Shared/UrlResolver.cs" />
+		<Compile Include="../classes/FavoriteItem.cs" Link="Shared/FavoriteItem.cs" />
+		<Compile Include="../classes/HistoryEntry.cs" Link="Shared/HistoryEntry.cs" />
+		<Compile Include="../classes/History/HistoryStore.cs" Link="Shared/History/HistoryStore.cs" />
+		<Compile Include="../classes/SiteZoomStore.cs" Link="Shared/SiteZoomStore.cs" />
+		<Compile Include="../classes/Import/BookmarkImporter.cs" Link="Shared/Import/BookmarkImporter.cs" />
+		<Compile Include="../classes/Profiles/AppDataContext.cs" Link="Shared/Profiles/AppDataContext.cs" />
+		<Compile Include="../classes/Homelab/HomelabService.cs" Link="Shared/Homelab/HomelabService.cs" />
+		<Compile Include="../classes/Homelab/HomelabServiceStore.cs" Link="Shared/Homelab/HomelabServiceStore.cs" />
+		<Compile Include="../classes/Homelab/ServiceHealthChecker.cs" Link="Shared/Homelab/ServiceHealthChecker.cs" />
+		<Compile Include="../classes/Homelab/ServiceMonitor.cs" Link="Shared/Homelab/ServiceMonitor.cs" />
+		<Compile Include="../classes/Security/HttpsUpgradePolicy.cs" Link="Shared/Security/HttpsUpgradePolicy.cs" />
+		<Compile Include="../classes/Security/SiteSecurityStore.cs" Link="Shared/Security/SiteSecurityStore.cs" />
+		<Compile Include="../classes/Security/CertificatePinStore.cs" Link="Shared/Security/CertificatePinStore.cs" />
+		<Compile Include="../classes/AdBlock/Models/AdBlockDomain.cs" Link="Shared/AdBlock/AdBlockDomain.cs" />
+		<Compile Include="../classes/AdBlock/Models/AdBlockSettings.cs" Link="Shared/AdBlock/AdBlockSettings.cs" />
+		<Compile Include="../classes/AdBlock/Models/AdBlockSubscription.cs" Link="Shared/AdBlock/AdBlockSubscription.cs" />
+		<Compile Include="../classes/AdBlock/Services/AdBlockSettingsService.cs" Link="Shared/AdBlock/AdBlockSettingsService.cs" />
+		<Compile Include="../classes/AdBlock/Services/AdBlockFilterListService.cs" Link="Shared/AdBlock/AdBlockFilterListService.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Traduction anglaise (clé = texte français), commune aux deux éditions. -->
+		<EmbeddedResource Include="../lang/en.json" LogicalName="lang.en.json" />
+		<Content Include="packaging/icons/**/*.png" Link="icons/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+	</ItemGroup>
+
+	<!-- Ruffle embarqué : téléchargé et vérifié à la compilation (commun avec l'édition Windows). -->
+	<Import Project="../build/Ruffle.targets" />
+</Project>

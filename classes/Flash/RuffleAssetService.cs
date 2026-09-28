@@ -6,14 +6,14 @@ namespace MyHomelabBrowser.classes.Flash
 {
     /// <summary>
     /// Ruffle est toujours servi depuis les fichiers de l'application (téléchargés et
-    /// vérifiés par SHA-256 à la compilation, voir MyHomelabBrowser.csproj), jamais
+    /// vérifiés par SHA-256 à la compilation, voir build/Ruffle.targets), jamais
     /// depuis un CDN : aucun script tiers n'est injecté dans les pages.
     /// </summary>
     public static class RuffleAssetService
     {
         public const string VirtualHost = "ruffle.pomme.internal";
 
-        /// <summary>Version attendue (propriété RuffleVersion du .csproj).</summary>
+        /// <summary>Version attendue (propriété RuffleVersion de build/Ruffle.targets).</summary>
         public const string PinnedVersion = "0.3.0";
 
         public static string AssetDirectory =>

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=PommeBrowser
+GenericName=Navigateur web
+GenericName[en]=Web Browser
+Comment=Navigateur pour le homelab : services surveillés, blocage des publicités, Flash avec Ruffle
+Comment[en]=A browser for the homelab: monitored services, ad blocking, Flash with Ruffle
+Exec=pommebrowser %U
+Icon=io.github.vazer7070.PommeBrowser
+Terminal=false
+StartupNotify=true
+Categories=Network;WebBrowser;
+MimeType=text/html;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+Keywords=web;browser;internet;homelab;flash;ruffle;navigateur;

@@ -39,6 +39,9 @@ namespace MyHomelabBrowser.classes.Import
 
         public static IReadOnlyList<BookmarkSource> DetectSources()
         {
+            if (OperatingSystem.IsLinux())
+                return DetectLinuxSources(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+
             var sources = new List<BookmarkSource>();
             string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             string roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
@@ -52,23 +55,51 @@ namespace MyHomelabBrowser.classes.Import
             if (File.Exists(opera))
                 sources.Add(new BookmarkSource("Opera", BookmarkSourceKind.ChromiumJson, opera));
 
-            string firefoxProfiles = Path.Combine(roaming, "Mozilla", "Firefox", "Profiles");
-            if (Directory.Exists(firefoxProfiles))
-            {
-                foreach (string profile in SafeEnumerateDirectories(firefoxProfiles))
-                {
-                    string places = Path.Combine(profile, "places.sqlite");
-                    if (!File.Exists(places))
-                        continue;
-
-                    string folderName = Path.GetFileName(profile);
-                    int dot = folderName.IndexOf('.');
-                    string label = dot >= 0 && dot < folderName.Length - 1 ? folderName[(dot + 1)..] : folderName;
-                    sources.Add(new BookmarkSource($"Firefox ({label})", BookmarkSourceKind.FirefoxPlaces, places));
-                }
-            }
-
+            AddFirefoxProfiles(sources, "Firefox", Path.Combine(roaming, "Mozilla", "Firefox", "Profiles"));
             return sources;
+        }
+
+        /// <summary>
+        /// Emplacements Linux : paquets classiques, Snap et Flatpak.
+        /// </summary>
+        public static IReadOnlyList<BookmarkSource> DetectLinuxSources(string home)
+        {
+            var sources = new List<BookmarkSource>();
+            string config = Path.Combine(home, ".config");
+
+            AddChromiumProfiles(sources, "Google Chrome", Path.Combine(config, "google-chrome"));
+            AddChromiumProfiles(sources, "Chromium", Path.Combine(config, "chromium"));
+            AddChromiumProfiles(sources, "Chromium (Snap)", Path.Combine(home, "snap", "chromium", "common", "chromium"));
+            AddChromiumProfiles(sources, "Chromium (Flatpak)", Path.Combine(home, ".var", "app", "org.chromium.Chromium", "config", "chromium"));
+            AddChromiumProfiles(sources, "Microsoft Edge", Path.Combine(config, "microsoft-edge"));
+            AddChromiumProfiles(sources, "Brave", Path.Combine(config, "BraveSoftware", "Brave-Browser"));
+            AddChromiumProfiles(sources, "Brave (Flatpak)", Path.Combine(home, ".var", "app", "com.brave.Browser", "config", "BraveSoftware", "Brave-Browser"));
+            AddChromiumProfiles(sources, "Vivaldi", Path.Combine(config, "vivaldi"));
+            AddChromiumProfiles(sources, "Opera", Path.Combine(config, "opera"));
+
+            AddFirefoxProfiles(sources, "Firefox", Path.Combine(home, ".mozilla", "firefox"));
+            AddFirefoxProfiles(sources, "Firefox (Snap)", Path.Combine(home, "snap", "firefox", "common", ".mozilla", "firefox"));
+            AddFirefoxProfiles(sources, "Firefox (Flatpak)", Path.Combine(home, ".var", "app", "org.mozilla.firefox", ".mozilla", "firefox"));
+            AddFirefoxProfiles(sources, "LibreWolf", Path.Combine(home, ".librewolf"));
+            return sources;
+        }
+
+        private static void AddFirefoxProfiles(List<BookmarkSource> sources, string browserName, string profilesFolder)
+        {
+            if (!Directory.Exists(profilesFolder))
+                return;
+
+            foreach (string profile in SafeEnumerateDirectories(profilesFolder).OrderBy(p => p, StringComparer.Ordinal))
+            {
+                string places = Path.Combine(profile, "places.sqlite");
+                if (!File.Exists(places))
+                    continue;
+
+                string folderName = Path.GetFileName(profile);
+                int dot = folderName.IndexOf('.');
+                string label = dot >= 0 && dot < folderName.Length - 1 ? folderName[(dot + 1)..] : folderName;
+                sources.Add(new BookmarkSource($"{browserName} ({label})", BookmarkSourceKind.FirefoxPlaces, places));
+            }
         }
 
         private static void AddChromiumProfiles(List<BookmarkSource> sources, string browserName, string userDataFolder)

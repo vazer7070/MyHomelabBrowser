@@ -69,3 +69,41 @@ jobs:
 
       - name: Image Docker
         run: docker build --tag pommebrowser-support:ci support-server
+
+  linux:
+    name: Linux (AppImage)
+    runs-on: ubuntu-24.04
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Tests (logique commune et édition Linux)
+        run: dotnet test tests/PommeBrowser.Tests/PommeBrowser.Tests.csproj --configuration Release
+
+      - name: Compilation de l'édition Linux
+        run: dotnet build linux/PommeBrowser.Linux.csproj --configuration Release
+
+      - name: AppImage (x86_64 et aarch64)
+        run: linux/packaging/build-appimage.sh all
+
+      - name: Essai de lancement
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libwebkitgtk-6.0-4 libadwaita-1-0 gstreamer1.0-plugins-good xvfb xauth dbus
+          linux/packaging/smoke-test.sh linux/packaging/out/PommeBrowser-*-x86_64.AppImage
+
+      - name: Paquets AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: PommeBrowser-Linux-AppImage
+          path: |
+            linux/packaging/out/*.AppImage
+            linux/packaging/out/*.sha256
+          if-no-files-found: error

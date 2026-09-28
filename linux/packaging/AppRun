@@ -1,0 +1,55 @@
+#!/bin/sh
+# Lanceur de l'AppImage : le moteur web (WebKitGTK), GTK 4 et libadwaita viennent du
+# système ; l'AppImage apporte le navigateur, .NET et Ruffle. Les bibliothèques sont
+# vérifiées avant .NET, pour afficher un message clair plutôt qu'un plantage.
+HERE="$(dirname "$(readlink -f "$0")")"
+
+libraries="$( (ldconfig -p || /sbin/ldconfig -p) 2>/dev/null )"
+missing=""
+for lib in libwebkitgtk-6.0.so.4 libadwaita-1.so.0 libgtk-4.so.1 libicuuc.so; do
+    case "$libraries" in
+        *"$lib"*) ;;
+        *) missing="$missing $lib" ;;
+    esac
+done
+
+if [ -n "$libraries" ] && [ -n "$missing" ]; then
+    ids="$( . /etc/os-release 2>/dev/null; echo " $ID $ID_LIKE " )"
+    case "$ids" in
+        *" fedora "*|*" rhel "*) command="sudo dnf install webkitgtk6.0 libadwaita gstreamer1-plugins-good" ;;
+        *" arch "*) command="sudo pacman -S --needed webkitgtk-6.0 libadwaita gst-plugins-good" ;;
+        *" suse "*|*" opensuse "*) command="sudo zypper install libwebkitgtk-6_0-4 libadwaita-1-0 gstreamer-plugins-good" ;;
+        *) command="sudo apt install libwebkitgtk-6.0-4 libadwaita-1-0 gstreamer1.0-plugins-good" ;;
+    esac
+
+    case "${LC_ALL:-${LC_MESSAGES:-${LANG:-fr}}}" in
+        fr*|C|C.*|POSIX)
+            message="PommeBrowser utilise le moteur web et l'interface fournis par votre système.
+
+Bibliothèques manquantes :$missing
+
+Pour les installer :
+$command
+
+Distributions prises en charge : Ubuntu 24.04, Debian 13, Fedora 40, Linux Mint 22 et versions plus récentes, Arch, openSUSE Tumbleweed." ;;
+        *)
+            message="PommeBrowser uses the web engine and user interface provided by your system.
+
+Missing libraries:$missing
+
+To install them:
+$command
+
+Supported distributions: Ubuntu 24.04, Debian 13, Fedora 40, Linux Mint 22 and newer, Arch, openSUSE Tumbleweed." ;;
+    esac
+
+    echo "$message" >&2
+    if [ -n "$DISPLAY$WAYLAND_DISPLAY" ]; then
+        zenity --error --no-markup --title=PommeBrowser --text="$message" 2>/dev/null ||
+            kdialog --title PommeBrowser --error "$message" 2>/dev/null ||
+            notify-send PommeBrowser "$message" 2>/dev/null
+    fi
+    exit 1
+fi
+
+exec "$HERE/usr/lib/pommebrowser/pommebrowser" "$@"
