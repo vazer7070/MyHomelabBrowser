@@ -4,6 +4,7 @@ using System.Linq;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.AdBlock.Models;
 using MyHomelabBrowser.classes.Homelab;
+using MyHomelabBrowser.classes.Profiles.Credentials;
 using PommeBrowser.Linux.Core;
 using PommeBrowser.Linux.Web;
 using static MyHomelabBrowser.classes.Localization.Loc;
@@ -27,6 +28,7 @@ namespace PommeBrowser.Linux.Ui
         readonly Gtk.Button _forward;
         readonly Gtk.Button _reload;
         readonly Gtk.Button _star;
+        readonly Gtk.Button _fillCredentials;
         readonly Gtk.MenuButton _adblockButton;
         readonly Gtk.MenuButton _downloadsButton;
         readonly Gtk.MenuButton _favoritesButton;
@@ -126,9 +128,12 @@ namespace PommeBrowser.Linux.Ui
             _omnibox.SecurityIconClicked += ShowSecurityInfo;
 
             _star = IconButton("non-starred-symbolic", Tr("Ajouter aux favoris (Ctrl+D)"), "win.bookmark");
+            _fillCredentials = IconButton("dialog-password-symbolic", Tr("Remplir les identifiants"), "win.fill-credentials");
+            _fillCredentials.SetVisible(false);
 
             var addressBox = Gtk.Box.New(Gtk.Orientation.Horizontal, 4);
             addressBox.Append(_omnibox.Widget);
+            addressBox.Append(_fillCredentials);
             addressBox.Append(_star);
             var clamp = Adw.Clamp.New();
             clamp.SetMaximumSize(900);
@@ -241,6 +246,8 @@ namespace PommeBrowser.Linux.Ui
             Action favoritesChanged = () => { RebuildFavoritesMenu(); UpdateChrome(); };
             Action adblockChanged = () => { foreach (BrowserTab tab in Tabs) tab.RefreshFilter(); UpdateAdBlockButton(); };
             Action downloadsChanged = UpdateDownloadsButton;
+            Action vaultChanged = UpdateChrome;
+            app.Vault.Changed += vaultChanged;
             app.Favorites.Changed += favoritesChanged;
             app.Engine.AdBlocker.Changed += adblockChanged;
             app.Engine.Downloads.Changed += downloadsChanged;
@@ -250,6 +257,7 @@ namespace PommeBrowser.Linux.Ui
                 foreach (Gtk.Widget widget in _tabsByWidget.Keys)
                     AllTabs.Remove(widget);
                 _tabsByWidget.Clear();
+                app.Vault.Changed -= vaultChanged;
                 app.Favorites.Changed -= favoritesChanged;
                 app.Engine.AdBlocker.Changed -= adblockChanged;
                 app.Engine.Downloads.Changed -= downloadsChanged;
@@ -408,6 +416,7 @@ namespace PommeBrowser.Linux.Ui
             TabContent.History => "document-open-recent-symbolic",
             TabContent.Favorites => "user-bookmarks-symbolic",
             TabContent.Services => "network-server-symbolic",
+            TabContent.Passwords => "dialog-password-symbolic",
             TabContent.Error => "dialog-warning-symbolic",
             _ => "go-home-symbolic"
         };
@@ -444,10 +453,25 @@ namespace PommeBrowser.Linux.Ui
             _star.SetIconName(isFavorite ? "starred-symbolic" : "non-starred-symbolic");
             _star.SetTooltipText(isFavorite ? Tr("Modifier le favori (Ctrl+D)") : Tr("Ajouter aux favoris (Ctrl+D)"));
             _star.SetSensitive(tab.Uri.Length > 0);
+            UpdateFillCredentialsButton(tab);
 
             _zoomLabel.SetLabel(SiteZoomStore.Format(tab.Web.GetZoomLevel()));
             Window.SetTitle(IsPrivate ? Tr("{0} — Navigation privée", tab.Title) : tab.Title + " — PommeBrowser");
             UpdateAdBlockButton();
+        }
+
+        /// <summary>Clé de la barre d'adresse : coffre verrouillé, ou identifiant enregistré pour ce site.</summary>
+        void UpdateFillCredentialsButton(BrowserTab tab)
+        {
+            Vault vault = _app.Vault;
+            bool available = tab.Content == TabContent.Web &&
+                             vault.Service.VaultExists &&
+                             CredentialOrigin.TryCreateTrusted(tab.Uri, out string origin) &&
+                             (!vault.IsUnlocked || vault.Service.FindForOrigin(origin) != null);
+            _fillCredentials.SetVisible(available);
+            _fillCredentials.SetTooltipText(vault.IsUnlocked
+                ? Tr("Remplir les identifiants")
+                : Tr("Déverrouiller le coffre pour remplir les identifiants"));
         }
 
         void UpdateAdBlockButton()
@@ -488,6 +512,7 @@ namespace PommeBrowser.Linux.Ui
                 TabContent.History => new HistoryView(_app, this).Widget,
                 TabContent.Favorites => new FavoritesView(_app, this).Widget,
                 TabContent.Services => new ServicesView(_app, this).Widget,
+                TabContent.Passwords => new PasswordsView(_app, this).Widget,
                 _ => new HomeView(_app, this).Widget
             };
             tab.ShowPage(content, page);
@@ -714,6 +739,7 @@ namespace PommeBrowser.Linux.Ui
             pages.Append(Tr("Historique"), "win.history");
             pages.Append(Tr("Favoris"), "win.favorites");
             pages.Append(Tr("Services du homelab"), "win.services");
+            pages.Append(Tr("Mots de passe"), "win.passwords");
             menu.AppendSection(null, pages);
 
             var tools = Gio.Menu.New();
@@ -792,6 +818,12 @@ namespace PommeBrowser.Linux.Ui
             Add("history", () => OpenPage(TabContent.History));
             Add("favorites", () => OpenPage(TabContent.Favorites));
             Add("services", () => OpenPage(TabContent.Services));
+            Add("passwords", () => OpenPage(TabContent.Passwords));
+            Add("fill-credentials", () =>
+            {
+                if (Current is { Content: TabContent.Web } tab)
+                    _app.Vault.Fill(this, tab);
+            });
             Add("print", () =>
             {
                 if (Current is { Content: TabContent.Web } tab)

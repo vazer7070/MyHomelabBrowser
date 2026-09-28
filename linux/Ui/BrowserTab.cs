@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using MyHomelabBrowser.classes;
+using MyHomelabBrowser.classes.Profiles.Credentials;
 using MyHomelabBrowser.classes.Security;
 using PommeBrowser.Linux.Core;
 using PommeBrowser.Linux.Web;
@@ -15,6 +16,7 @@ namespace PommeBrowser.Linux.Ui
         History,
         Favorites,
         Services,
+        Passwords,
         Error
     }
 
@@ -57,8 +59,15 @@ namespace PommeBrowser.Linux.Ui
             IsPrivate = window.IsPrivate;
 
             _content = WebKit.UserContentManager.New();
-            _content.OnScriptMessageReceived += (_, args) => OnRuffleMessage(args.Value.ToString());
+            WebKit.UserContentManager.ScriptMessageReceivedSignal.Connect(_content, (_, args) => OnRuffleMessage(args.Value.ToString()), false, RuffleSupport.MessageHandler);
             AttachRuffle();
+
+            // Coffre : pas de capture en navigation privée (rien n'y est conservé).
+            if (!IsPrivate)
+            {
+                WebKit.UserContentManager.ScriptMessageReceivedSignal.Connect(_content, (_, args) => OnCredentialMessage(args.Value.ToString()), false, CredentialCapture.MessageHandler);
+                app.Engine.Credentials.Attach(_content);
+            }
 
             var properties = new List<GObject.ConstructArgument>
             {
@@ -152,6 +161,7 @@ namespace PommeBrowser.Linux.Ui
             TabContent.History => Tr("Historique"),
             TabContent.Favorites => Tr("Favoris"),
             TabContent.Services => Tr("Services du homelab"),
+            TabContent.Passwords => Tr("Mots de passe"),
             _ => Tr("Page indisponible")
         };
 
@@ -481,6 +491,11 @@ namespace PommeBrowser.Linux.Ui
                     if (!IsPrivate && uri != null)
                         _app.History.Record(uri, Web.Title());
                     break;
+
+                case WebKit.LoadEvent.Finished:
+                    if (!IsPrivate && Content == TabContent.Web)
+                        _app.Vault.AutoFill(this);
+                    break;
             }
 
             Changed?.Invoke(this);
@@ -650,6 +665,19 @@ namespace PommeBrowser.Linux.Ui
         {
             if (status == "blocked")
                 Window.ShowToast(Tr("Ce site empêche Ruffle de démarrer : le contenu Flash ne peut pas être lu."));
+        }
+
+        /// <summary>
+        /// Identifiants envoyés par le formulaire de la page. L'origine retenue est celle de la page
+        /// affichée : le script ne peut que la confirmer (un message arrivé après un changement de page est écarté).
+        /// </summary>
+        void OnCredentialMessage(string? json)
+        {
+            if (IsPrivate || Content != TabContent.Web || !CredentialOrigin.TryCreateTrusted(Web.Url(), out string origin))
+                return;
+
+            if (CredentialScripts.TryParseSubmission(json, origin, out CredentialCandidate? candidate))
+                _app.Vault.OnSubmitted(Window, candidate!);
         }
 
         public SessionTab? GetSessionTab()

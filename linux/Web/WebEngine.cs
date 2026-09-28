@@ -43,6 +43,7 @@ namespace PommeBrowser.Linux.Web
         public WebKit.NetworkSession Session { get; }
         public WebKit.Settings WebSettings { get; }
         public RuffleSupport Ruffle { get; } = new();
+        public CredentialCapture Credentials { get; } = new();
         public AdBlocker AdBlocker { get; } = new();
         public DownloadManager Downloads { get; }
 

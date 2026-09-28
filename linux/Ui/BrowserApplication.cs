@@ -36,6 +36,7 @@ namespace PommeBrowser.Linux.Ui
         public Adw.Application App { get; }
         public AppearanceSettings Appearance { get; }
         public ProfileService Profiles { get; }
+        public Vault Vault { get; } = new();
         public LinuxSettings Settings { get; private set; }
 
         public WebEngine Engine { get; private set; } = null!;
@@ -58,7 +59,8 @@ namespace PommeBrowser.Linux.Ui
         public BrowserWindow? ActiveWindow
             => App.GetActiveWindow() is { } active ? _windows.FirstOrDefault(w => w.Window.Handle.DangerousGetHandle() == active.Handle.DangerousGetHandle()) : _windows.LastOrDefault();
 
-        public int Run(string[] args) => App.RunWithSynchronizationContext(args);
+        /// <summary>GApplication attend le nom du programme en premier, comme argv en C (sinon la première adresse est ignorée).</summary>
+        public int Run(string[] args) => App.RunWithSynchronizationContext(args.Prepend("pommebrowser").ToArray());
 
         void Startup()
         {

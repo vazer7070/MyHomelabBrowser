@@ -3,7 +3,6 @@ using MyHomelabBrowser.classes.Profiles.Credentials;
 using MyHomelabBrowser.classes.Security;
 using MyHomelabBrowser.controles;
 using System.Diagnostics;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -304,89 +303,12 @@ namespace MyHomelabBrowser
                 return;
             }
 
-            var usernameJson = JsonSerializer.Serialize(credential.Username);
-            var passwordJson = JsonSerializer.Serialize(credential.Password);
-
             // Code de double authentification, s'il est enregistré pour ce compte.
             string? otpCode = credential.HasTotp && Totp.TryParse(credential.TotpSecret, out TotpParameters totp, out _)
                 ? Totp.Generate(totp, DateTimeOffset.UtcNow)
                 : null;
-            var otpJson = JsonSerializer.Serialize(otpCode);
 
-            var script = $$"""
-            (() => {
-              let username = {{usernameJson}};
-              let password = {{passwordJson}};
-              let otp = {{otpJson}};
-
-              function isUsable(element) {
-                if (!element || element.disabled || element.readOnly) return false;
-                const style = window.getComputedStyle(element);
-                return style.display !== 'none' && style.visibility !== 'hidden';
-              }
-
-              function setValue(element, value) {
-                if (!isUsable(element) || !value) return;
-                element.focus();
-                const descriptor = Object.getOwnPropertyDescriptor(
-                  HTMLInputElement.prototype,
-                  'value'
-                );
-                descriptor?.set?.call(element, value);
-                element.dispatchEvent(new Event('input', { bubbles: true }));
-                element.dispatchEvent(new Event('change', { bubbles: true }));
-              }
-
-              const passwordFields = Array.from(
-                document.querySelectorAll('input[type="password"]')
-              ).filter(isUsable);
-
-              // Page de double authentification : pas de mot de passe, un champ de code.
-              if (passwordFields.length === 0) {
-                if (!otp) return 'none';
-                const hint = /(otp|totp|2fa|mfa|two.?factor|one.?time|verif|token|code)/i;
-                const otpField =
-                  Array.from(document.querySelectorAll('input[autocomplete="one-time-code"]')).find(isUsable) ||
-                  Array.from(document.querySelectorAll('input')).find(el =>
-                    isUsable(el) &&
-                    ['text', 'tel', 'number', ''].includes((el.getAttribute('type') || '').toLowerCase()) &&
-                    hint.test([el.name, el.id, el.placeholder, el.getAttribute('aria-label')].join(' ')));
-                if (!otpField || otpField.value) return 'none';
-                setValue(otpField, otp);
-                otp = '';
-                return 'otp';
-              }
-
-              if (passwordFields.some(field =>
-                    (field.autocomplete || '').toLowerCase() === 'new-password')) return 'none';
-
-              const passwordField =
-                passwordFields.find(field =>
-                  (field.autocomplete || '').toLowerCase() === 'current-password') ||
-                (passwordFields.length === 1 ? passwordFields[0] : null);
-
-              if (!passwordField) return 'none';
-
-              const root = passwordField.form || document;
-              const usernameField =
-                root.querySelector('input[autocomplete="username"]') ||
-                root.querySelector('input[type="email"]') ||
-                root.querySelector('input[name*="user" i], input[id*="user" i]') ||
-                root.querySelector('input[name*="email" i], input[id*="email" i]') ||
-                root.querySelector('input[type="text"]:not([name*="search" i]):not([id*="search" i])');
-
-              if (usernameField && !usernameField.value.trim())
-                setValue(usernameField, username);
-
-              if (!passwordField.value)
-                setValue(passwordField, password);
-
-              username = '';
-              password = '';
-              otp = '';
-              return 'password';
-            })();
-            """;
+            var script = CredentialScripts.Fill(credential.Username, credential.Password, otpCode);
 
             string result;
             try

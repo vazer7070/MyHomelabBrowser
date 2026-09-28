@@ -15,6 +15,8 @@ namespace PommeBrowser.Linux.Web
         public const string GLibLibrary = "libglib-2.0.so.0";
         public const string GtkLibrary = "libgtk-4.so.1";
         public const string AdwaitaLibrary = "libadwaita-1.so.0";
+        public const string JavaScriptCoreLibrary = "libjavascriptcoregtk-6.0.so.1";
+        public const string GObjectLibrary = "libgobject-2.0.so.0";
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void AsyncReadyCallback(IntPtr source, IntPtr result, IntPtr userData);
@@ -50,6 +52,25 @@ namespace PommeBrowser.Linux.Web
         [DllImport(WebKitLibrary)]
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool webkit_website_data_manager_clear_finish(IntPtr manager, IntPtr result, out IntPtr error);
+
+        [DllImport(WebKitLibrary)]
+        public static extern void webkit_web_view_evaluate_javascript(IntPtr webView, [MarshalAs(UnmanagedType.LPUTF8Str)] string script, IntPtr length, [MarshalAs(UnmanagedType.LPUTF8Str)] string? worldName, [MarshalAs(UnmanagedType.LPUTF8Str)] string? sourceUri, IntPtr cancellable, AsyncReadyCallback callback, IntPtr userData);
+
+        [DllImport(WebKitLibrary)]
+        public static extern IntPtr webkit_web_view_evaluate_javascript_finish(IntPtr webView, IntPtr result, out IntPtr error);
+
+        [DllImport(JavaScriptCoreLibrary)]
+        public static extern IntPtr jsc_value_to_string(IntPtr value);
+
+        [DllImport(JavaScriptCoreLibrary)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool jsc_value_is_string(IntPtr value);
+
+        [DllImport(GObjectLibrary)]
+        public static extern void g_object_unref(IntPtr instance);
+
+        [DllImport(GLibLibrary)]
+        public static extern void g_free(IntPtr memory);
 
         [DllImport(GLibLibrary)]
         public static extern IntPtr g_bytes_new(byte[] data, UIntPtr size);
@@ -102,6 +123,42 @@ namespace PommeBrowser.Linux.Web
             string message = Marshal.PtrToStringUTF8(Marshal.ReadIntPtr(error, 8)) ?? "?";
             g_error_free(error);
             throw new InvalidOperationException(message);
+        }
+
+        /// <summary>
+        /// Exécute un script dans la page, dans un monde isolé si <paramref name="world"/> est donné
+        /// (la page ne voit ni ses variables ni ses fonctions). Renvoie le résultat s'il s'agit d'un texte.
+        /// </summary>
+        public static Task<string?> EvaluateAsync(WebKit.WebView webView, string script, string? world)
+        {
+            IntPtr view = Pointer(webView);
+            return RunAsync(
+                callback => webkit_web_view_evaluate_javascript(view, script, -1, world, null, IntPtr.Zero, callback, IntPtr.Zero),
+                result =>
+                {
+                    IntPtr value = webkit_web_view_evaluate_javascript_finish(view, result, out IntPtr error);
+                    ThrowIfError(error);
+                    if (value == IntPtr.Zero)
+                        return null;
+                    try
+                    {
+                        if (!jsc_value_is_string(value))
+                            return null;
+                        IntPtr text = jsc_value_to_string(value);
+                        try
+                        {
+                            return Marshal.PtrToStringUTF8(text);
+                        }
+                        finally
+                        {
+                            g_free(text);
+                        }
+                    }
+                    finally
+                    {
+                        g_object_unref(value);
+                    }
+                });
         }
 
         public static IntPtr NewBytes(byte[] data) => g_bytes_new(data, (UIntPtr)data.Length);
