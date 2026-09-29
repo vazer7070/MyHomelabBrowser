@@ -19,6 +19,29 @@ namespace PommeBrowser.Legacy
         /// <summary>Moteur livré avec l'application ; null s'il est absent (compilation sans lui, macOS).</summary>
         public static string? BundledExecutable => Bundled.Value;
 
+        /// <summary>Version du moteur livré (2026.09.24), lue dans son application.ini ; null s'il est absent.</summary>
+        public static string? BundledVersion
+        {
+            get
+            {
+                if (BundledExecutable is not { } executable)
+                    return null;
+                try
+                {
+                    string ini = Path.Combine(Path.GetDirectoryName(executable)!, "application.ini");
+                    if (!File.Exists(ini))
+                        return null;
+                    string? version = PommeBrowser.Linux.Core.BasiliskInstall.ParseApplicationIni(File.ReadAllLines(ini)).Version;
+                    // Basilisk se présente aux modules comme « 52.9.<date> ».
+                    return version is { } v && v.StartsWith("52.9.", StringComparison.Ordinal) ? v[5..] : version;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    return null;
+                }
+            }
+        }
+
         /// <summary>Dossier des modules (MOZ_PLUGIN_PATH), commun à tous les profils.</summary>
         public static string PluginDirectory => AppPaths.SharedData("plugins");
 

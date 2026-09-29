@@ -38,7 +38,7 @@ Tout se fait dans la CI (`.github/workflows/legacy-engine.yml`), qui compile le 
 
 1. `fetch-sources.sh` récupère Basilisk au commit de `engine.env` (version et commit de la branche `release` du miroir).
 2. `brand.sh` crée la marque Pomme Legacy.
-3. `build-linux.sh` (Ubuntu 22.04, GCC 11) et `build-windows.sh` (Visual Studio 2022 + MozillaBuild) compilent, avec les réglages des compilations officielles (`mozconfigs/` des sources) moins les manettes, AV1 et les outils de développement. Ils produisent :
+3. `build-linux.sh` (Ubuntu 22.04, GCC 11) et `build-windows.sh` (Visual Studio 2022 + MozillaBuild 3.4) compilent, avec les réglages des compilations officielles (`mozconfigs/` des sources), sans AV1. Ils produisent :
    - `pomme-legacy-<version>-linux-x86_64.tar.xz`
    - `pomme-legacy-<version>-windows-x64.zip`
 

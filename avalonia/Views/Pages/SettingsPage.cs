@@ -624,11 +624,11 @@ namespace PommeBrowser.Views.Pages
                     ? Tr("Basilisk n'est pas disponible sur macOS : les contenus Flash passent uniquement par Ruffle.")
                     : Tr("Aucun Basilisk trouvé : les contenus Flash passent uniquement par Ruffle.");
 
+            if (executable == LegacyEngine.BundledExecutable)
+                return Tr("Pomme Legacy {0}, livré avec PommeBrowser.", LegacyEngine.BundledVersion ?? string.Empty).Replace(" ,", ",");
             (string? name, string? version) = OperatingSystem.IsLinux()
                 ? BasiliskInstall.Describe(executable)
                 : OperatingSystem.IsWindows() ? MyHomelabBrowser.BasiliskExecutable.Describe(executable) : (null, null);
-            if (executable == LegacyEngine.BundledExecutable)
-                return Tr("{0} {1}, livré avec PommeBrowser.", name ?? "Basilisk", version ?? string.Empty).Replace(" ,", ",");
             return name != null ? Tr("{0} {1} détecté : {2}", name, version ?? string.Empty, executable) : Tr("Basilisk détecté : {0}", executable);
         }
 
