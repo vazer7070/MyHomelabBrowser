@@ -11,7 +11,6 @@ using MyHomelabBrowser.classes.AdBlock.Models;
 using MyHomelabBrowser.classes.AdBlock.Services;
 using MyHomelabBrowser.classes.Localization;
 using PommeBrowser.Engine;
-using PommeBrowser.Engine.Gtk;
 using PommeBrowser.Linux.Core;
 using static MyHomelabBrowser.classes.Localization.Loc;
 
@@ -19,9 +18,11 @@ namespace PommeBrowser.Core
 {
     /// <summary>
     /// Bloqueur de publicités et de pisteurs. Mêmes listes et mêmes réglages que les autres
-    /// éditions (dossier AdBlock du profil). Avec WebKit, les listes sont converties en règles
-    /// de blocage de contenu (ContentRuleConverter), compilées une fois puis gardées en cache.
-    /// Un site autorisé, ou du réseau local, est simplement affiché sans le filtre.
+    /// éditions (dossier AdBlock du profil). Avec WebKit (Linux, macOS), les listes sont converties
+    /// en règles de blocage de contenu (ContentRuleConverter), compilées une fois puis gardées en
+    /// cache. Avec WebView2 (Windows), chaque requête passe par le moteur de règles de l'édition
+    /// WPF (AdBlockModuleService, AdBlockTabSession). Un site autorisé, ou du réseau local, est
+    /// simplement affiché sans le filtre.
     /// </summary>
     public sealed class AdBlockService : IDisposable
     {
@@ -30,7 +31,8 @@ namespace PommeBrowser.Core
         /// <summary>Réglages lus par le moteur à chaque chargement (fil du moteur) : jamais modifiés, remplacés.</summary>
         sealed record Policy(bool Enabled, bool BypassPrivateNetworks, string[] Allowlist);
 
-        readonly AdBlockSettingsService _settings = new();
+        readonly AdBlockModuleService _module;
+        readonly AdBlockSettingsService _settings;
         readonly AdBlockFilterListService _lists;
         readonly string _storeDirectory;
         readonly string _statePath;
@@ -42,11 +44,19 @@ namespace PommeBrowser.Core
 
         public AdBlockService()
         {
-            _lists = new AdBlockFilterListService(_settings);
+            // Réglages et listes du module commun : un seul fichier de réglages par profil.
+            _module = AdBlockModuleHost.Current;
+            _settings = _module.SettingsService;
+            _lists = _module.FilterLists;
             _storeDirectory = AppPaths.Cache("content-filters");
             _statePath = Path.Combine(_storeDirectory, "state.json");
             UpdatePolicy();
             EngineHost.ContentFilterPolicy = ShouldFilter;
+            if (EngineHost.Kind == EngineKind.WebView2)
+            {
+                EngineHost.RequestFilter = _module;
+                _module.RulesChanged += () => Avalonia.Threading.Dispatcher.UIThread.Post(UpdateStatus);
+            }
         }
 
         /// <summary>Filtre remplacé, réglages ou état modifiés (fil de l'interface).</summary>
@@ -60,8 +70,11 @@ namespace PommeBrowser.Core
 
         public bool IsReady { get; private set; }
 
-        /// <summary>Le moteur de ce système sait-il appliquer les règles ? (WebKitGTK aujourd'hui.)</summary>
-        public static bool IsSupported => EngineHost.Kind == EngineKind.WebKitGtk;
+        /// <summary>Le moteur de ce système sait-il appliquer les règles ?</summary>
+        public static bool IsSupported => EngineHost.Kind is EngineKind.WebKitGtk or EngineKind.WebView2 or EngineKind.WebKitApple;
+
+        /// <summary>Requêtes filtrées une à une par PommeBrowser (WebView2) plutôt que par le moteur.</summary>
+        static bool FiltersRequests => EngineHost.Kind == EngineKind.WebView2;
 
         public async Task StartAsync()
         {
@@ -69,6 +82,13 @@ namespace PommeBrowser.Core
             {
                 Status = Tr("Bloqueur indisponible avec ce moteur");
                 Changed?.Invoke();
+                return;
+            }
+
+            if (FiltersRequests)
+            {
+                await _module.InitializeAsync();
+                UpdateStatus();
                 return;
             }
 
@@ -159,6 +179,12 @@ namespace PommeBrowser.Core
             AdBlockUpdateResult result;
             try
             {
+                if (FiltersRequests)
+                {
+                    result = await Task.Run(() => _module.UpdateListsAsync(force));
+                    UpdateStatus();
+                    return result;
+                }
                 result = await Task.Run(() => _lists.UpdateAsync(force));
             }
             catch (Exception ex)
@@ -179,6 +205,12 @@ namespace PommeBrowser.Core
         {
             if (!IsSupported)
                 return;
+            if (FiltersRequests)
+            {
+                await _module.ReloadForCurrentProfileAsync();
+                UpdateStatus();
+                return;
+            }
             if (_building)
             {
                 _buildAgain = true;
@@ -221,7 +253,7 @@ namespace PommeBrowser.Core
 
             if (state?.Id == id)
             {
-                filter = await GtkEngine.LoadFilterAsync(_storeDirectory, id);
+                filter = await EngineHost.LoadContentFilterAsync(_storeDirectory, id);
                 ruleCount = state.RuleCount;
             }
 
@@ -231,7 +263,7 @@ namespace PommeBrowser.Core
                 Changed?.Invoke();
 
                 ContentRuleSet rules = await Task.Run(() => ContentRuleConverter.Convert(sources, settings.CosmeticFiltering));
-                filter = await GtkEngine.CompileFilterAsync(_storeDirectory, id, Encoding.UTF8.GetBytes(rules.Json));
+                filter = await EngineHost.CompileContentFilterAsync(_storeDirectory, id, rules.Json);
                 ruleCount = rules.RuleCount;
                 WriteState(new FilterState(id, ruleCount));
                 RuntimeLogBuffer.Append($"[Anti-pub] {rules.RuleCount} règles ({rules.NetworkFilters} réseau, {rules.CosmeticFilters} masquage, {rules.SkippedFilters} ignorées)");
@@ -241,12 +273,17 @@ namespace PommeBrowser.Core
             RuleCount = ruleCount;
             IsReady = true;
             // Les onglets reprennent le nouveau filtre ; l'ancien est libéré par le moteur.
-            GtkEngine.SetContentFilter(filter);
+            EngineHost.SetContentFilter(filter);
             UpdateStatus();
         }
 
         void UpdateStatus()
         {
+            if (FiltersRequests)
+            {
+                RuleCount = _module.Engine.NetworkRuleCount + _module.Engine.CosmeticRuleCount;
+                IsReady = _module.Engine.NetworkRuleCount > 0;
+            }
             Status = !Settings.Enabled
                 ? Tr("Bloqueur désactivé")
                 : IsReady
@@ -306,6 +343,6 @@ namespace PommeBrowser.Core
             };
         }
 
-        public void Dispose() => _lists.Dispose();
+        public void Dispose() => _module.Dispose();
     }
 }

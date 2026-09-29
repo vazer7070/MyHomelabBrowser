@@ -136,6 +136,9 @@ namespace PommeBrowser
                     _ => ThemeVariant.Default
                 };
             }
+            // Les sites qui proposent un thème sombre suivent celui du navigateur.
+            if (_lifetime != null)
+                ConfigureEngine();
         }
 
         /// <summary>Réglages transmis au moteur (confidentialité, langues, téléchargements).</summary>
@@ -148,9 +151,18 @@ namespace PommeBrowser
                 SpellCheckingLanguages = english ? new[] { "en_US" } : new[] { "fr_FR" },
                 TrackingPrevention = Settings.TrackingPrevention != BrowserSettings.TrackingProtection.Off,
                 BlockThirdPartyCookies = Settings.TrackingPrevention >= BrowserSettings.TrackingProtection.Balanced,
+                TrackingLevel = Settings.TrackingPrevention,
+                DarkPages = Appearance.Theme switch
+                {
+                    AppTheme.Dark => true,
+                    AppTheme.Light => false,
+                    _ => null
+                },
+                BrowserArguments = SecureDnsConfiguration.BuildAdditionalBrowserArguments(Settings, string.Empty),
                 DownloadDirectory = DownloadDirectory,
                 CookieDatabase = AppPaths.CookieDatabase,
-                WebView2UserDataFolder = OperatingSystem.IsWindows() ? AppPaths.WebView2UserDataFolder : null
+                WebView2UserDataFolder = OperatingSystem.IsWindows() ? AppPaths.WebView2UserDataFolder : null,
+                AppleDataStoreId = OperatingSystem.IsMacOS() ? AppPaths.AppleDataStoreId : null
             });
         }
 

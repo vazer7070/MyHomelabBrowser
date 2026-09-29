@@ -30,6 +30,16 @@ namespace PommeBrowser.Engine
 
         public bool BlockThirdPartyCookies { get; init; } = true;
 
+        /// <summary>Niveau de protection contre le pistage (WebView2 : aucun, simple, équilibré, strict).</summary>
+        public MyHomelabBrowser.classes.BrowserSettings.TrackingProtection TrackingLevel { get; init; } =
+            MyHomelabBrowser.classes.BrowserSettings.TrackingProtection.Balanced;
+
+        /// <summary>Thème demandé aux sites (prefers-color-scheme) : null pour suivre le système.</summary>
+        public bool? DarkPages { get; init; }
+
+        /// <summary>Arguments du moteur Chromium (WebView2) : DNS sécurisé…</summary>
+        public string? BrowserArguments { get; init; }
+
         /// <summary>Dossier où les téléchargements sont enregistrés.</summary>
         public string DownloadDirectory { get; init; } = string.Empty;
 
@@ -66,10 +76,15 @@ namespace PommeBrowser.Engine
         /// </summary>
         public static Func<string?, bool>? ContentFilterPolicy { get; set; }
 
+        /// <summary>Moteur de règles des requêtes (WebView2 : le filtre est appliqué requête par requête).</summary>
+        public static MyHomelabBrowser.classes.AdBlock.Services.AdBlockModuleService? RequestFilter { get; set; }
+
         /// <summary>Adresse d'où la page charge les fichiers de Ruffle (servis par PommeBrowser).</summary>
         public static string RuffleBaseUrl => Kind switch
         {
             EngineKind.WebKitGtk => GtkEngine.RuffleBaseUrl,
+            // WKWebView : pas de schéma ajoutable à une vue déjà créée, fichiers servis en local.
+            EngineKind.WebKitApple => RuffleServer.BaseUrl,
             _ => "https://ruffle.pommebrowser.invalid/"
         };
 
@@ -92,6 +107,10 @@ namespace PommeBrowser.Engine
             _settings = settings;
             if (Kind == EngineKind.WebKitGtk)
                 GtkEngine.ApplySettings();
+            else if (Kind == EngineKind.WebView2 && OperatingSystem.IsWindows())
+                WebView2.WebView2Engine.ApplySettings();
+            else if (Kind == EngineKind.WebKitApple && OperatingSystem.IsMacOS())
+                Apple.AppleEngine.ApplySettings();
         }
 
         /// <summary>À appeler avant l'insertion de la vue dans la fenêtre : données du profil ou navigation privée.</summary>
@@ -114,13 +133,19 @@ namespace PommeBrowser.Engine
                         break;
 
                     case WindowsWebView2EnvironmentRequestedEventArgs webView2:
+                        // Même environnement pour tous les onglets du profil (mêmes options) ; la
+                        // navigation privée a son profil en mémoire, comme dans l'édition WPF.
                         webView2.UserDataFolder = _settings.WebView2UserDataFolder;
                         webView2.IsInPrivateModeEnabled = isPrivate;
+                        webView2.ProfileName = isPrivate ? WebView2.WebView2Engine.PrivateProfileName : null;
                         webView2.Language = _settings.Languages.Count > 0 ? _settings.Languages[0] : null;
+                        webView2.AdditionalBrowserArguments = string.IsNullOrWhiteSpace(_settings.BrowserArguments) ? null : _settings.BrowserArguments;
+                        webView2.EnableDevTools = true;
                         break;
 
                     case AppleWKWebViewEnvironmentRequestedEventArgs apple:
                         apple.NonPersistentDataStore = isPrivate;
+                        apple.EnableDevTools = true;
                         if (!isPrivate && _settings.AppleDataStoreId is Guid id)
                             apple.DataStoreIdentifier = id;
                         break;
@@ -130,18 +155,63 @@ namespace PommeBrowser.Engine
 
         /// <summary>Adaptateur de l'onglet, une fois la vue native créée (événement AdapterCreated).</summary>
         public static IEngineTab? Attach(NativeWebView view, bool isPrivate)
-            => view.TryGetPlatformHandle() switch
+        {
+            switch (view.TryGetPlatformHandle())
             {
-                IGtkWebViewPlatformHandle gtk => new GtkEngineTab(view, gtk.WebKitWebView, isPrivate),
-                _ => null
-            };
+                case IGtkWebViewPlatformHandle gtk:
+                    return new GtkEngineTab(view, gtk.WebKitWebView, isPrivate);
+                case IWindowsWebView2PlatformHandle webView2 when OperatingSystem.IsWindows():
+                    return WebView2.WebView2EngineTab.Create(view, webView2, isPrivate);
+                case IAppleWKWebViewPlatformHandle apple when OperatingSystem.IsMacOS():
+                    return Apple.AppleEngineTab.Create(view, apple, isPrivate);
+                default:
+                    return null;
+            }
+        }
 
         /// <summary>
         /// Efface les données des sites du profil depuis <paramref name="since"/> (null : tout) :
         /// cookies et stockage, et/ou cache.
         /// </summary>
         public static Task ClearBrowsingDataAsync(TimeSpan? since, bool cookiesAndSiteData, bool cache)
-            => Kind == EngineKind.WebKitGtk ? GtkEngine.ClearDataAsync(since, cookiesAndSiteData, cache) : Task.CompletedTask;
+        {
+            if (Kind == EngineKind.WebKitGtk)
+                return GtkEngine.ClearDataAsync(since, cookiesAndSiteData, cache);
+            if (Kind == EngineKind.WebView2 && OperatingSystem.IsWindows())
+                return WebView2.WebView2Engine.ClearDataAsync(since, cookiesAndSiteData, cache);
+            if (Kind == EngineKind.WebKitApple && OperatingSystem.IsMacOS())
+                return Apple.AppleEngine.ClearDataAsync(since, cookiesAndSiteData, cache);
+            return Task.CompletedTask;
+        }
+
+        // ---------------------------------------------------------------
+        // Filtre anti-pub compilé par WebKit (WebKitGTK et WKWebView : même format de règles)
+        // ---------------------------------------------------------------
+
+        /// <summary>Filtre déjà compilé (0 s'il n'existe pas ou si le moteur n'en a pas).</summary>
+        public static Task<nint> LoadContentFilterAsync(string storeDirectory, string id) => Kind switch
+        {
+            EngineKind.WebKitGtk => GtkEngine.LoadFilterAsync(storeDirectory, id),
+            EngineKind.WebKitApple => Apple.AppleEngine.LoadFilterAsync(storeDirectory, id),
+            _ => Task.FromResult<nint>(0)
+        };
+
+        /// <summary>Compile des règles (JSON de WebKit) et les garde en cache.</summary>
+        public static Task<nint> CompileContentFilterAsync(string storeDirectory, string id, string json) => Kind switch
+        {
+            EngineKind.WebKitGtk => GtkEngine.CompileFilterAsync(storeDirectory, id, System.Text.Encoding.UTF8.GetBytes(json)),
+            EngineKind.WebKitApple => Apple.AppleEngine.CompileFilterAsync(storeDirectory, id, json),
+            _ => Task.FromResult<nint>(0)
+        };
+
+        /// <summary>Nouveau filtre actif : repris par tous les onglets.</summary>
+        public static void SetContentFilter(nint filter)
+        {
+            if (Kind == EngineKind.WebKitGtk)
+                GtkEngine.SetContentFilter(filter);
+            else if (Kind == EngineKind.WebKitApple)
+                Apple.AppleEngine.SetContentFilter(filter);
+        }
 
         /// <summary>Nom et version du moteur (diagnostic, rapports).</summary>
         public static string Describe() => Kind switch
@@ -154,7 +224,13 @@ namespace PommeBrowser.Engine
 
         /// <summary>Processus du moteur lancés par PommeBrowser (PID), pour la mémoire utilisée.</summary>
         public static IReadOnlyList<int> Processes()
-            => Kind == EngineKind.WebKitGtk ? GtkEngine.ChildProcesses() : Array.Empty<int>();
+        {
+            if (Kind == EngineKind.WebKitGtk)
+                return GtkEngine.ChildProcesses();
+            if (Kind == EngineKind.WebView2 && OperatingSystem.IsWindows())
+                return WebView2.WebView2Engine.Processes();
+            return Array.Empty<int>();
+        }
 
         internal static void RaiseDownloadStarted(EngineDownload download)
             => Dispatcher.UIThread.Post(() => DownloadStarted?.Invoke(download));

@@ -53,7 +53,7 @@
 
 	<ItemGroup Label="Logique partagée avec les éditions WPF et GTK">
 		<Compile Include="../classes/**/*.cs" LinkBase="Shared"
-		         Exclude="../classes/AdBlock/Integration/**;
+		         Exclude="../classes/AdBlock/Integration/AdBlockBrowserController.cs;
 		                  ../classes/BoolToVisibility.cs;
 		                  ../classes/ClipboardHelper.cs;
 		                  ../classes/DarkTitleBar.cs;

@@ -1,9 +1,11 @@
+using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using MyHomelabBrowser.classes.AdBlock.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows.Threading;
 
 namespace MyHomelabBrowser.classes.AdBlock.Integration
 {
@@ -35,7 +37,7 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
             if (_sessions.TryGetValue(webView, out AdBlockTabSession? existing))
                 return existing;
 
-            var session = new AdBlockTabSession(webView, _module, isPrivate);
+            var session = new AdBlockTabSession(new WpfAdBlockWebView(webView), _module, isPrivate);
             session.Updated += Session_Updated;
             _sessions[webView] = session;
             await session.AttachAsync().ConfigureAwait(true);
@@ -113,6 +115,19 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
 
             _sessions.Clear();
             _activeSession = null;
+        }
+
+        /// <summary>Contrôle WebView2 de WPF vu par le bloqueur.</summary>
+        private sealed class WpfAdBlockWebView : IAdBlockWebView
+        {
+            private readonly WebView2 _webView;
+
+            public WpfAdBlockWebView(WebView2 webView) => _webView = webView;
+
+            public CoreWebView2? CoreWebView2 => _webView.CoreWebView2;
+
+            public void Post(Action action)
+                => _webView.Dispatcher.BeginInvoke(DispatcherPriority.Background, action);
         }
     }
 }

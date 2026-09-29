@@ -10,6 +10,15 @@ namespace PommeBrowser.Engine
     /// </summary>
     public static class BrowserShortcuts
     {
+        /// <summary>
+        /// Sous macOS, les raccourcis se tapent avec Cmd (Meta pour Avalonia) : Cmd+T vaut Ctrl+T.
+        /// Ctrl garde son rôle (Ctrl+Tab pour changer d'onglet, comme dans Safari).
+        /// </summary>
+        public static KeyModifiers Normalize(KeyModifiers modifiers)
+            => OperatingSystem.IsMacOS() && modifiers.HasFlag(KeyModifiers.Meta)
+                ? (modifiers & ~KeyModifiers.Meta) | KeyModifiers.Control
+                : modifiers;
+
         public static bool IsShortcut(Key key, KeyModifiers modifiers)
         {
             bool ctrl = modifiers.HasFlag(KeyModifiers.Control);

@@ -101,6 +101,13 @@ namespace PommeBrowser.Core
         /// <summary>Données WebView2 du profil (même dossier que l'édition Windows).</summary>
         public static string WebView2UserDataFolder => WebViewProfileData.GetUserDataFolder(ActiveProfile);
 
+        /// <summary>
+        /// Magasin de données WebKit du profil (macOS 14 et suivants) : identifiant stable tiré du
+        /// nom du profil, pour que chaque profil garde ses propres cookies et sessions.
+        /// </summary>
+        public static Guid AppleDataStoreId
+            => new(System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes("pommebrowser:" + ProfileId)));
+
         /// <summary>Dossier Téléchargements de l'utilisateur.</summary>
         public static string DefaultDownloadDirectory =>
             OperatingSystem.IsLinux() ? LinuxPaths.DefaultDownloadDirectory() : Path.Combine(Home, "Downloads");

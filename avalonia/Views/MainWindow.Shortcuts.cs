@@ -19,8 +19,9 @@ namespace PommeBrowser.Views
         {
             AddHandler(KeyDownEvent, (_, e) =>
             {
-                if (!e.Handled && BrowserShortcuts.IsShortcut(e.Key, e.KeyModifiers))
-                    e.Handled = HandleShortcut(e.Key, e.KeyModifiers);
+                KeyModifiers modifiers = BrowserShortcuts.Normalize(e.KeyModifiers);
+                if (!e.Handled && BrowserShortcuts.IsShortcut(e.Key, modifiers))
+                    e.Handled = HandleShortcut(e.Key, modifiers);
                 else if (!e.Handled && e.Key == Key.Escape && WindowState == WindowState.FullScreen && !_webFullscreen)
                 {
                     SetFullscreen(false);

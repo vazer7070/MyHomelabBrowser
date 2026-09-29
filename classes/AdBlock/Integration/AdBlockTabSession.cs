@@ -1,5 +1,4 @@
 using Microsoft.Web.WebView2.Core;
-using Microsoft.Web.WebView2.Wpf;
 using MyHomelabBrowser.classes.AdBlock.Models;
 using MyHomelabBrowser.classes.AdBlock.Services;
 using System;
@@ -11,7 +10,6 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Threading;
 
 namespace MyHomelabBrowser.classes.AdBlock.Integration
 {
@@ -20,7 +18,7 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
         private const string CosmeticStyleAttribute = "data-pomme-adblock";
         private const int MaximumRememberedBlockedUrls = 320;
 
-        private readonly WebView2 _webView;
+        private readonly IAdBlockWebView _webView;
         private readonly AdBlockModuleService _module;
         private readonly object _blockedUrlsLock = new();
         private readonly HashSet<string> _blockedResourceUrls = new(StringComparer.OrdinalIgnoreCase);
@@ -33,8 +31,8 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
         private string _documentHost = string.Empty;
         private int _blockedCount;
         private long _lastUpdateNotificationTick;
-        private DispatcherTimer? _updateNotificationTimer;
-        private DispatcherTimer? _cosmeticRefreshTimer;
+        private DeferredAction? _updateNotificationTimer;
+        private DeferredAction? _cosmeticRefreshTimer;
         private bool _attached;
         private bool _disposed;
 
@@ -44,13 +42,13 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
 
         public event Action<AdBlockTabSession>? Updated;
 
-        public WebView2 WebView => _webView;
+        public IAdBlockWebView WebView => _webView;
         public bool IsPrivate { get; }
         public int BlockedCount => Volatile.Read(ref _blockedCount);
         public string CurrentHost => _documentHost;
         public bool IsProtectionActive => _module.IsFilteringEnabledForHost(_documentHost);
 
-        public AdBlockTabSession(WebView2 webView, AdBlockModuleService module, bool isPrivate)
+        public AdBlockTabSession(IAdBlockWebView webView, AdBlockModuleService module, bool isPrivate)
         {
             _webView = webView;
             _module = module;
@@ -63,12 +61,12 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
                 return Task.CompletedTask;
 
             _attached = true;
-            UpdateDocumentHost(_webView.Source?.AbsoluteUri);
+            UpdateDocumentHost(_webView.CoreWebView2.Source);
 
             _webView.CoreWebView2.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
             _webView.CoreWebView2.WebResourceRequested += CoreWebView2_WebResourceRequested;
             _webView.CoreWebView2.NavigationStarting += CoreWebView2_NavigationStarting;
-            _webView.NavigationCompleted += WebView_NavigationCompleted;
+            _webView.CoreWebView2.NavigationCompleted += WebView_NavigationCompleted;
 
             _module.RulesChanged += Module_RulesChanged;
             _module.StateChanged += Module_StateChanged;
@@ -103,7 +101,7 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
 
         private async void WebView_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
         {
-            UpdateDocumentHost(_webView.Source?.AbsoluteUri);
+            UpdateDocumentHost(_webView.CoreWebView2?.Source);
             try
             {
                 await ApplyCosmeticFilteringAsync().ConfigureAwait(true);
@@ -125,8 +123,8 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
                 return;
 
             string documentHost = _documentHost;
-            if (documentHost.Length == 0 && _webView.Source != null)
-                documentHost = AdBlockDomain.NormalizeHost(_webView.Source.Host);
+            if (documentHost.Length == 0 && Uri.TryCreate(_webView.CoreWebView2.Source, UriKind.Absolute, out Uri? source))
+                documentHost = AdBlockDomain.NormalizeHost(source.Host);
 
             AdBlockResourceType resourceType = MapResourceType(e.ResourceContext);
 
@@ -186,43 +184,27 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
             if (_disposed)
                 return;
 
-            _ = _webView.Dispatcher.BeginInvoke(
-                DispatcherPriority.Background,
-                new Action(() =>
+            _webView.Post(() =>
+            {
+                if (_disposed)
+                    return;
+
+                _cosmeticRefreshTimer ??= new DeferredAction(_webView, TimeSpan.FromMilliseconds(220), async () =>
                 {
                     if (_disposed)
                         return;
 
-                    _cosmeticRefreshTimer ??= CreateCosmeticRefreshTimer();
-                    _cosmeticRefreshTimer.Stop();
-                    _cosmeticRefreshTimer.Start();
-                }));
-        }
-
-        private DispatcherTimer CreateCosmeticRefreshTimer()
-        {
-            var timer = new DispatcherTimer(DispatcherPriority.Background, _webView.Dispatcher)
-            {
-                Interval = TimeSpan.FromMilliseconds(220)
-            };
-
-            timer.Tick += async (_, _) =>
-            {
-                timer.Stop();
-                if (_disposed)
-                    return;
-
-                try
-                {
-                    await ApplyCosmeticFilteringAsync(incremental: true).ConfigureAwait(true);
-                }
-                catch
-                {
-                    // Une page qui change pendant l'exécution du script peut invalider l'appel.
-                }
-            };
-
-            return timer;
+                    try
+                    {
+                        await ApplyCosmeticFilteringAsync(incremental: true).ConfigureAwait(true);
+                    }
+                    catch
+                    {
+                        // Une page qui change pendant l'exécution du script peut invalider l'appel.
+                    }
+                });
+                _cosmeticRefreshTimer.Restart();
+            });
         }
 
         /// <param name="incremental">
@@ -886,40 +868,23 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
                 return;
             }
 
-            _updateNotificationTimer ??= CreateUpdateNotificationTimer();
-            _updateNotificationTimer.Stop();
-            _updateNotificationTimer.Start();
-        }
-
-        private DispatcherTimer CreateUpdateNotificationTimer()
-        {
-            var timer = new DispatcherTimer(DispatcherPriority.Background, _webView.Dispatcher)
+            _updateNotificationTimer ??= new DeferredAction(_webView, TimeSpan.FromMilliseconds(180), () =>
             {
-                Interval = TimeSpan.FromMilliseconds(180)
-            };
-            timer.Tick += (_, _) =>
-            {
-                timer.Stop();
+                if (_disposed)
+                    return;
                 Interlocked.Exchange(ref _lastUpdateNotificationTick, Environment.TickCount64);
                 Updated?.Invoke(this);
-            };
-            return timer;
+            });
+            _updateNotificationTimer.Restart();
         }
 
-        private void Module_RulesChanged()
-        {
-            _ = _webView.Dispatcher.InvokeAsync(async () =>
-            {
-                try { await RefreshFilteringAsync(); } catch { }
-            });
-        }
+        private void Module_RulesChanged() => _webView.Post(() => _ = RefreshFilteringSafeAsync());
 
-        private void Module_StateChanged()
+        private void Module_StateChanged() => _webView.Post(() => _ = RefreshFilteringSafeAsync());
+
+        private async Task RefreshFilteringSafeAsync()
         {
-            _ = _webView.Dispatcher.InvokeAsync(async () =>
-            {
-                try { await RefreshFilteringAsync(); } catch { }
-            });
+            try { await RefreshFilteringAsync().ConfigureAwait(true); } catch { }
         }
 
         private void UpdateDocumentHost(string? url)
@@ -990,18 +955,72 @@ namespace MyHomelabBrowser.classes.AdBlock.Integration
                 return;
 
             _disposed = true;
-            _updateNotificationTimer?.Stop();
-            _cosmeticRefreshTimer?.Stop();
+            _updateNotificationTimer?.Dispose();
+            _cosmeticRefreshTimer?.Dispose();
             _module.RulesChanged -= Module_RulesChanged;
             _module.StateChanged -= Module_StateChanged;
 
-            if (_webView.CoreWebView2 != null)
+            try
             {
-                _webView.CoreWebView2.WebResourceRequested -= CoreWebView2_WebResourceRequested;
-                _webView.CoreWebView2.NavigationStarting -= CoreWebView2_NavigationStarting;
+                if (_webView.CoreWebView2 is { } core)
+                {
+                    core.WebResourceRequested -= CoreWebView2_WebResourceRequested;
+                    core.NavigationStarting -= CoreWebView2_NavigationStarting;
+                    core.NavigationCompleted -= WebView_NavigationCompleted;
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // Vue déjà fermée : ses événements sont partis avec elle.
+            }
+        }
+
+        /// <summary>
+        /// Action différée d'un délai, repoussée à chaque nouvel appel, exécutée sur le fil de
+        /// l'interface de la vue (remplace le minuteur propre à WPF).
+        /// </summary>
+        private sealed class DeferredAction : IDisposable
+        {
+            private readonly Timer _timer;
+            private readonly TimeSpan _delay;
+            private int _generation;
+            private bool _disposed;
+
+            public DeferredAction(IAdBlockWebView view, TimeSpan delay, Action action)
+            {
+                _delay = delay;
+                _timer = new Timer(state =>
+                {
+                    int generation = Volatile.Read(ref _generation);
+                    view.Post(() =>
+                    {
+                        // Arrêté ou relancé entre-temps : ce déclenchement ne compte plus.
+                        if (!_disposed && generation == Volatile.Read(ref _generation))
+                            action();
+                    });
+                }, null, Timeout.Infinite, Timeout.Infinite);
             }
 
-            _webView.NavigationCompleted -= WebView_NavigationCompleted;
+            public void Restart()
+            {
+                if (_disposed)
+                    return;
+                Interlocked.Increment(ref _generation);
+                _timer.Change(_delay, Timeout.InfiniteTimeSpan);
+            }
+
+            public void Stop()
+            {
+                Interlocked.Increment(ref _generation);
+                if (!_disposed)
+                    _timer.Change(Timeout.Infinite, Timeout.Infinite);
+            }
+
+            public void Dispose()
+            {
+                _disposed = true;
+                _timer.Dispose();
+            }
         }
     }
 }
