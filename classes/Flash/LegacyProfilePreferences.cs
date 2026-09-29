@@ -78,6 +78,8 @@ namespace MyHomelabBrowser.classes.Flash
                 ("plugin.state.java", 0),
                 ("plugin.state.npctrl", 0),
                 ("plugin.scan.plid.all", false),
+                // Module Flash rangé dans le dossier plugins de Basilisk (Windows) : à charger.
+                ("plugins.load_appdir_plugins", true),
 
                 // Fenêtres surgissantes bloquées, cache disque limité à 256 Mo
                 ("dom.disable_open_during_load", true),

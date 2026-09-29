@@ -9,7 +9,8 @@
 # Même nom et même identifiant que l'AppImage de l'édition GTK : publiée à sa place, elle
 # arrive chez ses utilisateurs comme une mise à jour, avec leurs données.
 #
-# L'AppImage contient le navigateur, .NET, Avalonia et Ruffle. Le moteur web (WebKitGTK 4.1)
+# L'AppImage contient le navigateur, .NET, Avalonia, Ruffle et, en x86_64, le moteur Flash
+# d'origine (Pomme Legacy, voir legacy-engine/). Le moteur web (WebKitGTK 4.1)
 # et GTK 3 viennent du système : ils reçoivent ainsi les correctifs de sécurité de la
 # distribution. Les outils AppImage sont téléchargés dans une version fixée et vérifiés
 # par SHA-256 avant d'être utilisés.
@@ -87,6 +88,12 @@ build() {
     --output "$appdir/usr/lib/pommebrowser"
 
   [ -f "$appdir/usr/lib/pommebrowser/Assets/Ruffle/ruffle.js" ] || { echo "Ruffle absent de la publication." >&2; exit 1; }
+
+  # Moteur Flash d'origine (Pomme Legacy), compilé pour x86_64 seulement : Flash Player n'a
+  # jamais existé pour les processeurs ARM.
+  if [ "$arch" = x86_64 ]; then
+    "$ROOT/legacy-engine/fetch-engine.sh" linux-x86_64 "$appdir/usr/lib/pommebrowser/legacy"
+  fi
 
   install -m 0755 "$PACKAGING/AppRun" "$appdir/AppRun"
   install -m 0644 "$DESKTOP/$APP_ID.desktop" "$appdir/$APP_ID.desktop"

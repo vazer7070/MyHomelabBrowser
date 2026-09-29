@@ -1,0 +1,21 @@
+# Pomme Legacy (Basilisk sous la marque de PommeBrowser) pour Linux x86_64.
+# Options des compilations officielles de Basilisk, sans mise à jour intégrée : c'est
+# PommeBrowser qui livre le moteur.
+ac_add_options --enable-application=basilisk
+ac_add_options --with-branding=basilisk/branding/pomme
+ac_add_options --enable-default-toolkit=cairo-gtk3
+ac_add_options --enable-optimize="-O2 -w"
+ac_add_options --enable-jemalloc
+ac_add_options --enable-strip
+ac_add_options --disable-debug
+ac_add_options --disable-tests
+ac_add_options --disable-updater
+ac_add_options --disable-eme
+ac_add_options --disable-webrtc
+ac_add_options --disable-gamepad
+ac_add_options --disable-necko-wifi
+ac_add_options --with-pthreads
+ac_add_options --x-libraries=/usr/lib/x86_64-linux-gnu
+ac_add_options --with-ccache=ccache
+export MOZ_PKG_SPECIAL=gtk3
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-pomme

@@ -371,3 +371,6 @@ avalonia/Assets/Ruffle/
 # Paquets AppImage de l'édition Linux
 linux/packaging/out/
 avalonia/packaging/out/
+
+# Moteur Flash d'origine compilé ou téléchargé (voir legacy-engine/README.md)
+legacy-engine/out/

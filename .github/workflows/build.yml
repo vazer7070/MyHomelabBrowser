@@ -125,7 +125,10 @@ jobs:
       - name: Compilation de l'édition Avalonia
         run: dotnet build avalonia/PommeBrowser.csproj --configuration Release
 
+      # Le moteur Flash d'origine (Pomme Legacy) est pris dans sa version GitHub, s'il est publié.
       - name: AppImage (x86_64 et aarch64)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: avalonia/packaging/linux/build-appimage.sh all
 
       - name: Essai de lancement
@@ -164,6 +167,12 @@ jobs:
           dotnet publish avalonia/PommeBrowser.csproj --configuration Release --runtime win-x64 --self-contained true -p:DebugType=none -p:RuffleDownloadOptional=false --output artifacts/avalonia-win-x64
           Move-Item artifacts/avalonia-win-x64/pommebrowser.exe artifacts/avalonia-win-x64/MyHomelabBrowser.exe
           if (-not (Test-Path artifacts/avalonia-win-x64/Assets/Ruffle/ruffle.js)) { throw "Ruffle absent de la publication." }
+
+      - name: Moteur Flash d'origine (Pomme Legacy, s'il est publié)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./legacy-engine/fetch-engine.ps1 -Destination artifacts/avalonia-win-x64/legacy
 
       - name: Dossier publié
         uses: actions/upload-artifact@v4

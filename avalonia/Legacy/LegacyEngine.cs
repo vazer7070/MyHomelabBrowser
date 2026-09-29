@@ -94,6 +94,35 @@ namespace PommeBrowser.Legacy
             }
         }
 
+        /// <summary>
+        /// Windows : Basilisk ne lit pas MOZ_PLUGIN_PATH, il cherche ses modules dans son propre
+        /// dossier plugins\. Le module de l'utilisateur y est recopié avant le lancement (le dossier
+        /// de l'application est remplacé à chaque mise à jour). Sans effet ailleurs.
+        /// </summary>
+        public static void PrepareAppPlugins(string executable)
+        {
+            if (!OperatingSystem.IsWindows() || InstalledModule is not { } module)
+                return;
+            try
+            {
+                string directory = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(executable))!, "plugins");
+                string target = Path.Combine(directory, Path.GetFileName(module));
+                var source = new FileInfo(module);
+                var existing = new FileInfo(target);
+                if (existing.Exists && existing.Length == source.Length && existing.LastWriteTimeUtc == source.LastWriteTimeUtc)
+                    return;
+                Directory.CreateDirectory(directory);
+                foreach (string previous in Directory.EnumerateFiles(directory).Where(IsModuleName).ToList())
+                    File.Delete(previous);
+                File.Copy(module, target, overwrite: true);
+                File.SetLastWriteTimeUtc(target, source.LastWriteTimeUtc);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                MyHomelabBrowser.classes.RuntimeLogBuffer.Append("[Basilisk] Module Flash non copié : " + ex.Message);
+            }
+        }
+
         /// <summary>Bibliothèque du système : en-tête ELF (Linux) ou MZ (Windows).</summary>
         static bool HasBinaryHeader(string path)
         {

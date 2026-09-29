@@ -496,6 +496,9 @@ try {
             throw "L'exécutable de l'édition Avalonia est absent après publication : $avaloniaExe"
         }
         Move-Item -LiteralPath $avaloniaExe -Destination (Join-Path $publishDir $mainExe) -Force
+
+        # Moteur Flash d'origine (Pomme Legacy) livré avec l'application, dans legacy\.
+        & (Join-Path $scriptDir "legacy-engine\fetch-engine.ps1") -Destination (Join-Path $publishDir "legacy")
     }
 
     $mainExePath = Join-Path $publishDir $mainExe

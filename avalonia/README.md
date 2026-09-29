@@ -88,7 +88,7 @@ Elle porte le même nom que celle de l'édition GTK. Gardez-la dans un dossier m
 
 **Flash**
 - Ruffle, intégré et vérifié par SHA-256 à la compilation, sans aucun CDN.
-- Basilisk pour les contenus que Ruffle ne lit pas.
+- Pour les contenus que Ruffle ne lit pas : Basilisk, livré avec PommeBrowser sous le nom « Pomme Legacy » (Windows x64, Linux x86_64). La page s'ouvre dans l'onglet, avec le lecteur Flash d'origine. Adobe interdit de redistribuer Flash Player : chacun ajoute sa copie dans **Paramètres › Avancé**. Détails dans [`legacy-engine/README.md`](../legacy-engine/README.md).
 
 **Autres**
 - Téléchargements sans boîte de dialogue, jamais par-dessus un fichier existant.
@@ -140,6 +140,7 @@ avalonia/packaging/macos/build-app.sh all         # PommeBrowser.app arm64 et x6
 La CI GitHub (`.github/workflows/build.yml`) construit les trois paquets à chaque modification. Elle essaie aussi de lancer l'AppImage.
 
 - **Ruffle** et les outils AppImage sont téléchargés dans une version fixée et vérifiés par SHA-256.
+- **Pomme Legacy** (moteur Flash d'origine) : compilé par sa propre CI, puis pris dans la version GitHub `legacy-engine-<version>` (voir [`legacy-engine/README.md`](../legacy-engine/README.md)).
 - **Signature macOS** (facultative) : `POMMEBROWSER_MACOS_SIGN_IDENTITY` (certificat Developer ID) et `POMMEBROWSER_NOTARY_PROFILE` (notarisation).
 - **Signature Windows** : mêmes variables que l'édition WPF (`POMMEBROWSER_AZURE_SIGN_METADATA` ou `POMMEBROWSER_SIGN_PARAMS`).
 - **Serveur de support** : `-p:SupportApiUrl=https://…` à la compilation, ou la variable `POMMEBROWSER_SUPPORT_API_URL`.
@@ -162,6 +163,6 @@ Les trois éditions cherchent leurs mises à jour sur `vazer7070/PommeBrowser-re
 | `Engine/WebView2/` | WebView2 : onglet, téléchargements, fenêtres de connexion, raccourcis |
 | `Engine/Apple/` | WKWebView : runtime Objective-C (délégués, blocs), onglet, téléchargements, fenêtres |
 | `Views/` | Fenêtre, onglets, barre d'adresse, pages internes, boîtes de dialogue |
-| `Legacy/` | Basilisk (Linux et Windows) |
+| `Legacy/` | Basilisk (Linux et Windows) : lancement, fenêtre logée dans l'onglet (X11, Win32), moteur livré et module Flash |
 | `Updates/` | Velopack (Windows), AppImage (Linux) |
 | `packaging/` | AppImage, app macOS |

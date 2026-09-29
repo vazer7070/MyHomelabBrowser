@@ -54,6 +54,7 @@ namespace PommeBrowser.Legacy
             try
             {
                 LegacyProfilePreferences.Apply(lease.ProfilePath, isPrivate, embedded);
+                LegacyEngine.PrepareAppPlugins(executable);
                 var arguments = new List<string> { "-new-instance", "-no-remote", "-profile", lease.ProfilePath, url.AbsoluteUri };
                 LegacyProcess process = LegacyProcess.Start(Path.GetFullPath(executable), arguments, LaunchEnvironment());
                 RuntimeLogBuffer.Append($"[Basilisk] Lancé (PID {process.Id}) : {url.Host}");
