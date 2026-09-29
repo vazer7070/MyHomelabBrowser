@@ -21,6 +21,7 @@ ac_add_options --disable-debug
 ac_add_options --disable-updater
 ac_add_options --disable-webrtc
 ac_add_options --disable-gamepad
+ac_add_options --disable-av1
 ac_add_options --disable-precompiled-startupcache
 
 mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-pomme
