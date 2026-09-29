@@ -12,7 +12,9 @@ SECONDS_TO_RUN="${2:-20}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+# Les dossiers XDG sont fixés aussi : la CI de GitHub définit XDG_CONFIG_HOME hors de ce HOME.
 export HOME="$WORK/home" XDG_RUNTIME_DIR="$WORK/run" APPIMAGE_EXTRACT_AND_RUN=1 GTK_A11Y=none
+export XDG_CONFIG_HOME="$HOME/.config" XDG_DATA_HOME="$HOME/.local/share" XDG_CACHE_HOME="$HOME/.cache"
 mkdir -p "$HOME" && mkdir -m 700 "$XDG_RUNTIME_DIR"
 
 set +e
@@ -32,5 +34,5 @@ if grep -qiE "unhandled|exception" "$WORK/app.log"; then
   echo "Exception dans le journal de PommeBrowser." >&2
   exit 1
 fi
-[ -d "$HOME/.config/MyHomelabBrowser/profiles/default" ] || { echo "Profil non créé." >&2; exit 1; }
+[ -d "$XDG_CONFIG_HOME/MyHomelabBrowser/profiles/default" ] || { echo "Profil non créé." >&2; exit 1; }
 echo "Essai de lancement réussi."

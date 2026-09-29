@@ -103,12 +103,14 @@ public sealed class LinuxEditionTests : IDisposable
     [Fact]
     public void DownloadsNeverOverwriteAnExistingFile()
     {
-        var existing = new HashSet<string> { "/d/notes.txt", "/d/notes (1).txt", "/d/archive.tar.gz" };
+        // Aussi utilisé par l'édition Avalonia sous Windows : chemins construits pour le système.
+        static string In(string name) => Path.Combine("/d", name);
+        var existing = new HashSet<string> { In("notes.txt"), In("notes (1).txt"), In("archive.tar.gz") };
         Func<string, bool> exists = existing.Contains;
 
-        Assert.Equal("/d/notes (2).txt", DownloadNames.UniquePath("/d", "notes.txt", exists));
-        Assert.Equal("/d/archive (1).tar.gz", DownloadNames.UniquePath("/d", "archive.tar.gz", exists));
-        Assert.Equal("/d/neuf.txt", DownloadNames.UniquePath("/d", "neuf.txt", exists));
+        Assert.Equal(In("notes (2).txt"), DownloadNames.UniquePath("/d", "notes.txt", exists));
+        Assert.Equal(In("archive (1).tar.gz"), DownloadNames.UniquePath("/d", "archive.tar.gz", exists));
+        Assert.Equal(In("neuf.txt"), DownloadNames.UniquePath("/d", "neuf.txt", exists));
     }
 
     // ---------------------------------------------------------------
