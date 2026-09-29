@@ -51,6 +51,7 @@ namespace PommeBrowser.Engine.Gtk
         [DllImport(Gio)] public static extern uint g_io_error_quark();
 
         public const int GIoErrorNotFound = 1;
+        public const int GIoErrorCancelled = 19;
 
         public const nuint GTypeString = 16 << 2;
 

@@ -66,6 +66,7 @@ namespace PommeBrowser.Engine.Gtk
         nint _finder;
         bool _filterApplied;
         string? _hoveredLink;
+        string? _tlsFailedUri;
         volatile bool _disposed;
         volatile Snapshot _state = new(null, null, false, 0, false, false);
         volatile bool _pageHasKeyboard;
@@ -386,6 +387,8 @@ namespace PommeBrowser.Engine.Gtk
                 return;
 
             string? uri = String(webkit_web_view_get_uri(view));
+            if (loadEvent == 0)
+                tab._tlsFailedUri = null;
             // Le filtre suit la page qui s'affiche, avant ses premières ressources.
             if (loadEvent is 0 or 1)
                 tab.ApplyContentFilterOnGlib(pageUri: uri);
@@ -402,8 +405,13 @@ namespace PommeBrowser.Engine.Gtk
             string uri = String(failingUri) ?? string.Empty;
             (uint domain, int code) = ErrorCode(error);
 
+            // Certificat refusé : sa page est déjà affichée, l'annulation qui suit ne compte pas.
+            if (uri == tab._tlsFailedUri)
+                return 1;
+
             // Navigation remplacée par une autre, ou changée en téléchargement : rien à afficher.
             if (domain == webkit_network_error_quark() && code == NetworkErrorCancelled ||
+                domain == g_io_error_quark() && code == GIoErrorCancelled ||
                 domain == webkit_policy_error_quark() && code == PolicyErrorFrameLoadInterrupted ||
                 domain == webkit_network_error_quark() && code == NetworkErrorFileDoesNotExist && uri.StartsWith("about:", StringComparison.Ordinal))
             {
@@ -422,6 +430,7 @@ namespace PommeBrowser.Engine.Gtk
                 return 0;
 
             string uri = String(failingUri) ?? string.Empty;
+            tab._tlsFailedUri = uri;
             g_object_ref(certificate);
             tab._certificates.Add(certificate);
 

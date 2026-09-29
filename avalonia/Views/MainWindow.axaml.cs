@@ -9,6 +9,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Session;
 using PommeBrowser.Core;
@@ -47,7 +48,14 @@ namespace PommeBrowser.Views
 
             ActualThemeVariantChanged += (_, _) => ApplyPrivateLook();
             // Le clavier des vues natives suit le focus d'Avalonia (voir IEngineTab.SyncKeyboard).
-            AddHandler(GotFocusEvent, (_, _) => Dispatcher.UIThread.Post(() => SyncKeyboard(force: false)), handledEventsToo: true);
+            AddHandler(GotFocusEvent, (_, e) =>
+            {
+                // Vue côte à côte : un clic dans la page de l'autre volet en fait l'onglet actif.
+                if (IsSplitViewActive && _splitPartner is { } partner && e.Source is Visual source &&
+                    (source == partner.Content || partner.Content.IsVisualAncestorOf(source)))
+                    SelectTab(partner);
+                Dispatcher.UIThread.Post(() => SyncKeyboard(force: false));
+            }, handledEventsToo: true);
             Activated += (_, _) => SyncKeyboard(force: true);
             Closing += OnClosing;
             Closed += (_, _) => OnClosed();

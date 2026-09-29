@@ -39,7 +39,10 @@ namespace PommeBrowser.Views.Pages
                     (Tr("Version"), AppInfo.DisplayVersion + " (Avalonia)"),
                     (Tr("Système"), $"{RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})"),
                     (Tr("Démarrée depuis"), FormatDuration(DateTime.Now - process.StartTime)),
-                    (Tr("Mémoire (processus)"), Tr("{0} utilisés, {1} privés", DownloadEntry.FormatSize(process.WorkingSet64), DownloadEntry.FormatSize(process.PrivateMemorySize64))),
+                    // Hors Windows, la mémoire « privée » compte l'espace réservé par .NET, pas la mémoire utilisée.
+                    (Tr("Mémoire (processus)"), OperatingSystem.IsWindows()
+                        ? Tr("{0} utilisés, {1} privés", DownloadEntry.FormatSize(process.WorkingSet64), DownloadEntry.FormatSize(process.PrivateMemorySize64))
+                        : DownloadEntry.FormatSize(process.WorkingSet64)),
                     (Tr("Mémoire gérée"), DownloadEntry.FormatSize(GC.GetTotalMemory(false)))
                 })
             };
