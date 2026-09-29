@@ -62,7 +62,7 @@ namespace PommeBrowser.Legacy
             {
                 LegacyProfilePreferences.Apply(lease.ProfilePath, isPrivate, embedded);
 
-                string pluginDirectory = AppPaths.SharedData("plugins");
+                string pluginDirectory = LegacyEngine.PluginDirectory;
                 Directory.CreateDirectory(pluginDirectory);
 
                 string? setpriv = new[] { "/usr/bin/setpriv", "/bin/setpriv" }.FirstOrDefault(File.Exists);

@@ -5,6 +5,7 @@ using MyHomelabBrowser.classes.Flash;
 using MyHomelabBrowser.classes.Homelab;
 using MyHomelabBrowser.classes.Workspaces;
 using PommeBrowser.Core;
+using PommeBrowser.Legacy;
 using PommeBrowser.Linux.Core;
 using static MyHomelabBrowser.classes.Localization.Loc;
 
@@ -78,7 +79,10 @@ namespace PommeBrowser
                 Tr("Ouvrir"), () => ActiveWindow?.NewTab(service.Url, select: true), warning: !up);
         }
 
-        /// <summary>Basilisk choisi dans les paramètres, sinon trouvé à un emplacement habituel (null : absent).</summary>
+        /// <summary>
+        /// Basilisk choisi dans les paramètres, sinon celui livré avec PommeBrowser, sinon (Linux)
+        /// celui trouvé à un emplacement habituel. Null : aucun.
+        /// </summary>
         public string? BasiliskExecutable
         {
             get
@@ -86,11 +90,17 @@ namespace PommeBrowser
                 string? chosen = string.IsNullOrWhiteSpace(Settings.BasiliskPath) ? null : Settings.BasiliskPath;
                 if (OperatingSystem.IsLinux())
                 {
-                    return BasiliskInstall.IsLaunchable(chosen)
-                        ? chosen
+                    if (BasiliskInstall.IsLaunchable(chosen))
+                        return chosen;
+                    return BasiliskInstall.IsLaunchable(LegacyEngine.BundledExecutable)
+                        ? LegacyEngine.BundledExecutable
                         : BasiliskInstall.Detect(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.GetEnvironmentVariable("PATH"));
                 }
-                return OperatingSystem.IsWindows() && BasiliskExecutable_IsLaunchable(chosen) ? chosen : null;
+                if (!OperatingSystem.IsWindows())
+                    return null;
+                if (BasiliskExecutable_IsLaunchable(chosen))
+                    return chosen;
+                return BasiliskExecutable_IsLaunchable(LegacyEngine.BundledExecutable) ? LegacyEngine.BundledExecutable : null;
             }
         }
 

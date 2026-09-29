@@ -15,6 +15,7 @@ using MyHomelabBrowser.classes.Flash;
 using MyHomelabBrowser.classes.Security;
 using PommeBrowser.Core;
 using PommeBrowser.Engine;
+using PommeBrowser.Legacy;
 using PommeBrowser.Linux.Core;
 using PommeBrowser.Views.Dialogs;
 using static MyHomelabBrowser.classes.Localization.Loc;
@@ -520,11 +521,32 @@ namespace PommeBrowser.Views.Pages
                 })));
 
             var status = Hint(BasiliskStatus());
+            var module = Hint(FlashModuleStatus());
             var path = new TextBlock { Text = string.IsNullOrWhiteSpace(Settings.BasiliskPath) ? Tr("Recherche automatique") : Settings.BasiliskPath, TextWrapping = TextWrapping.Wrap };
             panel.Children.Add(Card(Tr("Moteur de secours Legacy (Basilisk)"),
-                Tr("Basilisk lit les contenus Flash que Ruffle ne sait pas lire, avec le lecteur d'origine, dans sa propre fenêtre."),
-                path, status,
+                LegacyView.IsSupported
+                    ? Tr("Basilisk lit dans l'onglet, avec le lecteur Flash d'origine, les contenus que Ruffle ne sait pas lire.")
+                    : Tr("Basilisk lit les contenus Flash que Ruffle ne sait pas lire, avec le lecteur d'origine, dans sa propre fenêtre."),
+                path, status, module,
+                Hint(Tr("Adobe ne distribue plus Flash Player : PommeBrowser ne peut pas le fournir. Choisissez le module de votre copie ({0}). Les dernières versions bloquent les contenus depuis le 12 janvier 2021 : prenez une version plus ancienne.", LegacyEngine.ExpectedModuleName)),
                 Buttons(
+                    Action(Tr("Choisir le module Flash…"), async () =>
+                    {
+                        IReadOnlyList<IStorageFile> files = await _window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                        {
+                            Title = Tr("Choisir le module Flash"),
+                            AllowMultiple = false
+                        });
+                        if (files.Count == 0 || files[0].TryGetLocalPath() is not { } chosen)
+                            return;
+                        if (LegacyEngine.InstallModule(chosen) is { } error)
+                        {
+                            await Dialogs.Dialogs.AlertAsync(_window, Tr("Module Flash"), error);
+                            return;
+                        }
+                        module.Text = FlashModuleStatus();
+                        _window.ShowToast(Tr("Module Flash installé : il sera utilisé à la prochaine ouverture dans Basilisk."));
+                    }),
                     Action(Tr("Parcourir…"), async () =>
                     {
                         IReadOnlyList<IStorageFile> files = await _window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
@@ -605,7 +627,14 @@ namespace PommeBrowser.Views.Pages
             (string? name, string? version) = OperatingSystem.IsLinux()
                 ? BasiliskInstall.Describe(executable)
                 : OperatingSystem.IsWindows() ? MyHomelabBrowser.BasiliskExecutable.Describe(executable) : (null, null);
+            if (executable == LegacyEngine.BundledExecutable)
+                return Tr("{0} {1}, livré avec PommeBrowser.", name ?? "Basilisk", version ?? string.Empty).Replace(" ,", ",");
             return name != null ? Tr("{0} {1} détecté : {2}", name, version ?? string.Empty, executable) : Tr("Basilisk détecté : {0}", executable);
         }
+
+        static string FlashModuleStatus()
+            => LegacyEngine.InstalledModule is { } module
+                ? Tr("Module Flash : {0}", System.IO.Path.GetFileName(module))
+                : Tr("Module Flash absent : Basilisk ne pourra pas lire les contenus Flash.");
     }
 }

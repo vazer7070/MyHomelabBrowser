@@ -16,11 +16,16 @@ namespace PommeBrowser.Legacy
     [SupportedOSPlatform("windows")]
     sealed class WindowsBasilisk : ILegacyBrowser
     {
-        static readonly IReadOnlyDictionary<string, string> LaunchEnvironment = new Dictionary<string, string>
+        /// <summary>
+        /// Ni rapport de plantage ni instance partagée. Le moteur livré avec PommeBrowser cherche
+        /// aussi le module Flash dans le dossier des modules (MOZ_PLUGIN_PATH, comme sous Linux).
+        /// </summary>
+        static IReadOnlyDictionary<string, string> LaunchEnvironment() => new Dictionary<string, string>
         {
             ["MOZ_CRASHREPORTER_DISABLE"] = "1",
             ["MOZ_CRASHREPORTER_NO_REPORT"] = "1",
-            ["MOZ_NO_REMOTE"] = "1"
+            ["MOZ_NO_REMOTE"] = "1",
+            ["MOZ_PLUGIN_PATH"] = LegacyEngine.PluginDirectory
         };
 
         readonly LegacyProcess _process;
@@ -50,7 +55,7 @@ namespace PommeBrowser.Legacy
             {
                 LegacyProfilePreferences.Apply(lease.ProfilePath, isPrivate, embedded);
                 var arguments = new List<string> { "-new-instance", "-no-remote", "-profile", lease.ProfilePath, url.AbsoluteUri };
-                LegacyProcess process = LegacyProcess.Start(Path.GetFullPath(executable), arguments, LaunchEnvironment);
+                LegacyProcess process = LegacyProcess.Start(Path.GetFullPath(executable), arguments, LaunchEnvironment());
                 RuntimeLogBuffer.Append($"[Basilisk] Lancé (PID {process.Id}) : {url.Host}");
                 return new WindowsBasilisk(process, lease);
             }

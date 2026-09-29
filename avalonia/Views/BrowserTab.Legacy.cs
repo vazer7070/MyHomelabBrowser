@@ -70,6 +70,9 @@ namespace PommeBrowser.Views
             started.SetBackground(!IsSelected);
             if (!IsPrivate)
                 _app.History.Record(uri.AbsoluteUri, uri.Host);
+            // Sans module Flash, Basilisk affiche la page mais pas le contenu Flash.
+            if (LegacyEngine.InstalledModule == null && executable == LegacyEngine.BundledExecutable)
+                Window.ShowToast(Tr("Module Flash absent : ajoutez votre copie de Flash Player dans les paramètres."), Tr("Paramètres"), () => Window.OpenSettings("flash"), warning: true);
 
             if (embedded)
                 ShowEmbeddedBasilisk(started, uri);
