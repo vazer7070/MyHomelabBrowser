@@ -143,16 +143,6 @@ namespace PommeBrowser.Engine
         public static Task ClearBrowsingDataAsync(TimeSpan? since, bool cookiesAndSiteData, bool cache)
             => Kind == EngineKind.WebKitGtk ? GtkEngine.ClearDataAsync(since, cookiesAndSiteData, cache) : Task.CompletedTask;
 
-        /// <summary>
-        /// Rend le clavier à la fenêtre (avant de donner le focus à un champ d'Avalonia) quand la
-        /// vue native l'a gardé.
-        /// </summary>
-        public static void ReclaimKeyboard(TopLevel topLevel)
-        {
-            if (Kind == EngineKind.WebKitGtk)
-                X11Focus.TakeFocus(topLevel);
-        }
-
         /// <summary>Nom et version du moteur (diagnostic, rapports).</summary>
         public static string Describe() => Kind switch
         {

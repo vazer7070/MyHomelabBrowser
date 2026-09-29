@@ -46,6 +46,7 @@ namespace PommeBrowser.Engine.Gtk
         static readonly nint EvaluatedCallback = (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&OnEvaluated;
         static readonly nint KeyPressCallback = (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, int>)&OnKeyPress;
         static readonly nint ButtonPressCallback = (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, int>)&OnButtonPress;
+        static readonly nint WindowFocusInCallback = (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, int>)&OnWindowFocusIn;
 
         /// <summary>État lu par l'interface, remplacé d'un bloc depuis le fil GLib.</summary>
         sealed record Snapshot(string? Title, string? Uri, bool IsLoading, double Progress, bool CanGoBack, bool CanGoForward);
@@ -60,12 +61,16 @@ namespace PommeBrowser.Engine.Gtk
         readonly List<nint> _certificates = new();
 
         nint _view;
+        nint _window;
         nint _manager;
         nint _finder;
         bool _filterApplied;
         string? _hoveredLink;
         volatile bool _disposed;
         volatile Snapshot _state = new(null, null, false, 0, false, false);
+        volatile bool _pageHasKeyboard;
+        nint _parentWindow;
+        int _focusAttempts;
         double _zoom = 1;
 
         public GtkEngineTab(NativeWebView host, nint view, bool isPrivate)
@@ -74,7 +79,14 @@ namespace PommeBrowser.Engine.Gtk
             _view = view;
             IsPrivate = isPrivate;
             Glib.Post(Setup);
+            // Focus quitté pour un champ d'Avalonia, y compris dans un Popup (recherche dans la page).
+            _host.GotFocus += OnHostFocusChanged;
+            _host.LostFocus += OnHostFocusChanged;
+            SyncKeyboard(force: true);
         }
+
+        void OnHostFocusChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+            => Dispatcher.UIThread.Post(() => SyncKeyboard());
 
         public bool IsPrivate { get; }
         public string? Title => _state.Title;
@@ -147,6 +159,13 @@ namespace PommeBrowser.Engine.Gtk
             Connect(_view, "key-press-event", KeyPressCallback);
             Connect(_view, "button-press-event", ButtonPressCallback);
 
+            nint toplevel = gtk_widget_get_toplevel(_view);
+            if (toplevel != 0 && toplevel != _view && gtk_widget_is_toplevel(toplevel) != 0)
+            {
+                _window = g_object_ref(toplevel);
+                Connect(_window, "focus-in-event", WindowFocusInCallback);
+            }
+
             _manager = webkit_web_view_get_user_content_manager(_view);
             _finder = webkit_web_view_get_find_controller(_view);
             Connect(_finder, "counted-matches", CountedCallback);
@@ -208,6 +227,153 @@ namespace PommeBrowser.Engine.Gtk
             GtkEngineTab? tab = GSignal.State<GtkEngineTab>(data);
             return tab is { _disposed: false } ? tab : null;
         }
+
+        // ---------------------------------------------------------------
+        // Clavier
+        //
+        // La vue est une fenêtre GTK placée dans la fenêtre X11 d'Avalonia. Sous X11, une touche
+        // va à la fenêtre sous le pointeur dès qu'elle descend de celle qui a le focus : sans
+        // précaution, taper une adresse la souris posée sur la page écrirait dans la page, et
+        // GTK se croit même active au simple survol. Le clavier suit donc le focus d'Avalonia :
+        // la page le reçoit quand sa vue a le focus, sinon elle ne l'écoute plus du tout.
+        // ---------------------------------------------------------------
+
+        public void SyncKeyboard(bool force = false)
+        {
+            if (_disposed)
+                return;
+            bool page = _host.IsKeyboardFocusWithin && _host.IsEffectivelyVisible;
+            if (page == _pageHasKeyboard && !force)
+                return;
+            nint parent = TopLevel.GetTopLevel(_host)?.TryGetPlatformHandle() is { HandleDescriptor: "XID" } handle ? handle.Handle : 0;
+            Glib.Post(() => SetKeyboardOnGlib(page, parent));
+        }
+
+        /// <summary>
+        /// Donne le clavier à la page ou le lui retire (fil GLib) : touches écoutées ou non par la
+        /// fenêtre GTK, focus X11 déplacé à l'intérieur de la fenêtre de PommeBrowser seulement
+        /// (jamais pris à une autre application), et état actif de la fenêtre GTK.
+        /// </summary>
+        void SetKeyboardOnGlib(bool page, nint parent)
+        {
+            if (_disposed || _window == 0)
+                return;
+            nint gdkWindow = gtk_widget_get_window(_window);
+            if (gdkWindow == 0)
+                return;
+
+            _pageHasKeyboard = page;
+            if (parent != 0)
+                _parentWindow = parent;
+            int events = gdk_window_get_events(gdkWindow);
+            int wanted = page ? events | GdkKeyPressMask | GdkKeyReleaseMask : events & ~(GdkKeyPressMask | GdkKeyReleaseMask);
+            if (wanted != events)
+                gdk_window_set_events(gdkWindow, wanted);
+
+            nint display = gdk_window_get_display(gdkWindow);
+            nint xdisplay = gdk_x11_display_get_xdisplay(display);
+            nint xid = gdk_x11_window_get_xid(gdkWindow);
+            bool focused = false;
+            bool attempted = false;
+            gdk_x11_display_error_trap_push(display);
+            try
+            {
+                XGetInputFocus(xdisplay, out nint focus, out _);
+                bool inPage = focus > 1 && IsInside(xdisplay, focus, xid);
+                if (page && !inPage && (focus <= 1 || TopWindow(xdisplay, focus) == TopWindow(xdisplay, xid)))
+                {
+                    XSetInputFocus(xdisplay, xid, XRevertToParent, 0);
+                    focused = attempted = true;
+                }
+                else if (!page && inPage && _parentWindow != 0)
+                {
+                    XSetInputFocus(xdisplay, _parentWindow, XRevertToParent, 0);
+                }
+                else
+                {
+                    focused = inPage;
+                }
+            }
+            finally
+            {
+                if (gdk_x11_display_error_trap_pop(display) != 0)
+                    focused = false;
+            }
+
+            if (attempted && !focused && _focusAttempts < 20)
+            {
+                // Vue pas encore réaffichée par Avalonia (changement d'onglet) : X11 refuse le
+                // focus à une fenêtre invisible, nouvel essai un peu plus tard.
+                _focusAttempts++;
+                _ = Task.Delay(50).ContinueWith(_ => Glib.Post(() =>
+                {
+                    if (_pageHasKeyboard)
+                        SetKeyboardOnGlib(true, 0);
+                }), TaskScheduler.Default);
+            }
+            else
+            {
+                _focusAttempts = 0;
+            }
+
+            if (page ? focused && gtk_window_is_active(_window) == 0 : gtk_window_is_active(_window) != 0)
+                SendFocusChange(gdkWindow, page);
+        }
+
+        /// <summary>
+        /// GTK ne se rend active qu'une fois : quand le survol l'a déjà « activée » (et que ce
+        /// faux focus a été ignoré), le vrai focus n'est plus signalé. Il est donc envoyé ici.
+        /// </summary>
+        void SendFocusChange(nint gdkWindow, bool focusIn)
+        {
+            nint gdkEvent = gdk_event_new(GdkFocusChange);
+            if (gdkEvent == 0)
+                return;
+            // GdkEventFocus : fenêtre à +8 (libérée avec l'événement), send_event à +16, in à +18.
+            Marshal.WriteIntPtr(gdkEvent, 8, g_object_ref(gdkWindow));
+            Marshal.WriteByte(gdkEvent, 16, 1);
+            Marshal.WriteInt16(gdkEvent, 18, (short)(focusIn ? 1 : 0));
+            gtk_widget_event(_window, gdkEvent);
+            gdk_event_free(gdkEvent);
+        }
+
+        static bool IsInside(nint display, nint window, nint ancestor)
+        {
+            for (int depth = 0; depth < 64 && window != 0; depth++)
+            {
+                if (window == ancestor)
+                    return true;
+                if (XQueryTree(display, window, out nint root, out nint parent, out nint children, out _) == 0)
+                    return false;
+                if (children != 0)
+                    XFree(children);
+                if (parent == root)
+                    return false;
+                window = parent;
+            }
+            return false;
+        }
+
+        /// <summary>Fenêtre de premier niveau (cadre du gestionnaire de fenêtres compris).</summary>
+        static nint TopWindow(nint display, nint window)
+        {
+            for (int depth = 0; depth < 64 && window != 0; depth++)
+            {
+                if (XQueryTree(display, window, out nint root, out nint parent, out nint children, out _) == 0)
+                    return 0;
+                if (children != 0)
+                    XFree(children);
+                if (parent == root || parent == 0)
+                    return window;
+                window = parent;
+            }
+            return 0;
+        }
+
+        /// <summary>Focus que GTK croit recevoir alors que la page n'a pas le clavier (survol) : ignoré.</summary>
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+        static int OnWindowFocusIn(nint window, nint gdkEvent, nint data)
+            => Tab(data) is { _pageHasKeyboard: false } ? 1 : 0;
 
         // ---------------------------------------------------------------
         // Signaux de la vue
@@ -511,17 +677,38 @@ namespace PommeBrowser.Engine.Gtk
 
             if (key == Avalonia.Input.Key.None || !BrowserShortcuts.IsShortcut(key, modifiers))
                 return 0;
-            tab.Post(() => tab.ShortcutPressed?.Invoke(key, modifiers));
+            if (BrowserShortcuts.MovesKeyboardToWindow(key, modifiers))
+                tab.SetKeyboardOnGlib(page: false, parent: 0);
+            tab.Post(() =>
+            {
+                tab.ShortcutPressed?.Invoke(key, modifiers);
+                // Le clavier suit le focus laissé par le raccourci (rendu à la page si besoin).
+                tab.SyncKeyboard(force: true);
+            });
             return 1;
         }
 
-        /// <summary>Boutons « précédent » et « suivant » de la souris (GdkEventButton : bouton à +52).</summary>
+        /// <summary>
+        /// Clic dans la page : elle prend le clavier. Boutons « précédent » et « suivant » de la
+        /// souris (GdkEventButton : bouton à +52).
+        /// </summary>
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         static int OnButtonPress(nint view, nint gdkEvent, nint data)
         {
-            if (Tab(data) is null || gdkEvent == 0)
+            if (Tab(data) is not { } tab || gdkEvent == 0)
                 return 0;
             uint button = (uint)Marshal.ReadInt32(gdkEvent, 52);
+            if (button <= 3)
+            {
+                // À chaque clic : le gestionnaire de fenêtres vient peut-être de redonner le focus
+                // X11 à la fenêtre d'Avalonia.
+                tab.SetKeyboardOnGlib(page: true, parent: 0);
+                tab.Post(() =>
+                {
+                    if (!tab._host.IsKeyboardFocusWithin)
+                        tab._host.Focus();
+                });
+            }
             if (button == 8 && webkit_web_view_can_go_back(view) != 0)
             {
                 webkit_web_view_go_back(view);
@@ -581,6 +768,7 @@ namespace PommeBrowser.Engine.Gtk
         public void Focus()
         {
             _host.Focus();
+            SyncKeyboard(force: true);
             OnView(gtk_widget_grab_focus);
         }
 
@@ -731,6 +919,8 @@ namespace PommeBrowser.Engine.Gtk
             if (_disposed)
                 return;
             _disposed = true;
+            _host.GotFocus -= OnHostFocusChanged;
+            _host.LostFocus -= OnHostFocusChanged;
 
             foreach (PermissionRequest request in _pendingPermissions)
                 request.Deny();
@@ -755,6 +945,12 @@ namespace PommeBrowser.Engine.Gtk
                 foreach (nint certificate in _certificates)
                     g_object_unref(certificate);
                 _certificates.Clear();
+
+                if (_window != 0)
+                {
+                    g_object_unref(_window);
+                    _window = 0;
+                }
 
                 if (_view != 0)
                 {

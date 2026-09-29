@@ -46,13 +46,18 @@ namespace PommeBrowser.Views
                 // Adresse complète pendant la saisie, sélectionnée pour être remplacée d'un coup.
                 if (!_addressEditing && _selected?.Page == TabPage.Web && _selected.WebUrl.Length > 0)
                     SetAddressText(UrlDisplay.ForDisplay(_selected.WebUrl));
-                Avalonia.Threading.Dispatcher.UIThread.Post(AddressBar.SelectAll);
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    if (AddressBar.IsFocused)
+                        AddressBar.SelectAll();
+                });
             };
             AddressBar.LostFocus += (_, _) =>
             {
                 HideSuggestions();
                 _addressEditing = false;
                 ShowAddress(_selected);
+                AddressBar.ClearSelection();
             };
             AddressBar.AddHandler(KeyDownEvent, AddressBar_KeyDown, RoutingStrategies.Tunnel);
         }
@@ -75,7 +80,6 @@ namespace PommeBrowser.Views
 
         public void FocusAddressBar()
         {
-            Engine.EngineHost.ReclaimKeyboard(this);
             AddressBar.Focus();
             AddressBar.SelectAll();
         }
@@ -102,7 +106,7 @@ namespace PommeBrowser.Views
                     {
                         _addressEditing = false;
                         ShowAddress(_selected);
-                        _selected?.Engine?.Focus();
+                        _selected?.FocusPage();
                     }
                     break;
 
@@ -144,7 +148,7 @@ namespace PommeBrowser.Views
                 NewTab(url, select: true);
             else
                 _selected.Navigate(url);
-            _selected?.Engine?.Focus();
+            _selected?.FocusPage();
         }
 
         /// <summary>Ouvre une adresse dans l'onglet actif (ou un nouvel onglet s'il n'y en a pas).</summary>

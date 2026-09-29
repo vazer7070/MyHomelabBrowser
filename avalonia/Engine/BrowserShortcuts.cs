@@ -35,5 +35,23 @@ namespace PommeBrowser.Engine
 
             return !ctrl && !alt && key is Key.F3 or Key.F5 or Key.F6 or Key.F11 or Key.F12 or Key.BrowserBack or Key.BrowserForward or Key.BrowserRefresh;
         }
+
+        /// <summary>
+        /// Raccourcis qui envoient la saisie vers un champ de la fenêtre (adresse, recherche dans la
+        /// page, nouvel onglet) : la page lâche le clavier aussitôt, avant même que la fenêtre ait
+        /// traité le raccourci, pour que les touches tapées juste après n'y arrivent pas.
+        /// </summary>
+        public static bool MovesKeyboardToWindow(Key key, KeyModifiers modifiers)
+        {
+            bool ctrl = modifiers.HasFlag(KeyModifiers.Control);
+            bool shift = modifiers.HasFlag(KeyModifiers.Shift);
+            bool alt = modifiers.HasFlag(KeyModifiers.Alt);
+
+            if (ctrl && !alt)
+                return key is Key.L or Key.F || key == Key.T && !shift || key == Key.N && shift;
+            if (alt && !ctrl)
+                return key == Key.D;
+            return !ctrl && !alt && key is Key.F3 or Key.F6;
+        }
     }
 }

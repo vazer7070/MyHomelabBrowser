@@ -8,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Session;
 using PommeBrowser.Core;
@@ -45,13 +46,21 @@ namespace PommeBrowser.Views
             InitializeSuspension();
 
             ActualThemeVariantChanged += (_, _) => ApplyPrivateLook();
-            Activated += (_, _) => _selected?.Engine?.Focus();
+            // Le clavier des vues natives suit le focus d'Avalonia (voir IEngineTab.SyncKeyboard).
+            AddHandler(GotFocusEvent, (_, _) => Dispatcher.UIThread.Post(() => SyncKeyboard(force: false)), handledEventsToo: true);
+            Activated += (_, _) => SyncKeyboard(force: true);
             Closing += OnClosing;
             Closed += (_, _) => OnClosed();
             UpdateChrome();
         }
 
         public BrowserApp App { get; }
+
+        void SyncKeyboard(bool force)
+        {
+            foreach (BrowserTab tab in _tabs)
+                tab.Engine?.SyncKeyboard(force && tab.Content.IsEffectivelyVisible);
+        }
 
         public IReadOnlyList<BrowserTab> Tabs => _tabs;
 
@@ -143,7 +152,7 @@ namespace PommeBrowser.Views
             if (tab.Page == TabPage.Home)
                 FocusAddressBar();
             else
-                tab.Engine?.Focus();
+                tab.FocusPage();
         }
 
         public void CloseTab(BrowserTab tab)

@@ -22,7 +22,7 @@ namespace PommeBrowser.Views
                         break;
                     case Key.Escape:
                         CloseFind();
-                        _selected?.Engine?.Focus();
+                        _selected?.FocusPage();
                         e.Handled = true;
                         break;
                 }
@@ -34,7 +34,6 @@ namespace PommeBrowser.Views
             if (_selected is not { Page: TabPage.Web, Engine: not null })
                 return;
             FindPopup.IsOpen = true;
-            Engine.EngineHost.ReclaimKeyboard(this);
             FindBox.Focus();
             FindBox.SelectAll();
             if (!string.IsNullOrEmpty(FindBox.Text))

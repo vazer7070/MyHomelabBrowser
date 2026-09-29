@@ -200,6 +200,20 @@ namespace PommeBrowser.Views
         // Vue web
         // ---------------------------------------------------------------
 
+        /// <summary>
+        /// Clavier à la page web. Au premier chargement la vue du moteur n'existe pas encore : le
+        /// focus lui est donné tout de suite, le moteur prend le clavier dès qu'il est branché.
+        /// </summary>
+        public void FocusPage()
+        {
+            if (Page != TabPage.Web)
+                return;
+            if (_engine != null)
+                _engine.Focus();
+            else
+                _web?.Focus();
+        }
+
         /// <summary>Crée la vue du moteur (au premier chargement d'une page web).</summary>
         void EnsureWeb()
         {
@@ -553,6 +567,14 @@ namespace PommeBrowser.Views
 
         void GoBackOrHome()
         {
+            // Échec avant l'affichage : le moteur montre encore la page précédente, on y revient.
+            if (_webShownOnce && _engine?.Uri is { Length: > 0 } current && current != "about:blank" &&
+                !string.Equals(current, _errorUrl, StringComparison.Ordinal))
+            {
+                ShowWeb();
+                return;
+            }
+
             if (_engine?.CanGoBack == true)
             {
                 ShowWeb();

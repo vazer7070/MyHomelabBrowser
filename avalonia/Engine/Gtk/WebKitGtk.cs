@@ -20,6 +20,8 @@ namespace PommeBrowser.Engine.Gtk
         const string Soup = "libsoup-3.0.so.0";
         const string Cairo = "libcairo.so.2";
         const string Gtk3 = "libgtk-3.so.0";
+        const string Gdk3 = "libgdk-3.so.0";
+        const string X11 = "libX11.so.6";
 
         // ---------------------------------------------------------------
         // GLib / GObject
@@ -246,6 +248,31 @@ namespace PommeBrowser.Engine.Gtk
         [DllImport(Gtk3)] public static extern void gtk_window_set_default_size(nint window, int width, int height);
         [DllImport(Gtk3)] public static extern void gtk_window_set_icon_from_file(nint window, [MarshalAs(UnmanagedType.LPUTF8Str)] string path, nint error);
         [DllImport(Gtk3)] public static extern void gtk_window_present(nint window);
+
+        // Clavier de la vue intégrée (fenêtre GTK de l'adaptateur, placée dans la fenêtre X11 d'Avalonia)
+        [DllImport(Gtk3)] public static extern nint gtk_widget_get_toplevel(nint widget);
+        [DllImport(Gtk3)] public static extern int gtk_widget_is_toplevel(nint widget);
+        [DllImport(Gtk3)] public static extern nint gtk_widget_get_window(nint widget);
+        [DllImport(Gtk3)] public static extern int gtk_widget_event(nint widget, nint gdkEvent);
+        [DllImport(Gtk3)] public static extern int gtk_window_is_active(nint window);
+        [DllImport(Gdk3)] public static extern int gdk_window_get_events(nint window);
+        [DllImport(Gdk3)] public static extern void gdk_window_set_events(nint window, int mask);
+        [DllImport(Gdk3)] public static extern nint gdk_window_get_display(nint window);
+        [DllImport(Gdk3)] public static extern nint gdk_x11_window_get_xid(nint window);
+        [DllImport(Gdk3)] public static extern nint gdk_x11_display_get_xdisplay(nint display);
+        [DllImport(Gdk3)] public static extern void gdk_x11_display_error_trap_push(nint display);
+        [DllImport(Gdk3)] public static extern int gdk_x11_display_error_trap_pop(nint display);
+        [DllImport(Gdk3)] public static extern nint gdk_event_new(int type);
+        [DllImport(Gdk3)] public static extern void gdk_event_free(nint gdkEvent);
+        [DllImport(X11)] public static extern int XGetInputFocus(nint display, out nint focus, out int revertTo);
+        [DllImport(X11)] public static extern int XSetInputFocus(nint display, nint window, int revertTo, nint time);
+        [DllImport(X11)] public static extern int XQueryTree(nint display, nint window, out nint root, out nint parent, out nint children, out uint count);
+        [DllImport(X11)] public static extern int XFree(nint data);
+
+        public const int GdkKeyPressMask = 1 << 10;
+        public const int GdkKeyReleaseMask = 1 << 11;
+        public const int GdkFocusChange = 12;
+        public const int XRevertToParent = 2;
 
         [StructLayout(LayoutKind.Sequential)]
         public struct GdkRectangle

@@ -200,6 +200,13 @@ namespace PommeBrowser.Engine
         void Stop();
         void Focus();
 
+        /// <summary>
+        /// Le clavier suit le focus d'Avalonia : à la page quand sa vue a le focus, sinon à la
+        /// fenêtre (nécessaire avec les vues natives intégrées sous X11). <paramref name="force"/> :
+        /// réappliqué même sans changement (fenêtre réactivée).
+        /// </summary>
+        void SyncKeyboard(bool force = false);
+
         void Find(string text, bool matchCase);
         void FindNext(bool backward);
         void StopFind();
