@@ -80,6 +80,7 @@
     <PackageReference Include="Avalonia" Version="12.1.3" />
     <Compile Include="..\..\avalonia\Engine\BrowserShortcuts.cs" Link="Avalonia\BrowserShortcuts.cs" />
     <Compile Include="..\..\avalonia\Engine\UserScripts.cs" Link="Avalonia\UserScripts.cs" />
+    <Compile Include="..\..\avalonia\Legacy\FlashModuleSearch.cs" Link="Avalonia\FlashModuleSearch.cs" />
   </ItemGroup>
 
   <ItemGroup Label="Édition Linux (logique sans interface)">

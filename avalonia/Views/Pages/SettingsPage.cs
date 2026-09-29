@@ -523,30 +523,20 @@ namespace PommeBrowser.Views.Pages
             var status = Hint(BasiliskStatus());
             var module = Hint(FlashModuleStatus());
             var path = new TextBlock { Text = string.IsNullOrWhiteSpace(Settings.BasiliskPath) ? Tr("Recherche automatique") : Settings.BasiliskPath, TextWrapping = TextWrapping.Wrap };
+            Button search = null!;
+            // Module installé : statut à jour, et le bouton de recherche n'est plus mis en avant.
+            void Installed()
+            {
+                module.Text = FlashModuleStatus();
+                search.Classes.Remove("primary");
+            }
+            search = Action(Tr("Rechercher le module Flash"), async () => await SearchFlashModuleAsync(search, Installed), primary: LegacyEngine.InstalledModule == null);
             panel.Children.Add(Card(Tr("Moteur de secours Legacy (Basilisk)"),
                 LegacyView.IsSupported
                     ? Tr("Basilisk lit dans l'onglet, avec le lecteur Flash d'origine, les contenus que Ruffle ne sait pas lire.")
                     : Tr("Basilisk lit les contenus Flash que Ruffle ne sait pas lire, avec le lecteur d'origine, dans sa propre fenêtre."),
-                path, status, module,
-                Hint(Tr("Adobe ne distribue plus Flash Player : PommeBrowser ne peut pas le fournir. Choisissez le module de votre copie ({0}). Les dernières versions bloquent les contenus depuis le 12 janvier 2021 : prenez une version plus ancienne.", LegacyEngine.ExpectedModuleName)),
+                path, status,
                 Buttons(
-                    Action(Tr("Choisir le module Flash…"), async () =>
-                    {
-                        IReadOnlyList<IStorageFile> files = await _window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-                        {
-                            Title = Tr("Choisir le module Flash"),
-                            AllowMultiple = false
-                        });
-                        if (files.Count == 0 || files[0].TryGetLocalPath() is not { } chosen)
-                            return;
-                        if (LegacyEngine.InstallModule(chosen) is { } error)
-                        {
-                            await Dialogs.Dialogs.AlertAsync(_window, Tr("Module Flash"), error);
-                            return;
-                        }
-                        module.Text = FlashModuleStatus();
-                        _window.ShowToast(Tr("Module Flash installé : il sera utilisé à la prochaine ouverture dans Basilisk."));
-                    }),
                     Action(Tr("Parcourir…"), async () =>
                     {
                         IReadOnlyList<IStorageFile> files = await _window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
@@ -568,6 +558,20 @@ namespace PommeBrowser.Views.Pages
                         Save();
                         path.Text = Tr("Recherche automatique");
                         status.Text = BasiliskStatus();
+                    })),
+                module,
+                Hint(Tr("Adobe ne distribue plus Flash Player : PommeBrowser ne peut pas le fournir. « Rechercher le module Flash » trouve votre copie sur l'ordinateur, par exemple dans un Basilisk portable ; sinon, choisissez le fichier ({0}). Les dernières versions bloquent les contenus depuis le 12 janvier 2021 : prenez une version plus ancienne.", LegacyEngine.ExpectedModuleName)),
+                Buttons(
+                    search,
+                    Action(Tr("Choisir le module Flash…"), async () =>
+                    {
+                        IReadOnlyList<IStorageFile> files = await _window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                        {
+                            Title = Tr("Choisir le module Flash"),
+                            AllowMultiple = false
+                        });
+                        if (files.Count > 0 && files[0].TryGetLocalPath() is { } chosen)
+                            await InstallFlashModuleAsync(chosen, Installed);
                     }))));
 
             // Sites ouverts d'office dans Basilisk.
@@ -630,6 +634,98 @@ namespace PommeBrowser.Views.Pages
                 ? BasiliskInstall.Describe(executable)
                 : OperatingSystem.IsWindows() ? MyHomelabBrowser.BasiliskExecutable.Describe(executable) : (null, null);
             return name != null ? Tr("{0} {1} détecté : {2}", name, version ?? string.Empty, executable) : Tr("Basilisk détecté : {0}", executable);
+        }
+
+        /// <summary>Recherche du module Flash sur l'ordinateur, puis choix de celui à installer.</summary>
+        async Task SearchFlashModuleAsync(Button button, Action installed)
+        {
+            object? label = button.Content;
+            button.IsEnabled = false;
+            button.Content = Tr("Recherche…");
+            IReadOnlyList<FlashModuleSearch.Module> found;
+            try
+            {
+                found = await Task.Run(() => LegacyEngine.FindModules());
+            }
+            finally
+            {
+                button.Content = label;
+                button.IsEnabled = true;
+            }
+            await OfferFlashModulesAsync(found, installed, folder: null);
+        }
+
+        /// <summary>Recherche dans un dossier choisi (Basilisk ou Pale Moon portable…), sous-dossiers compris.</summary>
+        async Task SearchFlashFolderAsync(Action installed)
+        {
+            IReadOnlyList<IStorageFolder> folders = await _window.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = Tr("Dossier du module Flash"),
+                AllowMultiple = false
+            });
+            if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } folder)
+                return;
+            IReadOnlyList<FlashModuleSearch.Module> found = await Task.Run(() => LegacyEngine.FindModules(folder));
+            await OfferFlashModulesAsync(found, installed, folder);
+        }
+
+        /// <summary>Modules trouvés : l'utilisateur choisit celui à installer, ou un dossier où chercher.</summary>
+        async Task OfferFlashModulesAsync(IReadOnlyList<FlashModuleSearch.Module> found, Action installed, string? folder)
+        {
+            if (found.Count == 0)
+            {
+                int choice = await Dialogs.Dialogs.ChoiceAsync(_window, Tr("Module Flash introuvable"),
+                    folder == null
+                        ? Tr("Aucun module Flash 64 bits ({0}) n'a été trouvé dans les dossiers habituels. Indiquez le dossier où il se trouve, par exemple celui d'un Basilisk ou d'un Pale Moon portable : il y sera cherché, sous-dossiers compris.", LegacyEngine.ExpectedModuleName)
+                        : Tr("Aucun module Flash 64 bits ({0}) dans {1}, sous-dossiers compris.", LegacyEngine.ExpectedModuleName, folder),
+                    (Tr("Annuler"), false, false), (Tr("Choisir un dossier…"), true, false));
+                if (choice == 1)
+                    await SearchFlashFolderAsync(installed);
+                return;
+            }
+
+            string? chosen = null;
+            bool browse = false;
+            var dialog = new ListDialog(Tr("Module Flash trouvé"),
+                Tr("Choisissez le module à utiliser avec Basilisk. Il est copié dans les données de PommeBrowser : son dossier d'origine n'est plus nécessaire ensuite."),
+                string.Empty,
+                list => found.Select(m => list.Row(System.IO.Path.GetFileName(m.Path), FlashModuleDetail(m), Tr("Installer"), () =>
+                {
+                    chosen = m.Path;
+                    list.Close();
+                })));
+            dialog.AddExtraButton(Tr("Chercher dans un dossier…"), false, () =>
+            {
+                browse = true;
+                dialog.Close();
+            });
+            await dialog.ShowDialog(_window);
+            if (browse)
+                await SearchFlashFolderAsync(installed);
+            else if (chosen != null)
+                await InstallFlashModuleAsync(chosen, installed);
+        }
+
+        async Task InstallFlashModuleAsync(string path, Action installed)
+        {
+            if (LegacyEngine.InstallModule(path) is { } error)
+            {
+                await Dialogs.Dialogs.AlertAsync(_window, Tr("Module Flash"), error);
+                return;
+            }
+            installed();
+            _window.ShowToast(Tr("Module Flash installé : il sera utilisé à la prochaine ouverture dans Basilisk."));
+        }
+
+        /// <summary>Version et dossier du module ; avertissement pour les versions qui bloquent les contenus.</summary>
+        static string FlashModuleDetail(FlashModuleSearch.Module module)
+        {
+            string folder = System.IO.Path.GetDirectoryName(module.Path) ?? module.Path;
+            if (module.Version is not { } version)
+                return folder;
+            return FlashModuleSearch.MayBlockContent(module)
+                ? Tr("Version {0}, dans {1}. Cette version peut refuser les contenus Flash (blocage du 12 janvier 2021), sauf si elle a été modifiée pour l'éviter.", version, folder)
+                : Tr("Version {0}, dans {1}", version, folder);
         }
 
         static string FlashModuleStatus()

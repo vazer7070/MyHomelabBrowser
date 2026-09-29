@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using PommeBrowser.Core;
+using PommeBrowser.Linux.Core;
 using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace PommeBrowser.Legacy
@@ -75,12 +78,82 @@ namespace PommeBrowser.Legacy
         }
 
         /// <summary>Module Flash NPAPI 64 bits de ce système (le moteur est en 64 bits).</summary>
-        public static bool IsModuleName(string path)
+        public static bool IsModuleName(string path) => FlashModuleSearch.IsModuleName(path, OperatingSystem.IsWindows());
+
+        /// <summary>
+        /// Modules Flash de l'ordinateur (hors module déjà installé) : dans <paramref name="folder"/>
+        /// et ses sous-dossiers, ou, sans dossier, là où Flash Player s'installait et là où l'on range
+        /// d'habitude un navigateur portable (Basilisk, Pale Moon…). Vingt secondes au plus.
+        /// </summary>
+        public static IReadOnlyList<FlashModuleSearch.Module> FindModules(string? folder = null)
         {
-            string name = Path.GetFileName(path);
-            return OperatingSystem.IsWindows()
-                ? name.StartsWith("NPSWF64", StringComparison.OrdinalIgnoreCase) && name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
-                : name == "libflashplayer.so";
+            using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            IEnumerable<FlashModuleSearch.Location> locations = folder != null
+                ? new[] { new FlashModuleSearch.Location(folder, 10) }
+                : SearchLocations();
+            return FlashModuleSearch.Find(locations, OperatingSystem.IsWindows(), PluginDirectory, budget.Token);
+        }
+
+        /// <summary>Dossiers fouillés par la recherche automatique, des plus probables aux plus larges.</summary>
+        static IEnumerable<FlashModuleSearch.Location> SearchLocations()
+        {
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            char separator = OperatingSystem.IsWindows() ? ';' : ':';
+            IEnumerable<string> pluginPath = (Environment.GetEnvironmentVariable("MOZ_PLUGIN_PATH") ?? string.Empty)
+                .Split(separator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            if (OperatingSystem.IsWindows())
+            {
+                // Flash Player installé pour Firefox (version 64 bits dans System32).
+                yield return new(Path.Combine(Environment.SystemDirectory, "Macromed", "Flash"), 0);
+                foreach (string directory in pluginPath)
+                    yield return new(directory, 0);
+                foreach (string directory in new[]
+                {
+                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                    Path.Combine(home, "Downloads"),
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    Path.Combine(home, "PortableApps")
+                })
+                {
+                    yield return new(directory, 6);
+                }
+                yield return new(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), 3);
+                yield return new(home, 3);
+                // Autres disques : D:\Jeux\BasiliskPortable\…
+                foreach (string drive in FixedDrives())
+                    yield return new(drive, 4);
+                yield break;
+            }
+
+            foreach (string directory in new[]
+            {
+                "/usr/lib/flashplugin-nonfree", "/usr/lib/adobe-flashplugin", "/usr/lib/flashplugin-installer",
+                "/usr/lib/mozilla/plugins", "/usr/lib64/mozilla/plugins", "/usr/lib/x86_64-linux-gnu/mozilla/plugins",
+                "/usr/local/lib/mozilla/plugins", "/usr/lib/browser-plugins", "/usr/lib64/browser-plugins",
+                Path.Combine(home, ".mozilla", "plugins")
+            })
+            {
+                yield return new(directory, 0);
+            }
+            foreach (string directory in pluginPath)
+                yield return new(directory, 0);
+            foreach (string directory in new[] { LinuxPaths.DesktopDirectory(), LinuxPaths.DefaultDownloadDirectory(), LinuxPaths.DocumentsDirectory() })
+                yield return new(directory, 6);
+            yield return new("/opt", 3);
+            yield return new(home, 3);
+        }
+
+        static List<string> FixedDrives()
+        {
+            try
+            {
+                return DriveInfo.GetDrives().Where(d => d.DriveType == DriveType.Fixed && d.IsReady).Select(d => d.RootDirectory.FullName).ToList();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return new List<string>();
+            }
         }
 
         /// <summary>
@@ -97,8 +170,8 @@ namespace PommeBrowser.Legacy
                 return Tr("Ce module Flash est en 32 bits. Choisissez la version 64 bits ({0}).", ExpectedModuleName);
             if (!IsModuleName(source))
                 return Tr("Choisissez le module Flash Player pour navigateurs NPAPI : {0}.", ExpectedModuleName);
-            if (!HasBinaryHeader(source))
-                return Tr("Ce fichier n'est pas un module Flash valide.");
+            if (!FlashModuleSearch.IsModuleBinary(source, OperatingSystem.IsWindows()))
+                return Tr("Ce fichier n'est pas un module Flash 64 bits valide.");
 
             try
             {
@@ -114,25 +187,6 @@ namespace PommeBrowser.Legacy
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 return ex.Message;
-            }
-        }
-
-        /// <summary>Bibliothèque du système : en-tête ELF (Linux) ou MZ (Windows).</summary>
-        static bool HasBinaryHeader(string path)
-        {
-            try
-            {
-                using FileStream stream = File.OpenRead(path);
-                Span<byte> header = stackalloc byte[4];
-                if (stream.Read(header) < 4)
-                    return false;
-                return OperatingSystem.IsWindows()
-                    ? header[0] == (byte)'M' && header[1] == (byte)'Z'
-                    : header[0] == 0x7F && header[1] == (byte)'E' && header[2] == (byte)'L' && header[3] == (byte)'F';
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                return false;
             }
         }
     }

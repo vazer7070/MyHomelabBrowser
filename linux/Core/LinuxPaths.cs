@@ -88,6 +88,9 @@ namespace PommeBrowser.Linux.Core
         /// <summary>Dossier « Documents » de l'utilisateur (rapports enregistrés), sinon ~/Documents.</summary>
         public static string DocumentsDirectory() => UserDirectory("XDG_DOCUMENTS_DIR", "Documents");
 
+        /// <summary>Bureau de l'utilisateur (XDG_DESKTOP_DIR), sinon ~/Desktop.</summary>
+        public static string DesktopDirectory() => UserDirectory("XDG_DESKTOP_DIR", "Desktop");
+
         static string UserDirectory(string key, string fallback)
         {
             try

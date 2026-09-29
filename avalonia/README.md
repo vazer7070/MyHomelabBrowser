@@ -88,7 +88,7 @@ Elle porte le même nom que celle de l'édition GTK. Gardez-la dans un dossier m
 
 **Flash**
 - Ruffle, intégré et vérifié par SHA-256 à la compilation, sans aucun CDN.
-- Pour les contenus que Ruffle ne lit pas : Basilisk, livré avec PommeBrowser sous le nom « Pomme Legacy » (Windows x64, Linux x86_64). La page s'ouvre dans l'onglet, avec le lecteur Flash d'origine. Adobe interdit de redistribuer Flash Player : chacun ajoute sa copie dans **Paramètres › Avancé**. Détails dans [`legacy-engine/README.md`](../legacy-engine/README.md).
+- Pour les contenus que Ruffle ne lit pas : Basilisk, livré avec PommeBrowser sous le nom « Pomme Legacy » (Windows x64, Linux x86_64). La page s'ouvre dans l'onglet, avec le lecteur Flash d'origine. Adobe interdit de redistribuer Flash Player : chacun ajoute sa copie dans **Paramètres › Avancé**. Le bouton **Rechercher le module Flash** la trouve sur l'ordinateur (dossier d'installation de Flash, Bureau, Téléchargements, Documents, autres disques sous Windows), par exemple dans un Basilisk ou un Pale Moon portable ; sans résultat, il propose de choisir le dossier où chercher. Le module est vérifié (bibliothèque 64 bits) puis copié dans les données de PommeBrowser, et les versions qui bloquent les contenus depuis janvier 2021 sont signalées. Détails dans [`legacy-engine/README.md`](../legacy-engine/README.md).
 
 **Autres**
 - Téléchargements sans boîte de dialogue, jamais par-dessus un fichier existant.
