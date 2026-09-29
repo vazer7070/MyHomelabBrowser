@@ -124,7 +124,13 @@ namespace PommeBrowser.Views
         public bool IsSelected
         {
             get => _isSelected;
-            set => Set(ref _isSelected, value);
+            set
+            {
+                if (_isSelected == value)
+                    return;
+                Set(ref _isSelected, value);
+                _basilisk?.SetBackground(!value);
+            }
         }
 
         public bool IsPinned
@@ -206,6 +212,11 @@ namespace PommeBrowser.Views
         /// </summary>
         public void FocusPage()
         {
+            if (Page == TabPage.Legacy && _legacyView is { IsDocked: true } legacy)
+            {
+                legacy.Focus();
+                return;
+            }
             if (Page != TabPage.Web)
                 return;
             if (_engine != null)
@@ -623,6 +634,7 @@ namespace PommeBrowser.Views
 
         void RemovePage()
         {
+            ForgetLegacyView();
             if (_page == null)
                 return;
             _host.Children.Remove(_page);

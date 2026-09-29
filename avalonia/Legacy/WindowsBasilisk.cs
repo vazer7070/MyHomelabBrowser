@@ -43,12 +43,12 @@ namespace PommeBrowser.Legacy
 
         public event Action? Exited;
 
-        public static WindowsBasilisk Start(string executable, Uri url, bool isPrivate)
+        public static WindowsBasilisk Start(string executable, Uri url, bool isPrivate, bool embedded)
         {
             LegacyProfileLease lease = LegacyProfileManager.CreateLease(url.Host, isPrivate);
             try
             {
-                LegacyProfilePreferences.Apply(lease.ProfilePath, isPrivate, embedded: false);
+                LegacyProfilePreferences.Apply(lease.ProfilePath, isPrivate, embedded);
                 var arguments = new List<string> { "-new-instance", "-no-remote", "-profile", lease.ProfilePath, url.AbsoluteUri };
                 LegacyProcess process = LegacyProcess.Start(Path.GetFullPath(executable), arguments, LaunchEnvironment);
                 RuntimeLogBuffer.Append($"[Basilisk] Lancé (PID {process.Id}) : {url.Host}");
@@ -60,6 +60,15 @@ namespace PommeBrowser.Legacy
                 throw;
             }
         }
+
+        public bool HasExited => !_process.IsRunning;
+
+        public IEnumerable<int> ProcessIds => new[] { _process.Id };
+
+        /// <summary>Fenêtre de navigateur de Basilisk (la plus grande, classe MozillaWindowClass).</summary>
+        public nint FindWindow() => _process.FindMainWindow().Window;
+
+        public void SetBackground(bool background) => _process.SetBackground(background);
 
         void OnExited()
         {

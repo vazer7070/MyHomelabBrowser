@@ -45,6 +45,30 @@ namespace PommeBrowser.Engine
             return !ctrl && !alt && key is Key.F3 or Key.F5 or Key.F6 or Key.F11 or Key.F12 or Key.BrowserBack or Key.BrowserForward or Key.BrowserRefresh;
         }
 
+        const KeyModifiers Ctrl = KeyModifiers.Control;
+        const KeyModifiers CtrlShift = KeyModifiers.Control | KeyModifiers.Shift;
+
+        /// <summary>
+        /// Raccourcis des onglets et de la fenêtre, pris à Basilisk quand il a le clavier dans un
+        /// onglet. Les autres (recherche, zoom, rechargement, impression, historique de la page)
+        /// restent à Basilisk, qui les applique à sa page.
+        /// </summary>
+        public static readonly (Key Key, KeyModifiers Modifiers)[] LegacyWindowShortcuts =
+        {
+            (Key.T, Ctrl), (Key.T, CtrlShift), (Key.N, Ctrl), (Key.N, CtrlShift),
+            (Key.W, Ctrl), (Key.F4, Ctrl),
+            (Key.Tab, Ctrl), (Key.Tab, CtrlShift), (Key.PageUp, Ctrl), (Key.PageDown, Ctrl),
+            (Key.D1, Ctrl), (Key.D2, Ctrl), (Key.D3, Ctrl), (Key.D4, Ctrl), (Key.D5, Ctrl),
+            (Key.D6, Ctrl), (Key.D7, Ctrl), (Key.D8, Ctrl), (Key.D9, Ctrl),
+            (Key.L, Ctrl), (Key.H, Ctrl), (Key.J, Ctrl), (Key.D, Ctrl), (Key.OemComma, Ctrl),
+            (Key.Delete, CtrlShift),
+            (Key.D, KeyModifiers.Alt), (Key.Home, KeyModifiers.Alt),
+            (Key.F6, KeyModifiers.None), (Key.F11, KeyModifiers.None)
+        };
+
+        public static bool IsLegacyWindowShortcut(Key key, KeyModifiers modifiers)
+            => Array.IndexOf(LegacyWindowShortcuts, (key, modifiers)) >= 0;
+
         /// <summary>
         /// Raccourcis qui envoient la saisie vers un champ de la fenêtre (adresse, recherche dans la
         /// page, nouvel onglet) : la page lâche le clavier aussitôt, avant même que la fenêtre ait

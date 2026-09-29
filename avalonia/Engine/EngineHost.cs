@@ -137,7 +137,7 @@ namespace PommeBrowser.Engine
                         // navigation privée a son profil en mémoire, comme dans l'édition WPF.
                         webView2.UserDataFolder = _settings.WebView2UserDataFolder;
                         webView2.IsInPrivateModeEnabled = isPrivate;
-                        webView2.ProfileName = isPrivate ? WebView2.WebView2Engine.PrivateProfileName : null;
+                        webView2.ProfileName = isPrivate && OperatingSystem.IsWindows() ? WebView2.WebView2Engine.PrivateProfileName : null;
                         webView2.Language = _settings.Languages.Count > 0 ? _settings.Languages[0] : null;
                         webView2.AdditionalBrowserArguments = string.IsNullOrWhiteSpace(_settings.BrowserArguments) ? null : _settings.BrowserArguments;
                         webView2.EnableDevTools = true;
@@ -189,27 +189,31 @@ namespace PommeBrowser.Engine
         // ---------------------------------------------------------------
 
         /// <summary>Filtre déjà compilé (0 s'il n'existe pas ou si le moteur n'en a pas).</summary>
-        public static Task<nint> LoadContentFilterAsync(string storeDirectory, string id) => Kind switch
+        public static Task<nint> LoadContentFilterAsync(string storeDirectory, string id)
         {
-            EngineKind.WebKitGtk => GtkEngine.LoadFilterAsync(storeDirectory, id),
-            EngineKind.WebKitApple => Apple.AppleEngine.LoadFilterAsync(storeDirectory, id),
-            _ => Task.FromResult<nint>(0)
-        };
+            if (Kind == EngineKind.WebKitGtk)
+                return GtkEngine.LoadFilterAsync(storeDirectory, id);
+            if (Kind == EngineKind.WebKitApple && OperatingSystem.IsMacOS())
+                return Apple.AppleEngine.LoadFilterAsync(storeDirectory, id);
+            return Task.FromResult<nint>(0);
+        }
 
         /// <summary>Compile des règles (JSON de WebKit) et les garde en cache.</summary>
-        public static Task<nint> CompileContentFilterAsync(string storeDirectory, string id, string json) => Kind switch
+        public static Task<nint> CompileContentFilterAsync(string storeDirectory, string id, string json)
         {
-            EngineKind.WebKitGtk => GtkEngine.CompileFilterAsync(storeDirectory, id, System.Text.Encoding.UTF8.GetBytes(json)),
-            EngineKind.WebKitApple => Apple.AppleEngine.CompileFilterAsync(storeDirectory, id, json),
-            _ => Task.FromResult<nint>(0)
-        };
+            if (Kind == EngineKind.WebKitGtk)
+                return GtkEngine.CompileFilterAsync(storeDirectory, id, System.Text.Encoding.UTF8.GetBytes(json));
+            if (Kind == EngineKind.WebKitApple && OperatingSystem.IsMacOS())
+                return Apple.AppleEngine.CompileFilterAsync(storeDirectory, id, json);
+            return Task.FromResult<nint>(0);
+        }
 
         /// <summary>Nouveau filtre actif : repris par tous les onglets.</summary>
         public static void SetContentFilter(nint filter)
         {
             if (Kind == EngineKind.WebKitGtk)
                 GtkEngine.SetContentFilter(filter);
-            else if (Kind == EngineKind.WebKitApple)
+            else if (Kind == EngineKind.WebKitApple && OperatingSystem.IsMacOS())
                 Apple.AppleEngine.SetContentFilter(filter);
         }
 

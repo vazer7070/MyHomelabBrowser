@@ -44,6 +44,29 @@ public class AvaloniaEngineTests
     }
 
     [Fact]
+    public void ShortcutsTakenFromBasiliskAreBrowserShortcuts()
+    {
+        foreach ((Key key, KeyModifiers modifiers) in BrowserShortcuts.LegacyWindowShortcuts)
+            Assert.True(BrowserShortcuts.IsShortcut(key, modifiers), $"{modifiers}+{key}");
+    }
+
+    [Theory]
+    [InlineData(Key.T, KeyModifiers.Control, true)]
+    [InlineData(Key.W, KeyModifiers.Control, true)]
+    [InlineData(Key.Tab, KeyModifiers.Control | KeyModifiers.Shift, true)]
+    [InlineData(Key.L, KeyModifiers.Control, true)]
+    [InlineData(Key.F6, KeyModifiers.None, true)]
+    // Recherche, rechargement, zoom et historique de la page restent à Basilisk.
+    [InlineData(Key.F, KeyModifiers.Control, false)]
+    [InlineData(Key.R, KeyModifiers.Control, false)]
+    [InlineData(Key.F5, KeyModifiers.None, false)]
+    [InlineData(Key.OemPlus, KeyModifiers.Control, false)]
+    [InlineData(Key.Left, KeyModifiers.Alt, false)]
+    [InlineData(Key.A, KeyModifiers.None, false)]
+    public void BasiliskKeepsItsPageShortcuts(Key key, KeyModifiers modifiers, bool takenByTheWindow)
+        => Assert.Equal(takenByTheWindow, BrowserShortcuts.IsLegacyWindowShortcut(key, modifiers));
+
+    [Fact]
     public void CommandIsControlOnlyOnMacOs()
     {
         KeyModifiers normalized = BrowserShortcuts.Normalize(KeyModifiers.Meta | KeyModifiers.Shift);

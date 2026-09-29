@@ -55,12 +55,12 @@ namespace PommeBrowser.Legacy
         /// Lance Basilisk. À appeler depuis le fil de l'interface : --pdeathsig vise le fil qui crée
         /// le processus, et celui-ci vit aussi longtemps que PommeBrowser.
         /// </summary>
-        public static BasiliskProcess Start(string executable, Uri url, bool isPrivate)
+        public static BasiliskProcess Start(string executable, Uri url, bool isPrivate, bool embedded)
         {
             LegacyProfileLease lease = LegacyProfileManager.CreateLease(url.IdnHost, isPrivate);
             try
             {
-                LegacyProfilePreferences.Apply(lease.ProfilePath, isPrivate, embedded: false);
+                LegacyProfilePreferences.Apply(lease.ProfilePath, isPrivate, embedded);
 
                 string pluginDirectory = AppPaths.SharedData("plugins");
                 Directory.CreateDirectory(pluginDirectory);
@@ -90,6 +90,19 @@ namespace PommeBrowser.Legacy
                 lease.Dispose();
                 throw;
             }
+        }
+
+        public IEnumerable<int> ProcessIds => new[] { _process.Id };
+
+        /// <summary>Sous Linux, la fenêtre est cherchée par la connexion X11 de l'intégration (voir LegacyView).</summary>
+        public nint FindWindow() => 0;
+
+        /// <summary>
+        /// Sans effet sous Linux : un processus peut baisser sa priorité, mais pas la remonter
+        /// sans droits particuliers, et l'onglet redevenu actif resterait ralenti.
+        /// </summary>
+        public void SetBackground(bool background)
+        {
         }
 
         void OnExited()

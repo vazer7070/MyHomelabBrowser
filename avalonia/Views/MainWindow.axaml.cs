@@ -67,8 +67,14 @@ namespace PommeBrowser.Views
         void SyncKeyboard(bool force)
         {
             foreach (BrowserTab tab in _tabs)
+            {
                 tab.Engine?.SyncKeyboard(force && tab.Content.IsEffectivelyVisible);
+                tab.SyncLegacyKeyboard(force && tab.Content.IsEffectivelyVisible);
+            }
         }
+
+        /// <summary>Après un raccourci tapé dans Basilisk : le clavier suit le nouveau focus.</summary>
+        public void SyncAllKeyboards() => SyncKeyboard(force: false);
 
         public IReadOnlyList<BrowserTab> Tabs => _tabs;
 
