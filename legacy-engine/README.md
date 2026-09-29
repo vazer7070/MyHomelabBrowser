@@ -8,7 +8,7 @@ Basilisk est livré avec PommeBrowser (édition Avalonia, Windows x64 et Linux x
 
 Le code de Basilisk est libre (MPL 2.0), mais son nom et ses logos sont réservés à ses compilations officielles : une compilation modifiée ou livrée dans un autre logiciel doit porter un autre nom. PommeBrowser compile donc Basilisk depuis ses sources, à une version fixée, avec sa propre marque : **Pomme Legacy**.
 
-- Sources : [repo.palemoon.org/Basilisk-Dev/Basilisk](https://repo.palemoon.org/Basilisk-Dev/Basilisk) et la plateforme UXP (sous-module `platform/`), licence MPL 2.0.
+- Sources : miroir GitHub de l'équipe Basilisk, [Basilisk-Development-Team/basilisk-mirror](https://github.com/Basilisk-Development-Team/basilisk-mirror) (branche `release`), et la plateforme UXP ([UXP-mirror](https://github.com/Basilisk-Development-Team/UXP-mirror), sous-module `platform/`). Dépôt d'origine : [repo.palemoon.org/Basilisk-Dev/Basilisk](https://repo.palemoon.org/Basilisk-Dev/Basilisk). Licence MPL 2.0.
 - Seul changement : la marque (copie de la marque « non officielle » des sources, renommée, voir `brand.sh`). Mise à jour intégrée désactivée : c'est PommeBrowser qui livre le moteur.
 
 ## Flash Player
@@ -22,7 +22,7 @@ Adobe interdit de redistribuer Flash Player et ne le propose plus au télécharg
 
 Les dernières versions de Flash Player bloquent les contenus depuis le 12 janvier 2021 : il faut une version plus ancienne.
 
-Le module est rangé dans les données communes aux profils (`plugins/`). Sous Linux, il est passé à Basilisk par `MOZ_PLUGIN_PATH`. Sous Windows, il est recopié dans le dossier `plugins\` du moteur avant chaque lancement.
+Le module est rangé dans les données communes aux profils (`plugins/`), que Basilisk reçoit par `MOZ_PLUGIN_PATH` (Windows et Linux).
 
 Sous Linux, le moteur utilise les bibliothèques du système, comme le reste de l'AppImage. Pour Flash, il faut aussi GTK 2 (le module Flash en dépend) :
 
@@ -36,9 +36,9 @@ sudo pacman -S --needed dbus-glib libxt gtk2             # Arch
 
 Tout se fait dans la CI (`.github/workflows/legacy-engine.yml`), qui compile le moteur quand ce dossier change :
 
-1. `fetch-sources.sh` récupère Basilisk à la version de `engine.env`.
+1. `fetch-sources.sh` récupère Basilisk au commit de `engine.env` (version et commit de la branche `release` du miroir).
 2. `brand.sh` crée la marque Pomme Legacy.
-3. `build-linux.sh` (Ubuntu 22.04) et `build-windows.sh` (Visual Studio 2022 + MozillaBuild) compilent et produisent :
+3. `build-linux.sh` (Ubuntu 22.04, GCC 11) et `build-windows.sh` (Visual Studio 2022 + MozillaBuild) compilent, avec les réglages des compilations officielles (`mozconfigs/` des sources) moins WebRTC, manettes, AV1 et outils de développement. Ils produisent :
    - `pomme-legacy-<version>-linux-x86_64.tar.xz`
    - `pomme-legacy-<version>-windows-x64.zip`
 
@@ -52,6 +52,6 @@ Les paquets de PommeBrowser prennent ensuite le moteur dans cette version :
 
 L'archive est vérifiée par SHA-256 et placée dans le dossier `legacy/` de l'application. Tant qu'aucune version n'est publiée, les paquets sont construits sans moteur, avec un avertissement : `LEGACY_ENGINE_REQUIRED=1` en fait une erreur. `LEGACY_ENGINE_ARCHIVE=<fichier>` utilise une archive compilée à la main.
 
-**Nouvelle version de Basilisk** : changer `BASILISK_VERSION` dans `engine.env`, laisser la CI compiler, publier, puis construire les paquets.
+**Nouvelle version de Basilisk** : dans `engine.env`, changer `BASILISK_VERSION` et `BASILISK_COMMIT` (commit de la branche `release` du miroir), laisser la CI compiler, publier, puis construire les paquets.
 
 Dans les paramètres, un Basilisk choisi à la main reste prioritaire sur le moteur livré.

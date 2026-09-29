@@ -16,11 +16,18 @@ OUT="${2:?Dossier de sortie}"
 
 "$HERE/brand.sh" "$SRC"
 cp "$HERE/mozconfig-windows" "$SRC/.mozconfig"
-# Bibliothèques d'exécution de Visual C++ jointes au paquet (Windows sans le redistribuable).
+# Bibliothèques d'exécution de Visual C++ et du C universel jointes au paquet (Windows sans
+# le redistribuable). Dossiers donnés par l'environnement de Visual Studio (vcvars64).
 if [ -n "${VCToolsRedistDir:-}" ]; then
   crt="$(find "$(cygpath -u "$VCToolsRedistDir")x64" -maxdepth 1 -type d -name 'Microsoft.VC*.CRT' | head -n 1)"
-  [ -n "$crt" ] && echo "export WIN32_REDIST_DIR=\"$(cygpath -m "$crt")\"" >> "$SRC/.mozconfig"
+  [ -n "$crt" ] && echo "WIN32_REDIST_DIR=\"$(cygpath -m "$crt")\"" >> "$SRC/.mozconfig"
 fi
+if [ -n "${WindowsSdkDir:-}" ]; then
+  ucrt="$(ls -d "$(cygpath -u "$WindowsSdkDir")"Redist/*/ucrt/DLLs/x64 2>/dev/null | sort -V | tail -n 1)"
+  [ -n "$ucrt" ] && echo "WIN_UCRT_REDIST_DIR=\"$(cygpath -m "$ucrt")\"" >> "$SRC/.mozconfig"
+fi
+echo "Réglages de compilation :"
+cat "$SRC/.mozconfig"
 cd "$SRC"
 
 export MOZ_MAKE_FLAGS="-j$(nproc)"
