@@ -42,7 +42,7 @@ Tout se fait dans la CI (`.github/workflows/legacy-engine.yml`), qui compile le 
    - `pomme-legacy-<version>-linux-x86_64.tar.xz`
    - `pomme-legacy-<version>-windows-x64.zip`
 
-   avec leur `.sha256`. Le moteur Linux est lancé une fois pour vérifier qu'il démarre.
+   avec leur `.sha256`. Le moteur Linux est lancé une fois pour vérifier qu'il démarre. L'archive Windows contient les bibliothèques d'exécution de Visual C++ (le moteur démarre sans le redistribuable de Microsoft).
 4. **Actions › Moteur Flash d'origine › Run workflow**, case *publish* cochée : les archives sont publiées dans la version GitHub `legacy-engine-<version>`.
 
 Les paquets de PommeBrowser prennent ensuite le moteur dans cette version :
