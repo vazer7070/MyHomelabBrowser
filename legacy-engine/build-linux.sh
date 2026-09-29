@@ -11,7 +11,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=engine.env
 source "$HERE/engine.env"
 SRC="$(cd "${1:?Dossier des sources}" && pwd)"
-OUT="${2:?Dossier de sortie}"
+# Dossier de sortie en chemin absolu : la compilation se fait depuis le dossier des sources.
+mkdir -p "${2:?Dossier de sortie}"
+OUT="$(cd "$2" && pwd)"
 
 "$HERE/brand.sh" "$SRC"
 cp "$HERE/mozconfig-linux" "$SRC/.mozconfig"

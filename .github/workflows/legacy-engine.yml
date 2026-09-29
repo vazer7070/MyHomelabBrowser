@@ -25,9 +25,11 @@ on:
 permissions:
   contents: read
 
+# Une compilation prend plus d'une heure : un nouveau passage attend la fin du précédent au
+# lieu de l'annuler.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   linux-x64:
