@@ -1,0 +1,116 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:PommeBrowser.Core"
+             x:Class="PommeBrowser.Views.Pages.HomePage"
+             Background="{DynamicResource WindowBackgroundBrush}">
+
+    <UserControl.Styles>
+        <Style Selector="Border.search">
+            <Setter Property="Background" Value="{DynamicResource SurfaceRaisedBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="26" />
+        </Style>
+        <Style Selector="Border.search:pointerover">
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+        </Style>
+        <Style Selector="Border.search:focus-within">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <!-- Tuile (service, favori). -->
+        <Style Selector="Button.tile">
+            <Setter Property="Width" Value="116" />
+            <Setter Property="Height" Value="104" />
+            <Setter Property="Margin" Value="6" />
+            <Setter Property="Padding" Value="8" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.tile:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+        <Style Selector="TextBlock.sectiontitle">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </UserControl.Styles>
+
+    <Panel>
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Width="600" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,40,0,60">
+
+                <Image Source="avares://pommebrowser/Assets/logo-256.png" Width="96" Height="96" HorizontalAlignment="Center" />
+                <TextBlock Text="PommeBrowser" Margin="0,14,0,0" FontSize="26" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                <TextBlock x:Name="GreetingText" FontSize="13" Foreground="{DynamicResource TextTertiaryBrush}"
+                           HorizontalAlignment="Center" Margin="0,4,0,28" />
+
+                <!-- RECHERCHE -->
+                <Border x:Name="SearchBorder" Classes="search" Height="52" Padding="18,0,10,0">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <PathIcon Data="{StaticResource IconSearch}" Width="16" Height="16" Margin="0,0,12,0"
+                                  Foreground="{DynamicResource TextTertiaryBrush}" />
+                        <TextBox x:Name="SearchBox" Grid.Column="1" Classes="address" FontSize="15" Padding="0"
+                                 PlaceholderText="{l:Tr 'Rechercher ou saisir une adresse'}" />
+                        <Button x:Name="ClearButton" Grid.Column="2" Classes="inline" IsVisible="False"
+                                ToolTip.Tip="{l:Tr 'Effacer'}" Click="Clear_Click">
+                            <PathIcon Data="{StaticResource IconDismiss}" Width="11" Height="11" />
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <TextBlock Text="{l:Tr 'Entrée pour ouvrir · ↑ ↓ pour choisir une suggestion'}" Classes="hint"
+                           HorizontalAlignment="Center" Margin="0,12,0,0" />
+
+                <!-- SERVICES -->
+                <StackPanel x:Name="ServicesSection" Margin="0,36,0,0">
+                    <Grid Margin="6,0,6,6" ColumnDefinitions="*,Auto">
+                        <TextBlock Classes="sectiontitle" Text="{l:Tr 'Mes services'}" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button Classes="link" FontSize="12" MinHeight="24" Padding="8,2"
+                                    ToolTip.Tip="{l:Tr 'Vérifier l’état de tous les services'}" Click="CheckServices_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <PathIcon Data="{StaticResource IconRefresh}" Width="11" Height="11" />
+                                    <TextBlock Text="{l:Tr 'Actualiser'}" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="link" FontSize="12" MinHeight="24" Padding="8,2" Click="AddService_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <PathIcon Data="{StaticResource IconAdd}" Width="11" Height="11" />
+                                    <TextBlock Text="{l:Tr 'Ajouter'}" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                    <WrapPanel x:Name="ServicesTiles" HorizontalAlignment="Center" MaxWidth="600" />
+                    <TextBlock x:Name="ServicesEmpty" Classes="hint" HorizontalAlignment="Center" Margin="0,8,0,0"
+                               Text="{l:Tr 'Ajoutez les services de votre homelab (Proxmox, NAS, Home Assistant…) pour les ouvrir d’un clic et suivre leur état.'}"
+                               TextAlignment="Center" MaxWidth="460" />
+                </StackPanel>
+
+                <!-- FAVORIS -->
+                <StackPanel x:Name="FavoritesSection" Margin="0,28,0,0">
+                    <TextBlock Classes="sectiontitle" Text="{l:Tr 'Favoris'}" Margin="6,0,6,6" />
+                    <WrapPanel x:Name="FavoritesTiles" HorizontalAlignment="Center" MaxWidth="600" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Popup x:Name="SuggestionsPopup"
+               PlacementTarget="{Binding #SearchBorder}"
+               Placement="BottomEdgeAlignedLeft"
+               VerticalOffset="6"
+               IsLightDismissEnabled="False"
+               Focusable="False">
+            <Border Classes="popup" Padding="5" CornerRadius="14" Width="{Binding #SearchBorder.Bounds.Width}">
+                <ListBox x:Name="SuggestionList" Focusable="False" MaxHeight="300" Background="Transparent" />
+            </Border>
+        </Popup>
+    </Panel>
+</UserControl>

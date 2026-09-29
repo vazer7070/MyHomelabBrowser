@@ -1,0 +1,207 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Styling;
+using Avalonia.Threading;
+using MyHomelabBrowser.classes;
+using MyHomelabBrowser.classes.Localization;
+using MyHomelabBrowser.classes.Security;
+using PommeBrowser.Core;
+using PommeBrowser.Engine;
+using PommeBrowser.Legacy;
+using PommeBrowser.Linux.Core;
+using PommeBrowser.Views;
+
+namespace PommeBrowser
+{
+    /// <summary>Onglet fermé, rouvrable avec Ctrl+Maj+T.</summary>
+    public sealed record ClosedTab(string Url, string? Title, bool IsPrivate, MainWindow? Window, int Index);
+
+    /// <summary>
+    /// Application : données du profil ouvert, réglages, moteur web et fenêtres. Une seule
+    /// instance par profil ; les fenêtres partagent tout, sauf la navigation privée.
+    /// </summary>
+    public sealed partial class BrowserApp
+    {
+        const int MaxClosedTabs = 25;
+
+        readonly List<MainWindow> _windows = new();
+        readonly List<ClosedTab> _closedTabs = new();
+        IClassicDesktopStyleApplicationLifetime _lifetime = null!;
+
+        public BrowserApp(ProfileService profiles, AppearanceSettings appearance)
+        {
+            Current = this;
+            Profiles = profiles;
+            Appearance = appearance;
+            SettingsService = new SettingsService();
+            SettingsMigration.ImportLinuxSettings(SettingsService);
+            SettingsMigration.AdaptToPlatform(SettingsService);
+            Favorites = new FavoritesStore(AppPaths.FavoritesFile);
+            History = new HistoryService(AppPaths.HistoryDatabase);
+            Zoom = new SiteZoomStore(() => AppPaths.Profile("zoom.json"));
+            CertificatePins = new CertificatePinStore(() => AppPaths.Profile("pinned-certificates.json"));
+        }
+
+        public static BrowserApp Current { get; private set; } = null!;
+
+        public ProfileService Profiles { get; }
+        public AppearanceSettings Appearance { get; }
+        public SettingsService SettingsService { get; }
+        public BrowserSettings Settings => SettingsService.Settings;
+        public FavoritesStore Favorites { get; }
+        public HistoryService History { get; }
+        public SiteZoomStore Zoom { get; }
+        public CertificatePinStore CertificatePins { get; }
+        public SiteSecurityStore SiteSecurity => SiteSecurityStore.Current;
+        public DownloadList Downloads { get; } = new();
+
+        /// <summary>Hôtes dont le certificat a été accepté pendant cette session (non épinglé).</summary>
+        public HashSet<string> SessionTrustedHosts { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Hôtes qui ne répondent pas en HTTPS (pas de nouvel essai pendant la session).</summary>
+        public HashSet<string> HttpOnlyHosts { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public IReadOnlyList<MainWindow> Windows => _windows;
+
+        public MainWindow? ActiveWindow => _windows.FirstOrDefault(w => w.IsActive) ?? _windows.LastOrDefault();
+
+        public IReadOnlyList<ClosedTab> ClosedTabs => _closedTabs;
+
+        /// <summary>
+        /// Dossier des téléchargements : celui choisi dans les paramètres, sinon celui du système
+        /// (sous Linux, le dossier XDG, souvent traduit : ~/Téléchargements).
+        /// </summary>
+        public string DownloadDirectory
+        {
+            get
+            {
+                string? chosen = Settings.DownloadFolder;
+                if (string.IsNullOrWhiteSpace(chosen) || !Path.IsPathRooted(chosen))
+                    return AppPaths.DefaultDownloadDirectory;
+                string defaultFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                return !Directory.Exists(chosen) && string.Equals(chosen, defaultFolder, StringComparison.Ordinal)
+                    ? AppPaths.DefaultDownloadDirectory
+                    : chosen;
+            }
+        }
+
+        /// <summary>Page des nouveaux onglets (null : page d'accueil de PommeBrowser).</summary>
+        public string? NewTabUrl
+        {
+            get
+            {
+                string url = Settings.NewTabPage?.Trim() ?? string.Empty;
+                return url.Length == 0 || url.Equals("about:blank", StringComparison.OrdinalIgnoreCase)
+                    ? null
+                    : UrlResolver.ResolveOrSearch(url, Settings.Search);
+            }
+        }
+
+        public void Start(IClassicDesktopStyleApplicationLifetime lifetime, IReadOnlyList<string> urls)
+        {
+            _lifetime = lifetime;
+            lifetime.ShutdownMode = ShutdownMode.OnLastWindowClose;
+            lifetime.ShutdownRequested += (_, _) =>
+            {
+                if (!_quitting)
+                    SaveSession();
+                LegacyBrowser.CloseAll();
+            };
+
+            ApplyTheme();
+            ConfigureEngine();
+            SettingsService.SettingsChanged += _ => ConfigureEngine();
+            StartServices();
+            ScheduleUpdateCheck();
+
+            MainWindow window = OpenWindow();
+            RestoreSession(window, urls);
+            window.Show();
+        }
+
+        /// <summary>Thème choisi (système, sombre ou clair).</summary>
+        public void ApplyTheme()
+        {
+            if (Application.Current is { } application)
+            {
+                application.RequestedThemeVariant = Appearance.Theme switch
+                {
+                    AppTheme.Dark => ThemeVariant.Dark,
+                    AppTheme.Light => ThemeVariant.Light,
+                    _ => ThemeVariant.Default
+                };
+            }
+        }
+
+        /// <summary>Réglages transmis au moteur (confidentialité, langues, téléchargements).</summary>
+        public void ConfigureEngine()
+        {
+            bool english = Loc.Language == "en";
+            EngineHost.Configure(new EngineSettings
+            {
+                Languages = english ? new[] { "en-US", "en", "fr-FR", "fr" } : new[] { "fr-FR", "fr", "en-US", "en" },
+                SpellCheckingLanguages = english ? new[] { "en_US" } : new[] { "fr_FR" },
+                TrackingPrevention = Settings.TrackingPrevention != BrowserSettings.TrackingProtection.Off,
+                BlockThirdPartyCookies = Settings.TrackingPrevention >= BrowserSettings.TrackingProtection.Balanced,
+                DownloadDirectory = DownloadDirectory,
+                CookieDatabase = AppPaths.CookieDatabase,
+                WebView2UserDataFolder = OperatingSystem.IsWindows() ? AppPaths.WebView2UserDataFolder : null
+            });
+        }
+
+        public MainWindow OpenWindow()
+        {
+            var window = new MainWindow(this);
+            _windows.Add(window);
+            window.Closed += (_, _) =>
+            {
+                _windows.Remove(window);
+                _closedTabs.RemoveAll(t => t.Window == window);
+            };
+            return window;
+        }
+
+        /// <summary>Nouvelle fenêtre, avec la page d'accueil ou l'adresse donnée.</summary>
+        public MainWindow NewWindow(string? url = null, bool isPrivate = false)
+        {
+            MainWindow window = OpenWindow();
+            window.NewTab(url, select: true, isPrivate: isPrivate);
+            window.Show();
+            return window;
+        }
+
+        public void RememberClosedTab(ClosedTab tab)
+        {
+            if (tab.IsPrivate || !SessionStore.IsRestorable(tab.Url))
+                return;
+            _closedTabs.Add(tab);
+            if (_closedTabs.Count > MaxClosedTabs)
+                _closedTabs.RemoveAt(0);
+        }
+
+        public ClosedTab? TakeClosedTab(MainWindow window)
+        {
+            int index = _closedTabs.FindLastIndex(t => t.Window == window || t.Window == null || !_windows.Contains(t.Window));
+            if (index < 0)
+                return null;
+            ClosedTab tab = _closedTabs[index];
+            _closedTabs.RemoveAt(index);
+            return tab;
+        }
+
+        /// <summary>Ferme toutes les fenêtres (la session est gardée).</summary>
+        public void Quit()
+        {
+            SaveSession();
+            Shutdown();
+        }
+
+        /// <summary>Exécute sur le fil de l'interface.</summary>
+        public static void Post(Action action) => Dispatcher.UIThread.Post(action);
+    }
+}

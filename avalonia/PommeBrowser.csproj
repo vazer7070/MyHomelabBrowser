@@ -1,0 +1,98 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+		PommeBrowser pour Windows, macOS et Linux : interface Avalonia, moteur web natif de
+		chaque système (WebView2 sous Windows, WebKit sous macOS, WebKitGTK sous Linux) via
+		Avalonia.Controls.WebView. Les fonctions propres au moteur (anti-pub, scripts isolés,
+		certificats, téléchargements…) passent par Engine/, un adaptateur par système.
+		La logique du navigateur est partagée avec les éditions WPF et GTK (fichiers liés).
+	-->
+
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<RootNamespace>PommeBrowser</RootNamespace>
+		<AssemblyName>pommebrowser</AssemblyName>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+		<ApplicationIcon>../PommeBrowser_desktop.ico</ApplicationIcon>
+
+		<Version>0.9.8</Version>
+		<AssemblyVersion>0.9.8.0</AssemblyVersion>
+		<FileVersion>0.9.8.0</FileVersion>
+
+		<SatelliteResourceLanguages>fr;en</SatelliteResourceLanguages>
+		<InvariantGlobalization>false</InvariantGlobalization>
+		<TieredPGO>true</TieredPGO>
+		<RuffleAssetDir>$(MSBuildProjectDirectory)/Assets/Ruffle</RuffleAssetDir>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Avalonia" Version="12.1.3" />
+		<PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
+		<PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.3" />
+		<PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.3" />
+		<PackageReference Include="Avalonia.Controls.WebView" Version="12.1.0" />
+		<!-- Accès complet à WebView2 sous Windows (filtrage des requêtes, certificats, téléchargements…). -->
+		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" ExcludeAssets="all" GeneratePathProperty="true" />
+		<PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+		<!-- Mises à jour sous Windows (même canal que l'édition WPF). -->
+		<PackageReference Include="Velopack" Version="1.2.0" />
+		<!-- Même bibliothèque SQLite native que les autres éditions (la version tirée par défaut est vulnérable). -->
+		<PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Seulement le cœur de WebView2 (les contrôles WPF et WinForms du paquet ne servent pas ici). -->
+		<Reference Include="$(PkgMicrosoft_Web_WebView2)/lib_manual/netcoreapp3.0/Microsoft.Web.WebView2.Core.dll" />
+		<Content Include="$(PkgMicrosoft_Web_WebView2)/runtimes/win-x64/native/WebView2Loader.dll" Link="runtimes/win-x64/native/WebView2Loader.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="'$(RuntimeIdentifier)' == '' Or '$(RuntimeIdentifier)' == 'win-x64'" />
+		<Content Include="$(PkgMicrosoft_Web_WebView2)/runtimes/win-arm64/native/WebView2Loader.dll" Link="runtimes/win-arm64/native/WebView2Loader.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="'$(RuntimeIdentifier)' == '' Or '$(RuntimeIdentifier)' == 'win-arm64'" />
+	</ItemGroup>
+
+	<ItemGroup Label="Logique partagée avec les éditions WPF et GTK">
+		<Compile Include="../classes/**/*.cs" LinkBase="Shared"
+		         Exclude="../classes/AdBlock/Integration/**;
+		                  ../classes/BoolToVisibility.cs;
+		                  ../classes/ClipboardHelper.cs;
+		                  ../classes/DarkTitleBar.cs;
+		                  ../classes/DownloadHook.cs;
+		                  ../classes/DownloadItem.cs;
+		                  ../classes/DownloadManager.cs;
+		                  ../classes/EnumEqualsConverter.cs;
+		                  ../classes/EnumOpacityConverter.cs;
+		                  ../classes/FaviconStore.cs;
+		                  ../classes/Flash/FlashDecisionService.cs;
+		                  ../classes/Flash/FlashUxOverlay.cs;
+		                  ../classes/Flash/RuffleAssetService.cs;
+		                  ../classes/Flash/RuffleInjector.cs;
+		                  ../classes/Flash/RuffleMonitor.cs;
+		                  ../classes/Localization/UiTranslator.cs;
+		                  ../classes/OmniboxItem.cs;
+		                  ../classes/Profiles/Credentials/CredentialInjector.cs;
+		                  ../classes/Security/BrowserCertificateTrustService.cs;
+		                  ../classes/TabPreviewState.cs;
+		                  ../classes/ThemeManager.cs;
+		                  ../classes/UpdateService.cs;
+		                  ../classes/WinFocus.cs" />
+		<Compile Include="../linux/Core/*.cs" LinkBase="Shared/LinuxCore" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<AvaloniaResource Include="Assets/**" Exclude="Assets/Ruffle/**" />
+		<!-- Traduction anglaise (clé = texte français), commune à toutes les éditions. -->
+		<EmbeddedResource Include="../lang/en.json" LogicalName="lang.en.json" />
+	</ItemGroup>
+
+	<PropertyGroup>
+		<!-- Adresse du serveur de support (support-server/), comme pour les autres éditions. -->
+		<SupportApiUrl Condition="'$(SupportApiUrl)' == ''">$(POMMEBROWSER_SUPPORT_API_URL)</SupportApiUrl>
+	</PropertyGroup>
+	<ItemGroup>
+		<AssemblyMetadata Include="SupportApiUrl" Value="$(SupportApiUrl)" />
+	</ItemGroup>
+
+	<!-- Ruffle embarqué : téléchargé et vérifié à la compilation (commun à toutes les éditions). -->
+	<Import Project="../build/Ruffle.targets" />
+</Project>

@@ -1,0 +1,406 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="using:PommeBrowser.Core"
+        xmlns:v="using:PommeBrowser.Views"
+        x:Class="PommeBrowser.Views.MainWindow"
+        x:DataType="v:MainWindow"
+        Title="PommeBrowser"
+        Icon="avares://pommebrowser/Assets/icon.png"
+        Width="1400" Height="860"
+        MinWidth="720" MinHeight="460"
+        Background="{DynamicResource WindowBackgroundBrush}">
+
+    <Window.Styles>
+        <!-- Onglet de la barre d'onglets. -->
+        <Style Selector="Border.tab">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="10,10,0,0" />
+            <Setter Property="Margin" Value="1,0" />
+            <Setter Property="Padding" Value="10,0,4,0" />
+        </Style>
+        <Style Selector="Border.tab:pointerover">
+            <Setter Property="Background" Value="{DynamicResource TabHoverBrush}" />
+        </Style>
+        <Style Selector="Border.tab.selected">
+            <Setter Property="Background" Value="{DynamicResource SelectedTabBrush}" />
+        </Style>
+        <Style Selector="Border.tab Button.close">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector="Border.tab:pointerover Button.close, Border.tab.selected Button.close">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="Border.tab.pinned Button.close">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="Border.tab.private TextBlock.tabtitle">
+            <Setter Property="Foreground" Value="{DynamicResource PrivateBrush}" />
+        </Style>
+        <Style Selector="Border.divider">
+            <Setter Property="Width" Value="1" />
+            <Setter Property="Height" Value="16" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Background" Value="{DynamicResource BorderBrush}" />
+        </Style>
+        <Style Selector="Border.tab:pointerover Border.divider, Border.tab.selected Border.divider">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="Border.splitheader">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Background" Value="{DynamicResource ChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,0,2" />
+        </Style>
+        <Style Selector="Border.splitheader.active">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="Border.splitheader > TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        </Style>
+        <Style Selector="Button.favorite">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="MinHeight" Value="26" />
+            <Setter Property="MaxWidth" Value="200" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        </Style>
+    </Window.Styles>
+
+    <Grid x:Name="RootGrid" RowDefinitions="Auto,*">
+
+        <!-- =====================================================
+             CHROME : onglets, navigation, favoris
+             ===================================================== -->
+        <StackPanel x:Name="BrowserChrome" Grid.Row="0">
+
+            <!-- BARRE D'ONGLETS -->
+            <Grid Height="40" Background="{DynamicResource ChromeBrush}" ColumnDefinitions="*,Auto">
+                <ItemsControl x:Name="TabStrip" Grid.Column="0" Margin="8,6,0,0" ClipToBounds="True">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <v:TabStripPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="v:BrowserTab">
+                            <Border Classes="tab"
+                                    Classes.selected="{Binding IsSelected}"
+                                    Classes.pinned="{Binding IsPinned}"
+                                    Classes.private="{Binding IsPrivate}"
+                                    Height="34"
+                                    ToolTip.Tip="{Binding Title}"
+                                    PointerPressed="Tab_PointerPressed"
+                                    PointerReleased="Tab_PointerReleased"
+                                    ContextRequested="Tab_ContextRequested">
+                                <Grid>
+                                    <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                                        <Panel Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center">
+                                            <Image Source="{Binding Favicon}" IsVisible="{Binding Favicon, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                            <PathIcon Data="{StaticResource IconGlobe}" Width="14" Height="14"
+                                                      Foreground="{DynamicResource TextTertiaryBrush}"
+                                                      IsVisible="{Binding Favicon, Converter={x:Static ObjectConverters.IsNull}}" />
+                                            <v:Spinner IsVisible="{Binding IsLoading}" />
+                                        </Panel>
+                                        <TextBlock Grid.Column="1" Classes="tabtitle"
+                                                   Text="{Binding Title}"
+                                                   FontSize="12.5"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center"
+                                                   IsVisible="{Binding !IsPinned}" />
+                                        <Button Grid.Column="2" Classes="inline close"
+                                                Width="22" Height="22" CornerRadius="11"
+                                                Margin="4,0,0,0"
+                                                ToolTip.Tip="{l:Tr 'Fermer l’onglet (Ctrl+W)'}"
+                                                Click="TabClose_Click">
+                                            <PathIcon Data="{StaticResource IconDismiss}" Width="10" Height="10" />
+                                        </Button>
+                                    </Grid>
+                                    <Border Classes="divider" Margin="0,0,-1,0" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0,8,0">
+                    <Button Classes="toolbar" Width="30" Height="30" CornerRadius="15"
+                            ToolTip.Tip="{l:Tr 'Nouvel onglet (Ctrl+T)'}"
+                            Click="NewTab_Click">
+                        <PathIcon Data="{StaticResource IconAdd}" Width="14" Height="14" />
+                    </Button>
+                    <Button Classes="toolbar" Width="30" Height="30" CornerRadius="15" Margin="2,0,0,0"
+                            ToolTip.Tip="{l:Tr 'Nouvel onglet privé (Ctrl+Maj+N)'}"
+                            Click="NewPrivateTab_Click">
+                        <PathIcon Data="{StaticResource IconPrivate}" Width="17" Height="17" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- BARRE DE NAVIGATION -->
+            <Border x:Name="NavBar"
+                    Height="46"
+                    Background="{DynamicResource SelectedTabBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="0,0,0,1">
+                <Grid Margin="8,0" ColumnDefinitions="Auto,*,Auto">
+
+                    <!-- Précédent / Suivant / Actualiser -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="BackButton" Classes="toolbar"
+                                ToolTip.Tip="{l:Tr 'Précédent (Alt+←)'}"
+                                Click="Back_Click">
+                            <PathIcon Data="{StaticResource IconBack}" />
+                        </Button>
+                        <Button x:Name="ForwardButton" Classes="toolbar" Margin="2,0,0,0"
+                                ToolTip.Tip="{l:Tr 'Suivant (Alt+→)'}"
+                                Click="Forward_Click">
+                            <PathIcon Data="{StaticResource IconForward}" />
+                        </Button>
+                        <Button x:Name="RefreshButton" Classes="toolbar" Margin="2,0,0,0"
+                                ToolTip.Tip="{l:Tr 'Actualiser (F5)'}"
+                                Click="Refresh_Click">
+                            <Panel>
+                                <PathIcon x:Name="RefreshIcon" Data="{StaticResource IconRefresh}" />
+                                <PathIcon x:Name="StopIcon" Data="{StaticResource IconDismiss}" IsVisible="False" />
+                            </Panel>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- BARRE D'ADRESSE -->
+                    <Border x:Name="AddressBarBorder" Classes="addressbar"
+                            Grid.Column="1"
+                            Height="34"
+                            Margin="8,0"
+                            VerticalAlignment="Center">
+                        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
+
+                            <!-- Indicateur de sécurité de la connexion -->
+                            <Button x:Name="SecurityButton" Grid.Column="0" Classes="inline"
+                                    Width="30" Height="26" CornerRadius="13" Margin="4,0,0,0"
+                                    Click="Security_Click">
+                                <PathIcon x:Name="SecurityIcon" Data="{StaticResource IconSearch}" Width="13" Height="13"
+                                          Foreground="{DynamicResource TextTertiaryBrush}" />
+                            </Button>
+
+                            <!-- Pastille « Navigation privée » -->
+                            <Border x:Name="PrivatePill" Grid.Column="1"
+                                    IsVisible="False"
+                                    Background="{DynamicResource PrivateSoftBrush}"
+                                    CornerRadius="9"
+                                    Padding="7,2,8,2"
+                                    Margin="2,0,6,0"
+                                    VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <PathIcon Data="{StaticResource IconPrivate}" Width="13" Height="13" Margin="0,0,5,0"
+                                              Foreground="{DynamicResource PrivateBrush}" />
+                                    <TextBlock Text="{l:Tr 'Navigation privée'}" FontSize="11" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" Foreground="{DynamicResource PrivateBrush}" />
+                                </StackPanel>
+                            </Border>
+
+                            <TextBox x:Name="AddressBar" Grid.Column="2" Classes="address"
+                                     PlaceholderText="{l:Tr 'Rechercher ou saisir une adresse'}" />
+
+                            <!-- Visible seulement quand le zoom de la page n'est pas à 100 % ; un clic le réinitialise. -->
+                            <Button x:Name="ZoomButton" Grid.Column="3" Classes="inline"
+                                    Width="NaN" Padding="6,0" IsVisible="False"
+                                    Click="ZoomReset_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <PathIcon Data="{StaticResource IconZoomIn}" Width="12" Height="12" />
+                                    <TextBlock x:Name="ZoomButtonText" Margin="4,0,0,0" FontSize="11.5" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+
+                            <Button x:Name="CredentialButton" Grid.Column="4" Classes="inline"
+                                    ToolTip.Tip="{l:Tr 'Remplir les identifiants enregistrés'}"
+                                    IsVisible="False"
+                                    Click="Credential_Click">
+                                <PathIcon Data="{StaticResource IconKey}" Width="14" Height="14" />
+                            </Button>
+
+                            <Button x:Name="FavoriteButton" Grid.Column="5" Classes="inline" Margin="0,0,3,0"
+                                    ToolTip.Tip="{l:Tr 'Ajouter aux favoris (Ctrl+D)'}"
+                                    Click="Favorite_Click">
+                                <Panel>
+                                    <PathIcon x:Name="FavoriteIconEmpty" Data="{StaticResource IconStar}" Width="15" Height="15" />
+                                    <PathIcon x:Name="FavoriteIconFilled" Data="{StaticResource IconStarFilled}" Width="15" Height="15"
+                                              Foreground="{DynamicResource WarningBrush}" IsVisible="False" />
+                                </Panel>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <!-- Modules et menus -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="AdBlockButton" Classes="toolbar tinted"
+                                ToolTip.Tip="{l:Tr 'Protection web'}"
+                                Click="AdBlock_Click">
+                            <Panel Width="34" Height="34">
+                                <PathIcon Data="{StaticResource IconAdShield}" Width="16" Height="16" />
+                                <Border x:Name="AdBlockBadge" Classes="badge" Background="{DynamicResource AccentStrongBrush}" IsVisible="False">
+                                    <TextBlock x:Name="AdBlockBadgeText" />
+                                </Border>
+                            </Panel>
+                        </Button>
+
+                        <Button x:Name="LegacyButton" Classes="toolbar warm" Margin="2,0,0,0"
+                                ToolTip.Tip="{l:Tr 'Ouvrir ce site avec Flash Legacy (Basilisk)'}"
+                                IsVisible="False"
+                                Click="Legacy_Click">
+                            <PathIcon Data="{StaticResource IconFlash}" />
+                        </Button>
+
+                        <Button x:Name="DownloadsButton" Classes="toolbar" Margin="2,0,0,0"
+                                ToolTip.Tip="{l:Tr 'Téléchargements (Ctrl+J)'}"
+                                Click="Downloads_Click">
+                            <Panel Width="34" Height="34">
+                                <PathIcon Data="{StaticResource IconDownload}" />
+                                <Border x:Name="DownloadsBadge" Classes="badge" Background="{DynamicResource SuccessBrush}" IsVisible="False">
+                                    <TextBlock x:Name="DownloadsBadgeText" Foreground="#0B2A1B" />
+                                </Border>
+                            </Panel>
+                        </Button>
+
+                        <Border Width="1" Height="20" Margin="8,0" Background="{DynamicResource BorderBrush}" />
+
+                        <Button x:Name="ProfileButton"
+                                Width="30" Height="30" MinHeight="0" Padding="0"
+                                CornerRadius="15"
+                                Focusable="False"
+                                ToolTip.Tip="{l:Tr 'Profil utilisateur'}"
+                                Background="{DynamicResource SurfaceRaisedBrush}"
+                                BorderBrush="{DynamicResource BorderStrongBrush}"
+                                FontWeight="SemiBold" FontSize="13"
+                                HorizontalContentAlignment="Center"
+                                Click="Profile_Click" />
+
+                        <Button x:Name="MenuButton" Classes="toolbar" Margin="4,0,0,0"
+                                ToolTip.Tip="{l:Tr 'Menu'}"
+                                Click="Menu_Click">
+                            <PathIcon Data="{StaticResource IconMore}" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Progression du chargement de la page -->
+            <ProgressBar x:Name="LoadProgress" Height="2" MinHeight="2" Minimum="0" Maximum="1"
+                         CornerRadius="0" Background="Transparent" IsVisible="False" Margin="0,-2,0,0" />
+
+            <!-- BARRE DE FAVORIS (masquée s'il n'y a aucun favori) -->
+            <Border x:Name="FavoritesBarHost"
+                    Height="32"
+                    Background="{DynamicResource SelectedTabBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    IsVisible="False">
+                <StackPanel x:Name="FavoritesBar" Orientation="Horizontal" VerticalAlignment="Center" ClipToBounds="True" Margin="8,0" Spacing="2" />
+            </Border>
+        </StackPanel>
+
+        <!-- =====================================================
+             CONTENU : une zone par onglet, seule celle de l'onglet actif est visible
+             ===================================================== -->
+        <Grid x:Name="ContentArea" Grid.Row="1">
+            <!--
+                Toutes les zones d'onglets sont des enfants de WebHost (ligne 1). En vue côte à côte,
+                les colonnes 0 et 2 reçoivent chacune un onglet, avec leur titre en ligne 0.
+            -->
+            <Grid x:Name="WebHost" RowDefinitions="Auto,*" ColumnDefinitions="*,0,0" Background="{DynamicResource WindowBackgroundBrush}">
+                <Border x:Name="SplitHeaderLeft" Grid.Row="0" Grid.Column="0" Classes="splitheader" IsVisible="False">
+                    <TextBlock x:Name="SplitTitleLeft" />
+                </Border>
+                <Border x:Name="SplitHeaderRight" Grid.Row="0" Grid.Column="2" Classes="splitheader" IsVisible="False">
+                    <TextBlock x:Name="SplitTitleRight" />
+                </Border>
+                <GridSplitter x:Name="SplitSplitter" Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" IsVisible="False"
+                              Background="{DynamicResource ChromeBrush}" ResizeDirection="Columns" />
+            </Grid>
+        </Grid>
+
+        <!-- Suggestions de l'omnibox : fenêtre surgissante, au-dessus de la page native. -->
+        <Popup x:Name="SuggestionsPopup"
+               PlacementTarget="{Binding #AddressBarBorder}"
+               Placement="BottomEdgeAlignedLeft"
+               VerticalOffset="4"
+               IsLightDismissEnabled="False"
+               Focusable="False">
+            <Border Classes="popup" Padding="5" Width="{Binding #AddressBarBorder.Bounds.Width}">
+                <ListBox x:Name="SuggestionList" Focusable="False" MaxHeight="360" Background="Transparent"
+                         SelectionMode="Single" />
+            </Border>
+        </Popup>
+
+        <!-- Recherche dans la page (Ctrl+F). -->
+        <Popup x:Name="FindPopup"
+               PlacementTarget="{Binding #ContentArea}"
+               Placement="AnchorAndGravity"
+               PlacementAnchor="TopRight"
+               PlacementGravity="BottomLeft"
+               HorizontalOffset="-16"
+               VerticalOffset="8"
+               IsLightDismissEnabled="False">
+            <Border Classes="popup" Padding="10,6,6,6" CornerRadius="10">
+                <StackPanel Orientation="Horizontal">
+                    <PathIcon Data="{StaticResource IconSearch}" Width="13" Height="13" Margin="0,0,8,0"
+                              Foreground="{DynamicResource TextTertiaryBrush}" />
+                    <TextBox x:Name="FindBox" Classes="address" Width="220" FontSize="13" Padding="0"
+                             PlaceholderText="{l:Tr 'Rechercher dans la page'}" />
+                    <TextBlock x:Name="FindCountText" MinWidth="64" Margin="8,0" FontSize="12" TextAlignment="Right"
+                               VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <Border Width="1" Margin="2,4,6,4" Background="{DynamicResource BorderBrush}" />
+                    <CheckBox x:Name="FindCaseToggle" VerticalAlignment="Center" Margin="0,0,6,0" MinWidth="0"
+                              ToolTip.Tip="{l:Tr 'Respecter la casse'}">
+                        <TextBlock Text="Aa" FontSize="12" />
+                    </CheckBox>
+                    <Button Classes="inline" ToolTip.Tip="{l:Tr 'Précédent (Maj+Entrée)'}" Click="FindPrevious_Click">
+                        <PathIcon Data="{StaticResource IconChevronUp}" Width="12" Height="12" />
+                    </Button>
+                    <Button Classes="inline" ToolTip.Tip="{l:Tr 'Suivant (Entrée)'}" Click="FindNext_Click">
+                        <PathIcon Data="{StaticResource IconChevronDown}" Width="12" Height="12" />
+                    </Button>
+                    <Button Classes="inline" ToolTip.Tip="{l:Tr 'Fermer (Échap)'}" Click="FindClose_Click">
+                        <PathIcon Data="{StaticResource IconDismiss}" Width="11" Height="11" />
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- Adresse du lien survolé, en bas à gauche de la page. -->
+        <Popup x:Name="LinkStatusPopup"
+               PlacementTarget="{Binding #ContentArea}"
+               Placement="AnchorAndGravity"
+               PlacementAnchor="BottomLeft"
+               PlacementGravity="TopRight"
+               VerticalOffset="-4"
+               HorizontalOffset="4"
+               IsHitTestVisible="False"
+               Focusable="False">
+            <Border Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource BorderStrongBrush}"
+                    BorderThickness="1" CornerRadius="6" Padding="8,3" MaxWidth="640">
+                <TextBlock x:Name="LinkStatusText" FontSize="12" TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource TextSecondaryBrush}" />
+            </Border>
+        </Popup>
+
+        <!-- Notifications, en bas à droite de la page. -->
+        <Popup x:Name="ToastPopup"
+               PlacementTarget="{Binding #ContentArea}"
+               Placement="AnchorAndGravity"
+               PlacementAnchor="BottomRight"
+               PlacementGravity="TopLeft"
+               HorizontalOffset="-12"
+               VerticalOffset="-12"
+               Focusable="False">
+            <StackPanel x:Name="ToastHost" Width="360" Spacing="8" />
+        </Popup>
+    </Grid>
+</Window>

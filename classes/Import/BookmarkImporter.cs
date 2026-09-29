@@ -41,6 +41,8 @@ namespace MyHomelabBrowser.classes.Import
         {
             if (OperatingSystem.IsLinux())
                 return DetectLinuxSources(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+            if (OperatingSystem.IsMacOS())
+                return DetectMacSources(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
 
             var sources = new List<BookmarkSource>();
             string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -56,6 +58,24 @@ namespace MyHomelabBrowser.classes.Import
                 sources.Add(new BookmarkSource("Opera", BookmarkSourceKind.ChromiumJson, opera));
 
             AddFirefoxProfiles(sources, "Firefox", Path.Combine(roaming, "Mozilla", "Firefox", "Profiles"));
+            return sources;
+        }
+
+        /// <summary>Emplacements macOS (~/Library/Application Support).</summary>
+        public static IReadOnlyList<BookmarkSource> DetectMacSources(string home)
+        {
+            var sources = new List<BookmarkSource>();
+            string support = Path.Combine(home, "Library", "Application Support");
+            AddChromiumProfiles(sources, "Google Chrome", Path.Combine(support, "Google", "Chrome"));
+            AddChromiumProfiles(sources, "Microsoft Edge", Path.Combine(support, "Microsoft Edge"));
+            AddChromiumProfiles(sources, "Brave", Path.Combine(support, "BraveSoftware", "Brave-Browser"));
+            AddChromiumProfiles(sources, "Vivaldi", Path.Combine(support, "Vivaldi"));
+
+            string opera = Path.Combine(support, "com.operasoftware.Opera", "Bookmarks");
+            if (File.Exists(opera))
+                sources.Add(new BookmarkSource("Opera", BookmarkSourceKind.ChromiumJson, opera));
+
+            AddFirefoxProfiles(sources, "Firefox", Path.Combine(support, "Firefox", "Profiles"));
             return sources;
         }
 

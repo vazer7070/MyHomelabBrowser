@@ -1,0 +1,89 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Palette PommeBrowser, identique à celle de l'édition Windows : sombre neutre, légèrement
+        froide ; claire et douce. Hiérarchie des surfaces, de la plus profonde à la plus haute :
+        Chrome (barre d'onglets) < fond < Surface < Toolbar/Panel < Raised < Hover < Pressed.
+        SelectedTabBrush et AddressFieldBrush sont remplacés par la fenêtre en navigation privée.
+    -->
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="ChromeBrush" Color="#0E1014"/>
+            <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#111317"/>
+            <SolidColorBrush x:Key="SurfaceBrush" Color="#16191E"/>
+            <SolidColorBrush x:Key="SurfaceTertiaryBrush" Color="#1C2026"/>
+            <SolidColorBrush x:Key="SurfaceHoverBrush" Color="#2A2F37"/>
+            <SolidColorBrush x:Key="SurfacePressedBrush" Color="#343A44"/>
+            <SolidColorBrush x:Key="ToolbarBrush" Color="#1A1D23"/>
+            <SolidColorBrush x:Key="PanelBrush" Color="#1B1E24"/>
+            <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="#22262D"/>
+            <SolidColorBrush x:Key="AddressBarBrush" Color="#101216"/>
+            <SolidColorBrush x:Key="TabHoverBrush" Color="#171A1F"/>
+            <SolidColorBrush x:Key="AccentBrush" Color="#6AA5FF"/>
+            <SolidColorBrush x:Key="AccentStrongBrush" Color="#3B7BF6"/>
+            <SolidColorBrush x:Key="AccentHoverBrush" Color="#8AB9FF"/>
+            <SolidColorBrush x:Key="AccentSoftBrush" Color="#1B2B46"/>
+            <SolidColorBrush x:Key="SuccessBrush" Color="#3DD68C"/>
+            <SolidColorBrush x:Key="SuccessSoftBrush" Color="#15342A"/>
+            <SolidColorBrush x:Key="WarningBrush" Color="#F2B84B"/>
+            <SolidColorBrush x:Key="WarningSoftBrush" Color="#3A2E14"/>
+            <SolidColorBrush x:Key="DangerBrush" Color="#F2677A"/>
+            <SolidColorBrush x:Key="DangerSoftBrush" Color="#3A1D24"/>
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#EEF1F6"/>
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A9B1BF"/>
+            <SolidColorBrush x:Key="TextTertiaryBrush" Color="#737D8C"/>
+            <SolidColorBrush x:Key="BorderBrush" Color="#2A2F37"/>
+            <SolidColorBrush x:Key="BorderStrongBrush" Color="#3A414C"/>
+            <SolidColorBrush x:Key="PrivateBrush" Color="#B794FF"/>
+            <SolidColorBrush x:Key="PrivateSoftBrush" Color="#2B2142"/>
+            <SolidColorBrush x:Key="PrivateToolbarBrush" Color="#1D1928"/>
+            <SolidColorBrush x:Key="PrivateAddressBrush" Color="#120F1B"/>
+            <SolidColorBrush x:Key="SelectedTabBrush" Color="#1A1D23"/>
+            <SolidColorBrush x:Key="AddressFieldBrush" Color="#101216"/>
+            <SolidColorBrush x:Key="OverlayBrush" Color="#99000000"/>
+            <Color x:Key="AccentColor">#3B7BF6</Color>
+            <Color x:Key="WindowBackgroundColor">#111317</Color>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="ChromeBrush" Color="#E6E9EE"/>
+            <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F7F8FA"/>
+            <SolidColorBrush x:Key="SurfaceBrush" Color="#EEF1F5"/>
+            <SolidColorBrush x:Key="SurfaceTertiaryBrush" Color="#E6E9EE"/>
+            <SolidColorBrush x:Key="SurfaceHoverBrush" Color="#E1E5EB"/>
+            <SolidColorBrush x:Key="SurfacePressedBrush" Color="#D4D9E1"/>
+            <SolidColorBrush x:Key="ToolbarBrush" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="PanelBrush" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="#F1F3F6"/>
+            <SolidColorBrush x:Key="AddressBarBrush" Color="#EEF1F5"/>
+            <SolidColorBrush x:Key="TabHoverBrush" Color="#DADFE6"/>
+            <SolidColorBrush x:Key="AccentBrush" Color="#1A66D9"/>
+            <SolidColorBrush x:Key="AccentStrongBrush" Color="#1F6FEB"/>
+            <SolidColorBrush x:Key="AccentHoverBrush" Color="#3B82F6"/>
+            <SolidColorBrush x:Key="AccentSoftBrush" Color="#DCE8FB"/>
+            <SolidColorBrush x:Key="SuccessBrush" Color="#16A34A"/>
+            <SolidColorBrush x:Key="SuccessSoftBrush" Color="#DCF5E6"/>
+            <SolidColorBrush x:Key="WarningBrush" Color="#B26A00"/>
+            <SolidColorBrush x:Key="WarningSoftBrush" Color="#FDF1D8"/>
+            <SolidColorBrush x:Key="DangerBrush" Color="#D1334B"/>
+            <SolidColorBrush x:Key="DangerSoftBrush" Color="#FBE3E7"/>
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1B1F24"/>
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#4B5563"/>
+            <SolidColorBrush x:Key="TextTertiaryBrush" Color="#6B7280"/>
+            <SolidColorBrush x:Key="BorderBrush" Color="#D9DEE5"/>
+            <SolidColorBrush x:Key="BorderStrongBrush" Color="#C3CAD4"/>
+            <SolidColorBrush x:Key="PrivateBrush" Color="#7C3AED"/>
+            <SolidColorBrush x:Key="PrivateSoftBrush" Color="#EDE4FF"/>
+            <SolidColorBrush x:Key="PrivateToolbarBrush" Color="#F3EDFF"/>
+            <SolidColorBrush x:Key="PrivateAddressBrush" Color="#E9E0FB"/>
+            <SolidColorBrush x:Key="SelectedTabBrush" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="AddressFieldBrush" Color="#EEF1F5"/>
+            <SolidColorBrush x:Key="OverlayBrush" Color="#99000000"/>
+            <Color x:Key="AccentColor">#1F6FEB</Color>
+            <Color x:Key="WindowBackgroundColor">#F7F8FA</Color>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+    <CornerRadius x:Key="ControlCornerRadius">8</CornerRadius>
+    <CornerRadius x:Key="CardCornerRadius">12</CornerRadius>
+</ResourceDictionary>

@@ -15,7 +15,7 @@
 		<ApplicationIcon>PommeBrowser_desktop.ico</ApplicationIcon>
 
 		<!-- Tests, serveur de support et édition Linux vivent dans le même dépôt : ils ne font pas partie de l'application Windows. -->
-		<DefaultItemExcludes>$(DefaultItemExcludes);tests\**;support-server\**;linux\**;build\**</DefaultItemExcludes>
+		<DefaultItemExcludes>$(DefaultItemExcludes);tests\**;support-server\**;linux\**;avalonia\**;build\**</DefaultItemExcludes>
 	</PropertyGroup>
 
 	<PropertyGroup>
