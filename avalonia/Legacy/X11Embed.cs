@@ -304,6 +304,7 @@ namespace PommeBrowser.Legacy
         int _focusAttempts;
         bool _wantKeyboard;
         nint _topLevel;
+        long _dockedAt;
 
         public X11Dock(X11Embed x) => _x = x;
 
@@ -377,6 +378,7 @@ namespace PommeBrowser.Legacy
                     Thread.Sleep(10);
             }
 
+            _dockedAt = Environment.TickCount64;
             X.XReparentWindow(display, client, Host, 0, 0);
             X.XMoveResizeWindow(display, client, 0, 0, _width, _height);
             X.XMapWindow(display, client);
@@ -477,6 +479,7 @@ namespace PommeBrowser.Legacy
                 _focusAttempts = 0;
                 X.XSetInputFocus(display, _client, X.RevertToParent, 0);
                 X.XFlush(display);
+                CheckFocusAfterDock();
             }
             else if (++_focusAttempts <= 20)
             {
@@ -487,6 +490,39 @@ namespace PommeBrowser.Legacy
                         SetKeyboard(true, _topLevel);
                 }));
             }
+        }
+
+        /// <summary>
+        /// Basilisk reprend le clavier s'il est passé ailleurs dans la fenêtre de PommeBrowser, mais
+        /// pas s'il est parti dans une autre application ou une boîte de dialogue. Fil X11.
+        /// </summary>
+        void ReclaimFocus()
+        {
+            if (!_wantKeyboard || _client == 0)
+                return;
+            nint display = _x.Display;
+            nint focus;
+            int revert;
+            X.XGetInputFocus(display, &focus, &revert);
+            if (focus > 1 && !_x.IsInside(focus, _client) && _x.TopWindow(focus) == _x.TopWindow(Host) &&
+                _x.Attributes(_client) is { MapState: X.IsViewable })
+            {
+                X.XSetInputFocus(display, _client, X.RevertToParent, 0);
+                X.XFlush(display);
+            }
+        }
+
+        /// <summary>
+        /// Juste après l'accueil de Basilisk, le gestionnaire de fenêtres rend le clavier (retrait de
+        /// sa fenêtre) avec un peu de retard, parfois après que Basilisk l'a reçu : vérifié encore
+        /// pendant deux secondes.
+        /// </summary>
+        void CheckFocusAfterDock()
+        {
+            if (Environment.TickCount64 - _dockedAt > 2000)
+                return;
+            foreach (int delay in new[] { 250, 800, 2000 })
+                Task.Delay(delay).ContinueWith(_ => _x.Post(ReclaimFocus));
         }
 
         internal void OnEvent(int type, byte* ev)
@@ -526,20 +562,9 @@ namespace PommeBrowser.Legacy
                 }
 
                 case X.FocusOut when _wantKeyboard && _client != 0:
-                {
                     // Clic dans la fenêtre : le gestionnaire de fenêtres lui a rendu le clavier.
-                    // Basilisk le reprend, sauf s'il est parti ailleurs (autre application, boîte de dialogue).
-                    nint focus;
-                    int revert;
-                    X.XGetInputFocus(display, &focus, &revert);
-                    if (focus > 1 && !_x.IsInside(focus, _client) && _x.TopWindow(focus) == _x.TopWindow(Host) &&
-                        _x.Attributes(_client) is { MapState: X.IsViewable })
-                    {
-                        X.XSetInputFocus(display, _client, X.RevertToParent, 0);
-                        X.XFlush(display);
-                    }
+                    ReclaimFocus();
                     break;
-                }
 
                 case X.KeyPress:
                 {

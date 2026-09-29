@@ -97,7 +97,10 @@ namespace PommeBrowser.Views
                 waiting.IsVisible = false;
                 view.IsVisible = true;
                 // Page affichée : Basilisk prend le clavier, sauf si l'utilisateur tape déjà ailleurs.
-                if (IsSelected && Window.IsActive && Window.FocusManager?.GetFocusedElement() is not TextBox)
+                // La fenêtre peut sembler inactive à cet instant (le gestionnaire de fenêtres a
+                // activé Basilisk avant son accueil) : la vue prend quand même le focus, et le
+                // clavier ne quitte pas une autre application (voir X11Dock et Win32Dock).
+                if (IsSelected && Window.FocusManager?.GetFocusedElement() is not TextBox)
                     view.Focus();
             };
             view.DockFailed += () =>
