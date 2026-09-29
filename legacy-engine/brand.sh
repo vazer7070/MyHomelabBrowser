@@ -16,13 +16,13 @@ rm -rf pomme
 cp -r "$base" pomme
 grep -rl "branding/$base" pomme | while read -r file; do sed -i "s#branding/$base#branding/pomme#g" "$file"; done
 
-find pomme -name brand.dtd -exec sed -i -E \
+find pomme -name brand.dtd -exec sed -i -r \
   -e 's/(<!ENTITY[[:space:]]+(brandShorterName|brandShortName|brandFullName)[[:space:]]+)"[^"]*"/\1"Pomme Legacy"/' \
   -e 's/(<!ENTITY[[:space:]]+(vendorShortName|vendorFullName)[[:space:]]+)"[^"]*"/\1"PommeBrowser"/' {} +
-find pomme -name brand.properties -exec sed -i -E \
+find pomme -name brand.properties -exec sed -i -r \
   -e 's/^(brandShorterName|brandShortName|brandFullName)=.*/\1=Pomme Legacy/' \
   -e 's/^(vendorShortName|vendorFullName)=.*/\1=PommeBrowser/' {} +
-[ -f pomme/configure.sh ] && sed -i -E 's/^MOZ_APP_DISPLAYNAME=.*/MOZ_APP_DISPLAYNAME=PommeLegacy/' pomme/configure.sh
+[ -f pomme/configure.sh ] && sed -i -r 's/^MOZ_APP_DISPLAYNAME=.*/MOZ_APP_DISPLAYNAME=PommeLegacy/' pomme/configure.sh
 
 echo "Marque « Pomme Legacy » :"
 grep -rhE "brand(Shorter|Short|Full)Name|MOZ_APP_DISPLAYNAME" pomme | sed 's/^/  /'
