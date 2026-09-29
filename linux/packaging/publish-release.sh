@@ -5,6 +5,9 @@
 #   linux/packaging/build-appimage.sh all
 #   linux/packaging/publish-release.sh
 #
+#   avalonia/packaging/linux/build-appimage.sh all      # édition Avalonia, à la place
+#   linux/packaging/publish-release.sh --avalonia
+#
 # Prérequis : GitHub CLI (gh) connecté avec le droit d'écrire sur le dépôt. Publiez d'abord
 # l'édition Windows (build-pack-velopack.ps1) : ce script ajoute les AppImage à sa version,
 # ou la crée si elle n'existe pas encore.
@@ -14,6 +17,10 @@ REPO="${POMMEBROWSER_RELEASE_REPO:-vazer7070/PommeBrowser-release}"
 PACKAGING="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT="$PACKAGING/../PommeBrowser.Linux.csproj"
 OUT="$PACKAGING/out"
+if [ "${1:-}" = "--avalonia" ]; then
+  PROJECT="$PACKAGING/../../avalonia/PommeBrowser.csproj"
+  OUT="$PACKAGING/../../avalonia/packaging/out"
+fi
 
 command -v gh >/dev/null || { echo "GitHub CLI (gh) introuvable : https://cli.github.com" >&2; exit 1; }
 

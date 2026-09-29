@@ -107,3 +107,93 @@ jobs:
             linux/packaging/out/*.AppImage
             linux/packaging/out/*.sha256
           if-no-files-found: error
+
+  avalonia-linux:
+    name: Avalonia Linux (AppImage)
+    runs-on: ubuntu-24.04
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Compilation de l'édition Avalonia
+        run: dotnet build avalonia/PommeBrowser.csproj --configuration Release
+
+      - name: AppImage (x86_64 et aarch64)
+        run: avalonia/packaging/linux/build-appimage.sh all
+
+      - name: Essai de lancement
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libwebkit2gtk-4.1-0 libgtk-3-0 gstreamer1.0-plugins-good xvfb xauth dbus
+          linux/packaging/smoke-test.sh avalonia/packaging/out/PommeBrowser-*-x86_64.AppImage
+
+      - name: Paquets AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: PommeBrowser-Avalonia-Linux-AppImage
+          path: |
+            avalonia/packaging/out/*.AppImage
+            avalonia/packaging/out/*.sha256
+          if-no-files-found: error
+
+  avalonia-windows:
+    name: Avalonia Windows
+    runs-on: windows-latest
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # Même nom d'exécutable que l'édition WPF (voir build-pack-velopack.ps1 -Edition avalonia).
+      - name: Publication (win-x64)
+        shell: pwsh
+        run: |
+          dotnet publish avalonia/PommeBrowser.csproj --configuration Release --runtime win-x64 --self-contained true -p:DebugType=none -p:RuffleDownloadOptional=false --output artifacts/avalonia-win-x64
+          Move-Item artifacts/avalonia-win-x64/pommebrowser.exe artifacts/avalonia-win-x64/MyHomelabBrowser.exe
+          if (-not (Test-Path artifacts/avalonia-win-x64/Assets/Ruffle/ruffle.js)) { throw "Ruffle absent de la publication." }
+
+      - name: Dossier publié
+        uses: actions/upload-artifact@v4
+        with:
+          name: PommeBrowser-Avalonia-Windows-x64
+          path: artifacts/avalonia-win-x64
+          if-no-files-found: error
+
+  avalonia-macos:
+    name: Avalonia macOS (.app)
+    runs-on: macos-latest
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: PommeBrowser.app (arm64 et x64)
+        run: avalonia/packaging/macos/build-app.sh all
+
+      - name: Archives de l'app
+        uses: actions/upload-artifact@v4
+        with:
+          name: PommeBrowser-Avalonia-macOS
+          path: |
+            avalonia/packaging/out/*.zip
+            avalonia/packaging/out/*.sha256
+          if-no-files-found: error

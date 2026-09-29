@@ -2,6 +2,8 @@
 
 Édition Linux de PommeBrowser, distribuée en **AppImage** : un seul fichier, sans installation.
 
+> L'**édition Avalonia** (dossier [`avalonia`](../avalonia/README.md)) réunit Windows, macOS et Linux dans une même application, avec les mêmes données. Son AppImage porte le même nom : publiée à la place de celle-ci, elle arrive comme une mise à jour.
+
 Elle partage avec l'édition Windows la logique du navigateur :
 - les profils protégés par mot de passe et le coffre à identifiants ;
 - l'historique, les favoris et les espaces de travail ;

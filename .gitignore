@@ -370,3 +370,4 @@ avalonia/Assets/Ruffle/
 
 # Paquets AppImage de l'édition Linux
 linux/packaging/out/
+avalonia/packaging/out/
