@@ -110,8 +110,9 @@ jobs:
         shell: bash
         run: legacy-engine/fetch-sources.sh /c/pb
 
-      # Environnement de Visual Studio (vcvars64), sans Git for Windows dans le PATH (son
-      # runtime MSYS ne doit pas se mêler à celui de MozillaBuild).
+      # Environnement de Visual Studio (vcvars64). Le PATH ne garde que Visual Studio, le SDK,
+      # Windows et MozillaBuild : les outils installés sur la machine (Git, Strawberry Perl…)
+      # seraient pris à la place des siens (gmake, pkg-config, runtime MSYS).
       - name: Compilation
         shell: pwsh
         run: |
@@ -119,7 +120,10 @@ jobs:
           cmd /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && set" | ForEach-Object {
             if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2]) }
           }
-          $env:PATH = (@('C:\mozilla-build\msys\bin', 'C:\mozilla-build\bin', 'C:\mozilla-build\python3') + ($env:PATH -split ';' | Where-Object { $_ -and $_ -notmatch '\\Git\\' })) -join ';'
+          $system = $env:PATH -split ';' | Where-Object { $_ -match 'Microsoft Visual Studio|Windows Kits|Microsoft SDKs|^C:\\Windows' }
+          $nsis = Get-ChildItem C:\mozilla-build -Directory -Filter 'nsis-*' | ForEach-Object FullName
+          $env:PATH = (@('C:\mozilla-build\msys\bin', 'C:\mozilla-build\bin', 'C:\mozilla-build\python3') + $nsis + $system) -join ';'
+          Write-Host "PATH : $env:PATH"
           $env:MOZILLABUILD = 'C:\mozilla-build\'
           $workspace = '/' + $env:GITHUB_WORKSPACE.Substring(0, 1).ToLower() + $env:GITHUB_WORKSPACE.Substring(2).Replace('\', '/')
           & C:\mozilla-build\msys\bin\bash.exe --login -c "cd '$workspace' && legacy-engine/build-windows.sh /c/pb legacy-engine/out"
