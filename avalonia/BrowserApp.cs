@@ -102,17 +102,16 @@ namespace PommeBrowser
             }
         }
 
-        public void Start(IClassicDesktopStyleApplicationLifetime lifetime, IReadOnlyList<string> urls)
+        /// <summary>
+        /// Démarrage (ou profil ouvert sans relance) : fenêtre et onglets de la session.
+        /// <paramref name="placement"/> : position et taille de la fenêtre du profil quitté.
+        /// </summary>
+        public void Start(IClassicDesktopStyleApplicationLifetime lifetime, IReadOnlyList<string> urls, WindowPlacement? placement = null)
         {
             _lifetime = lifetime;
             Dispatcher.UIThread.UnhandledException += OnUnhandledException;
             lifetime.ShutdownMode = ShutdownMode.OnLastWindowClose;
-            lifetime.ShutdownRequested += (_, _) =>
-            {
-                if (!_quitting)
-                    SaveSession();
-                LegacyBrowser.CloseAll();
-            };
+            lifetime.ShutdownRequested += OnShutdownRequested;
 
             ApplyTheme();
             ConfigureEngine();
@@ -121,8 +120,16 @@ namespace PommeBrowser
             ScheduleUpdateCheck();
 
             MainWindow window = OpenWindow();
+            placement?.ApplyTo(window);
             RestoreSession(window, urls);
             window.Show();
+        }
+
+        void OnShutdownRequested(object? sender, ShutdownRequestedEventArgs e)
+        {
+            if (!_quitting)
+                SaveSession();
+            LegacyBrowser.CloseAll();
         }
 
         DateTime _lastErrorToast = DateTime.MinValue;

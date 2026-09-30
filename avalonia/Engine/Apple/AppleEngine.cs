@@ -53,6 +53,9 @@ namespace PommeBrowser.Engine.Apple
 
         public static void AllowCertificate(string key) => AllowedCertificates.Add(key);
 
+        /// <summary>Changement de profil : les certificats acceptés pour le profil quitté ne valent plus.</summary>
+        public static void ForgetAllowedCertificates() => AllowedCertificates.Clear();
+
         public static string Authority(string host, long port) => port is 0 or 443 ? host : host + ":" + port;
 
         // ---------------------------------------------------------------

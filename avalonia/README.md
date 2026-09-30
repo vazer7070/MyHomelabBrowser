@@ -70,6 +70,7 @@ Elle porte le même nom que celle de l'édition GTK. Gardez-la dans un dossier m
 
 **Profils et mots de passe**
 - Profils protégés par mot de passe, avec leurs propres réglages, favoris, historique, cookies et coffre.
+- Changement de profil sans redémarrer sous Windows et macOS : les fenêtres du profil quitté se ferment et celles du nouveau profil s'ouvrent au même endroit, avec ses onglets. Sous Linux, WebKitGTK fixe ses dossiers de données au démarrage : PommeBrowser redémarre. Renommer ou supprimer un profil redémarre partout (ses dossiers ne se déplacent qu'au démarrage).
 - Coffre chiffré, au même format que les autres éditions :
   - PommeBrowser propose d'enregistrer les identifiants et remplit les formulaires ;
   - codes de double authentification (TOTP) ;

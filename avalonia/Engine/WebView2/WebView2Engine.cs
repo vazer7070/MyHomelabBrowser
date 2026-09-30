@@ -37,6 +37,9 @@ namespace PommeBrowser.Engine.WebView2
 
         public static bool IsCertificateAllowed(string key) => AllowedCertificates.Contains(key);
 
+        /// <summary>Changement de profil : les certificats acceptés pour le profil quitté ne valent plus.</summary>
+        public static void ForgetAllowedCertificates() => AllowedCertificates.Clear();
+
         /// <summary>Réglages modifiés (pistage, thème des pages) : appliqués aux onglets ouverts.</summary>
         public static void ApplySettings()
         {

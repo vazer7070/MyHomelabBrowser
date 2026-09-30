@@ -155,12 +155,15 @@ namespace PommeBrowser.Views
             return valid ? null : LockMessage(profile) ?? Tr("Mot de passe incorrect");
         }
 
-        /// <summary>Changement de profil puis relance ; une erreur (disque, nom déjà pris) reste dans la boîte.</summary>
-        string? ApplyProfileChange(Action change)
+        /// <summary>
+        /// Changement de profil, puis ouverture du profil courant (sans relance si possible, voir
+        /// BrowserApp.ChangeProfile) ; une erreur (disque, nom déjà pris) reste dans la boîte.
+        /// </summary>
+        string? ApplyProfileChange(Action change, bool relaunch = false)
         {
             try
             {
-                App.ChangeProfile(change);
+                App.ChangeProfile(change, relaunch);
                 return null;
             }
             catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
@@ -172,7 +175,9 @@ namespace PommeBrowser.Views
         async Task SwitchProfileAsync(UserProfile profile)
         {
             var form = new FormDialog(Tr("Changer de profil"), Tr("Ouvrir"));
-            form.AddText(Tr("Mot de passe du profil « {0} ». PommeBrowser redémarre avec ce profil et rouvre ses onglets.", profile.Username));
+            form.AddText(BrowserApp.SwitchesProfileInPlace
+                ? Tr("Mot de passe du profil « {0} ». Ses onglets remplacent ceux du profil actuel, qui les retrouvera à son retour.", profile.Username)
+                : Tr("Mot de passe du profil « {0} ». PommeBrowser redémarre avec ce profil et rouvre ses onglets.", profile.Username));
             TextBox password = form.AddEntry(Tr("Mot de passe"), password: true);
             form.Submit = async () =>
                 await VerifyAsync(profile, password.Text ?? string.Empty) ?? ApplyProfileChange(() => App.Profiles.LoginSilent(profile));
@@ -181,8 +186,12 @@ namespace PommeBrowser.Views
 
         async Task SwitchToDefaultAsync()
         {
+            bool inPlace = BrowserApp.SwitchesProfileInPlace;
             if (!await Dialogs.Dialogs.ConfirmAsync(this, Tr("Revenir au profil par défaut ?"),
-                    Tr("PommeBrowser redémarre avec le profil par défaut et rouvre ses onglets."), Tr("Redémarrer")))
+                    inPlace
+                        ? Tr("Les onglets du profil par défaut remplacent ceux du profil actuel, qui les retrouvera à son retour.")
+                        : Tr("PommeBrowser redémarre avec le profil par défaut et rouvre ses onglets."),
+                    inPlace ? Tr("Changer de profil") : Tr("Redémarrer")))
                 return;
             if (ApplyProfileChange(App.Profiles.Logout) is { } error)
                 ShowToast(error, warning: true);
@@ -236,7 +245,9 @@ namespace PommeBrowser.Views
             if (created == null)
                 return;
             int choice = await Dialogs.Dialogs.ChoiceAsync(this, Tr("Profil « {0} » créé", created.Username),
-                Tr("Ouvrir ce profil maintenant ? PommeBrowser redémarre avec lui. Les onglets ouverts restent dans le profil actuel et reviennent quand vous le rouvrez."),
+                BrowserApp.SwitchesProfileInPlace
+                    ? Tr("Ouvrir ce profil maintenant ? Les onglets ouverts restent dans le profil actuel et reviennent quand vous le rouvrez.")
+                    : Tr("Ouvrir ce profil maintenant ? PommeBrowser redémarre avec lui. Les onglets ouverts restent dans le profil actuel et reviennent quand vous le rouvrez."),
                 (Tr("Ouvrir maintenant"), true, false), (Tr("Plus tard"), false, false));
             if (choice == 0 && ApplyProfileChange(() => App.Profiles.LoginSilent(created)) is { } error)
                 ShowToast(error, warning: true);
@@ -312,12 +323,12 @@ namespace PommeBrowser.Views
                     return null;
                 }
 
-                // Nouveau nom : les dossiers du profil changent, PommeBrowser redémarre.
+                // Nouveau nom : les dossiers du profil ne se déplacent qu'au démarrage, PommeBrowser redémarre.
                 return ApplyProfileChange(() =>
                 {
                     App.Profiles.UpdateProfile(newName, newPassword.Length > 0 ? newPassword : null);
                     ProfileStorage.ScheduleRename(oldName, newName);
-                });
+                }, relaunch: true);
             };
 
             await form.ShowAsync(this);
@@ -330,11 +341,12 @@ namespace PommeBrowser.Views
                 return;
 
             string deleted = profile.Username;
+            // Données du profil effacées au démarrage, moteur arrêté : PommeBrowser redémarre.
             if (ApplyProfileChange(() =>
                 {
                     App.Profiles.DeleteCurrentProfile();
                     ProfileStorage.ScheduleDelete(deleted);
-                }) is { } failure)
+                }, relaunch: true) is { } failure)
             {
                 ShowToast(failure, warning: true);
             }
