@@ -330,13 +330,16 @@ namespace PommeFlash.Host
         // Scripts
         // ---------------------------------------------------------------
 
+        /// <summary>Attente maximale d'un script de la page (une boîte alert() le bloque jusqu'à sa fermeture).</summary>
+        static readonly TimeSpan ScriptTimeout = TimeSpan.FromSeconds(20);
+
         [GeneratedRegex("""^\s*(?:(?:window|top|self|parent)\s*\.\s*)*(?:document\s*\.\s*)?location(?:\s*\.\s*href)?\s*(?:\+\s*(["'])(?<suffix>.*)\1)?\s*;?\s*$""", RegexOptions.CultureInvariant)]
         private static partial Regex LocationScript();
 
         /// <summary>
         /// NPN_Evaluate. Le module demande l'adresse de la page (« top.location + … ») pour ses
-        /// règles de sécurité : l'hôte répond lui-même. Le reste est transmis à la page, sans
-        /// attendre de résultat.
+        /// règles de sécurité : l'hôte répond lui-même. Le reste (ExternalInterface.call…) est
+        /// exécuté dans la page par PommeBrowser, dont la réponse est attendue.
         /// </summary>
         public bool Evaluate(string code, out object? value)
         {
@@ -348,9 +351,7 @@ namespace PommeFlash.Host
             }
 
             HostChannel.Trace("eval:" + code, "Script de la page demandé (NPN_Evaluate) : " + HostChannel.Excerpt(code));
-            HostChannel.Send("script", ("code", code), ("target", null));
-            value = null;
-            return true;
+            return HostChannel.RunInPage(code, ScriptTimeout, out value);
         }
 
         // ---------------------------------------------------------------

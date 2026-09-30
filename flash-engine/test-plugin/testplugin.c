@@ -198,9 +198,31 @@ static void timerCallback(NPP npp, uint32_t id)
     }
 }
 
+/* Script de la page, comme ExternalInterface.call : exécuté par PommeBrowser, qui répond. */
+static void evaluateScript(const char *script, const char *key)
+{
+    NPObject *window = NULL;
+    if (browser->getvalue(instanceNpp, NPNVWindowNPObject, &window) != NPERR_NO_ERROR || !window)
+        return;
+    NPString code = { script, (uint32_t)strlen(script) };
+    NPVariant result;
+    if (browser->evaluate(instanceNpp, window, &code, &result))
+    {
+        reportString(key, &result);
+        browser->releasevariantvalue(&result);
+    }
+    else
+    {
+        report("%s=failed", key);
+    }
+    browser->releaseobject(window);
+}
+
 /* Contenu principal reçu : le reste du scénario. */
 static void continueScenario(void)
 {
+    evaluateScript("try { __flash__toXML(pommeAdd(2,3)) ; } catch (e) { \"<undefined/>\"; }", "script");
+    evaluateScript("pommeRefuse()", "script-refused");
     browser->geturlnotify(instanceNpp, "data.txt", NULL, (void *)0x1234);
     browser->geturlnotify(instanceNpp, "missing.txt", NULL, (void *)0x5678);
     const char *post = "Content-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello";

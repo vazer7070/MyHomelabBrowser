@@ -11,10 +11,13 @@ sealed class HostRun : IAsyncDisposable
     readonly ConcurrentQueue<JsonElement> _events = new();
     readonly Task _reader;
     readonly SemaphoreSlim _arrived = new(0);
+    readonly SemaphoreSlim _input = new(1, 1);
+    readonly Func<string, (bool Ok, string? Value)>? _scripts;
 
-    HostRun(Process process)
+    HostRun(Process process, Func<string, (bool Ok, string? Value)>? scripts)
     {
         _process = process;
+        _scripts = scripts;
         _reader = Task.Run(ReadAsync);
     }
 
@@ -33,7 +36,11 @@ sealed class HostRun : IAsyncDisposable
             Assert.Skip("Hors de Windows, l'hôte se lance avec Wine (POMMEFLASH_LAUNCHER=wine).");
     }
 
-    public static HostRun Start(IEnumerable<string> arguments)
+    /// <summary>
+    /// Hôte lancé ; <paramref name="scripts"/> répond aux scripts de la page qu'il demande
+    /// (événements « eval »), à la place de PommeBrowser.
+    /// </summary>
+    public static HostRun Start(IEnumerable<string> arguments, Func<string, (bool Ok, string? Value)>? scripts = null)
     {
         var start = new ProcessStartInfo
         {
@@ -49,7 +56,7 @@ sealed class HostRun : IAsyncDisposable
         foreach (string argument in arguments)
             start.ArgumentList.Add(argument);
         start.Environment["WINEDEBUG"] = "-all";
-        return new HostRun(Process.Start(start) ?? throw new InvalidOperationException("Hôte non lancé."));
+        return new HostRun(Process.Start(start) ?? throw new InvalidOperationException("Hôte non lancé."), scripts);
     }
 
     async Task ReadAsync()
@@ -59,7 +66,14 @@ sealed class HostRun : IAsyncDisposable
             if (!line.StartsWith('{'))
                 continue;
             using JsonDocument document = JsonDocument.Parse(line);
-            _events.Enqueue(document.RootElement.Clone());
+            JsonElement received = document.RootElement.Clone();
+            _events.Enqueue(received);
+            if (_scripts != null && received.GetProperty("event").GetString() == "eval")
+            {
+                (bool ok, string? value) = _scripts(received.GetProperty("code").GetString()!);
+                string reply = JsonSerializer.Serialize(new { ok, value });
+                await SendAsync($"result {received.GetProperty("id").GetInt32()} {reply}");
+            }
             _arrived.Release();
         }
         _arrived.Release();
@@ -95,8 +109,16 @@ sealed class HostRun : IAsyncDisposable
 
     public async Task SendAsync(string command)
     {
-        await _process.StandardInput.WriteLineAsync(command);
-        await _process.StandardInput.FlushAsync();
+        await _input.WaitAsync();
+        try
+        {
+            await _process.StandardInput.WriteLineAsync(command);
+            await _process.StandardInput.FlushAsync();
+        }
+        finally
+        {
+            _input.Release();
+        }
     }
 
     public async Task<int> WaitForExitAsync(TimeSpan timeout)

@@ -31,9 +31,7 @@ namespace PommeBrowser.Views
 
         /// <summary>Le contenu peut être lu à sa place : page web affichée, contenu du document principal.</summary>
         bool CanPlaceInPage(FlashContent content)
-            => Page == TabPage.Web && _engine != null && _web != null && LegacyView.IsSupported &&
-               System.Uri.TryCreate(WebUrl, UriKind.Absolute, out Uri? page) &&
-               System.Uri.Compare(page, content.Page, UriComponents.HttpRequestUrl, UriFormat.UriEscaped, StringComparison.Ordinal) == 0;
+            => Page == TabPage.Web && _engine != null && _web != null && LegacyView.IsSupported && IsTopDocument(content);
 
         [SupportedOSPlatform("windows")]
         void OpenFlashInPage(FlashContent content, string module)
@@ -65,6 +63,7 @@ namespace PommeBrowser.Views
 
             host.SetBackground(!IsSelected);
             host.NavigateRequested += OnFlashNavigate;
+            host.ScriptRequested += (id, code) => RunFlashScript(host, content, id, code);
             host.Exited += () =>
             {
                 if (_overlayHost != host)

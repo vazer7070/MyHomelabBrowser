@@ -6,7 +6,9 @@ using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using MyHomelabBrowser.classes;
@@ -27,10 +29,11 @@ namespace PommeBrowser.Legacy
         static nint _job;
 
         readonly Process _process;
+        // Écritures sur l'entrée de l'hôte (réponses aux scripts, fermeture) : une à la fois.
+        readonly SemaphoreSlim _input = new(1, 1);
         nint _window;
         bool _closed;
         bool _exited;
-        bool _scriptNoticed;
 
         FlashHostProcess(Process process)
         {
@@ -47,6 +50,12 @@ namespace PommeBrowser.Legacy
         /// <summary>Le contenu demande une page (cible _blank, _self…).</summary>
         public event Action<Uri, string>? NavigateRequested;
 
+        /// <summary>
+        /// Script à exécuter dans la page (ExternalInterface.call, adresse javascript:). Avec un
+        /// numéro, l'hôte attend la réponse (<see cref="ReplyScript"/>) ; sans, aucune.
+        /// </summary>
+        public event Action<int?, string>? ScriptRequested;
+
         public static FlashHostProcess Start(FlashContent content, string module, bool isPrivate)
         {
             var start = new ProcessStartInfo
@@ -56,6 +65,9 @@ namespace PommeBrowser.Legacy
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                StandardInputEncoding = new UTF8Encoding(false),
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
@@ -157,19 +169,71 @@ namespace PommeBrowser.Legacy
                     case "log":
                         RuntimeLogBuffer.Append("[Flash] " + (root.TryGetProperty("message", out JsonElement message) ? message.GetString() : line));
                         break;
-                    case "script":
-                        // Échanges avec les scripts de la page : étape 4 du moteur. Le détail de chaque
-                        // script est dans les traces de l'hôte ; un seul avertissement ici.
-                        if (!_scriptNoticed)
+                    case "eval" when root.TryGetProperty("id", out JsonElement number) && number.TryGetInt32(out int id):
+                        string evaluated = Text(root, "code");
+                        Dispatcher.UIThread.Post(() =>
                         {
-                            _scriptNoticed = true;
-                            RuntimeLogBuffer.Append("[Flash] Scripts de la page non transmis (pas encore pris en charge).");
-                        }
+                            if (ScriptRequested is { } handler)
+                                handler(id, evaluated);
+                            else
+                                ReplyScript(id, false, null);
+                        });
+                        break;
+                    case "script":
+                        // Adresse javascript: : exécutée dans la page si elle vise la page elle-même.
+                        string code = Text(root, "code");
+                        string? targetWindow = root.TryGetProperty("target", out JsonElement named) ? named.GetString() : null;
+                        if (string.IsNullOrEmpty(targetWindow) || targetWindow is "_self" or "_top" or "_parent")
+                            Dispatcher.UIThread.Post(() => ScriptRequested?.Invoke(null, code));
+                        else
+                            RuntimeLogBuffer.Append($"[Flash] Adresse javascript: pour la fenêtre « {targetWindow} » ignorée.");
                         break;
                 }
             }
             catch (JsonException)
             {
+            }
+        }
+
+        static string Text(JsonElement root, string name)
+            => root.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty;
+
+        /// <summary>Réponse à un script de la page : « result &lt;id&gt; {"ok":…,"value":…} ».</summary>
+        public void ReplyScript(int id, bool ok, string? value)
+        {
+            using var buffer = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(buffer))
+            {
+                writer.WriteStartObject();
+                writer.WriteBoolean("ok", ok);
+                if (value == null)
+                    writer.WriteNull("value");
+                else
+                    writer.WriteString("value", value);
+                writer.WriteEndObject();
+            }
+            _ = WriteAsync("result " + id.ToString(CultureInfo.InvariantCulture) + " " + Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length));
+        }
+
+        /// <summary>Une ligne pour l'hôte ; faux s'il ne lit plus son entrée.</summary>
+        async Task<bool> WriteAsync(string line)
+        {
+            await _input.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (_process.HasExited)
+                    return false;
+                await _process.StandardInput.WriteLineAsync(line).ConfigureAwait(false);
+                await _process.StandardInput.FlushAsync().ConfigureAwait(false);
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException or InvalidOperationException or ObjectDisposedException)
+            {
+                return false;
+            }
+            finally
+            {
+                _input.Release();
             }
         }
 
@@ -200,9 +264,8 @@ namespace PommeBrowser.Legacy
             _closed = true;
             try
             {
-                await _process.StandardInput.WriteLineAsync("close").ConfigureAwait(true);
-                await _process.StandardInput.FlushAsync().ConfigureAwait(true);
-                await Task.WhenAny(_process.WaitForExitAsync(), Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(true);
+                if (await WriteAsync("close").ConfigureAwait(true))
+                    await Task.WhenAny(_process.WaitForExitAsync(), Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(true);
             }
             catch (Exception ex) when (ex is IOException or InvalidOperationException or ObjectDisposedException)
             {

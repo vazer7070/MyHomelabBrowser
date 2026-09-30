@@ -42,7 +42,9 @@ public sealed class HostProtocolTests
             "--width", "400",
             "--height", "300",
             "--hidden"
-        });
+        }, code => code.Contains("pommeAdd(2,3)", StringComparison.Ordinal)
+            ? (true, "<number>5</number>")
+            : (false, null));
 
         await host.WaitForAsync(h => h.Reports.Contains("done"), Scenario);
         IReadOnlyList<string> reports = host.Reports;
@@ -91,6 +93,11 @@ public sealed class HostProtocolTests
                                           e.GetProperty("target").GetString() == "_blank");
         Assert.Contains(host.Events, e => e.GetProperty("event").GetString() == "script" &&
                                           e.GetProperty("code").GetString() == "window.alert('pomme')");
+
+        // Scripts de la page (ExternalInterface.call) : le module attend la réponse de PommeBrowser.
+        Assert.Contains("script=<number>5</number>", reports);
+        Assert.Contains("script-refused=failed", reports);
+        Assert.Equal(2, host.Events.Count(e => e.GetProperty("event").GetString() == "eval"));
 
         // Fils et minuteries : tout revient sur le fil du module.
         Assert.Contains("async main=1 data=c0ffee", reports);

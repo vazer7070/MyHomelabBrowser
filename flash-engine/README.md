@@ -42,8 +42,21 @@ PommeFlashHost.exe --plugin <NPSWF64_*.dll> --swf <adresse> --page <adresse de l
 ```
 
 Sortie standard, un événement JSON par ligne : `ready` (fenêtre à loger), `status`,
-`navigate` (url, cible), `script` (code pour la page), `audio`, `log`, `exit`.
-Entrée standard : `close`.
+`navigate` (url, cible), `script` (adresse `javascript:`, sans réponse), `eval` (id, code : script
+de la page dont le module attend le résultat), `audio`, `log` (niveaux info, error, trace), `exit`.
+Entrée standard : `close`, et `result <id> {"ok":true,"value":…}` en réponse à `eval`.
+
+**Scripts de la page** (`ExternalInterface.call`, `NPN_Evaluate`) : le module attend le résultat,
+comme dans un navigateur. L'hôte envoie `eval` puis attend la réponse (20 s au plus) en traitant les
+messages que Windows lui envoie d'autres fils : PommeBrowser place et affiche la fenêtre du module
+pendant ce temps, et les deux processus s'attendraient sinon l'un l'autre. PommeBrowser exécute le
+script dans la page (document principal seulement : un contenu venu d'un cadre reçoit un refus) ;
+le module applique lui-même `allowScriptAccess`.
+
+**Journal** : version du module, contenu, noms des flashvars (pas leurs valeurs), puis une trace de
+chaque fichier chargé (et de la réponse), de chaque script demandé à la page et de ce que l'hôte ne
+fournit pas (valeurs `NPN_GetValue`, membres des objets de la page) ; 300 traces au plus. Page
+**Diagnostic** de PommeBrowser, lignes `[Flash]`.
 
 ## Tests
 
@@ -97,5 +110,6 @@ Sans le réglage, sans module Flash ou sans description du contenu, Basilisk res
 1. **Hôte NPAPI sous Windows** (fait) : le contenu principal est lu dans une fenêtre logée dans l'onglet.
 2. **Contenu à sa place dans la page** (fait) : suivi du défilement, des dimensions et du zoom.
 3. Cookies et session partagés avec la page.
-4. `ExternalInterface` : appels entre les scripts de la page et Flash.
+4. `ExternalInterface` : appels entre les scripts de la page et Flash. **Flash → page fait**
+   (`ExternalInterface.call`, adresses `javascript:`) ; reste page → Flash (`addCallback`).
 5. Linux (`libflashplayer.so`, GTK 2 / XEmbed).

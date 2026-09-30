@@ -145,5 +145,17 @@ namespace PommeFlash.Host.Native
 
         public const uint GW_CHILD = 5;
         public const nint IDC_ARROW = 32512;
+
+        public const uint QS_SENDMESSAGE = 0x0040;
+        public const uint PM_NOREMOVE = 0x0000;
+        public const uint PM_QS_SENDMESSAGE = QS_SENDMESSAGE << 16;
+        public const uint WAIT_OBJECT_0 = 0;
+
+        [LibraryImport(User32)]
+        public static partial uint MsgWaitForMultipleObjectsEx(uint count, nint* handles, uint milliseconds, uint wakeMask, uint flags);
+
+        [LibraryImport(User32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool PeekMessageW(MSG* msg, nint hwnd, uint min, uint max, uint remove);
     }
 }

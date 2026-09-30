@@ -98,6 +98,7 @@ namespace PommeBrowser.Views
                     ShowLegacyPage(running: false);
             };
             host.NavigateRequested += OnFlashNavigate;
+            host.ScriptRequested += (id, code) => RunFlashScript(host, content, id, code);
             host.SetBackground(!IsSelected);
             ShowEmbeddedLegacy(host, Tr("Ouverture du lecteur Flash…"), Tr("{0} s'ouvre avec votre module Flash.", content.Swf.Host), content.Page);
         }
@@ -117,6 +118,39 @@ namespace PommeBrowser.Views
             {
                 Window.OpenTab(url.AbsoluteUri, background: false, opener: this);
             }
+        }
+
+        /// <summary>Le contenu vient du document principal de la page chargée dans l'onglet.</summary>
+        bool IsTopDocument(FlashContent content)
+            => System.Uri.TryCreate(WebUrl, UriKind.Absolute, out Uri? page) &&
+               System.Uri.Compare(page, content.Page, UriComponents.HttpRequestUrl, UriFormat.UriEscaped, StringComparison.Ordinal) == 0;
+
+        /// <summary>
+        /// Script demandé par le contenu (ExternalInterface.call, adresse javascript:) : exécuté
+        /// dans la page, comme dans un navigateur, et son résultat renvoyé au lecteur. Le lecteur
+        /// applique lui-même allowScriptAccess. Seulement pour un contenu du document principal :
+        /// celui d'un cadre n'agit pas sur la page qui le contient (il reçoit un refus).
+        /// </summary>
+        [SupportedOSPlatform("windows")]
+        async void RunFlashScript(FlashHostProcess host, FlashContent content, int? id, string code)
+        {
+            string? value = null;
+            bool ok = false;
+            if (_engine is { } engine && IsTopDocument(content))
+            {
+                try
+                {
+                    value = await engine.EvaluateAsync(code, isolated: false);
+                    ok = true;
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or
+                                               System.Runtime.InteropServices.COMException or System.Threading.Tasks.TaskCanceledException)
+                {
+                    RuntimeLogBuffer.Append("[Flash] Script de la page impossible : " + ex.Message);
+                }
+            }
+            if (id is { } request)
+                host.ReplyScript(request, ok, value);
         }
 
         /// <summary>Site réglé sur « toujours dans Basilisk », et Basilisk installé.</summary>
