@@ -532,6 +532,7 @@ namespace PommeBrowser.Views
                 case LoadStage.Committed:
                     _upgradedHosts.Clear();
                     _rufflePlaying = false;
+                    _flashContent = null;
                     Window.OnTabCommitted(this);
                     Security = ComputeSecurity(url);
                     if (_engine != null)

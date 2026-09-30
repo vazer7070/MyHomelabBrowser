@@ -129,6 +129,37 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: ./legacy-engine/fetch-engine.ps1 -Destination artifacts/avalonia-win-x64/legacy
 
+      # Moteur Flash intégré (flash-engine/) : hôte NPAPI compilé en code natif (NativeAOT).
+      - name: Moteur Flash intégré (PommeFlashHost)
+        shell: pwsh
+        run: |
+          dotnet publish flash-engine/PommeFlash.Host/PommeFlash.Host.csproj --configuration Release --runtime win-x64 -p:PublishAot=true -p:DebugType=none --output artifacts/avalonia-win-x64/flash
+          if (-not (Test-Path artifacts/avalonia-win-x64/flash/PommeFlashHost.exe)) { throw "PommeFlashHost absent de la publication." }
+
+      # Le vrai hôte, avec un greffon NPAPI de test qui rapporte ce qu'il observe.
+      - name: Tests du moteur Flash intégré
+        shell: pwsh
+        run: |
+          $plugin = Join-Path $env:RUNNER_TEMP "npPommeTest.dll"
+          if (Get-Command clang -ErrorAction SilentlyContinue) {
+            clang -shared -O2 -o $plugin flash-engine/test-plugin/testplugin.c -luser32
+          } else {
+            gcc -shared -O2 -o $plugin flash-engine/test-plugin/testplugin.c
+          }
+          if ($LASTEXITCODE -ne 0) { throw "Greffon de test non compilé." }
+          $env:POMMEFLASH_HOST = (Resolve-Path artifacts/avalonia-win-x64/flash/PommeFlashHost.exe).Path
+          $env:POMMEFLASH_TEST_PLUGIN = $plugin
+          dotnet test tests/PommeFlash.Tests/PommeFlash.Tests.csproj --configuration Release --logger "trx;LogFileName=moteur-flash.trx" --results-directory TestResults
+          if ($LASTEXITCODE -ne 0) { throw "Tests du moteur Flash intégré en échec." }
+
+      - name: Résultats des tests du moteur Flash
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultats-tests-moteur-flash
+          path: TestResults
+          if-no-files-found: ignore
+
       - name: Dossier publié
         uses: actions/upload-artifact@v4
         with:

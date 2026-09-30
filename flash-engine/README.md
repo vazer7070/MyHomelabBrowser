@@ -65,9 +65,24 @@ POMMEFLASH_LAUNCHER=wine xvfb-run -a dotnet test tests/PommeFlash.Tests
 Sous Windows, le greffon se compile avec `clang -shared` (ou `cl /LD`) et `POMMEFLASH_LAUNCHER`
 n'est pas nécessaire.
 
+## Dans PommeBrowser
+
+Réglage **Paramètres › Avancé › Moteur Flash intégré (expérimental)**, Windows seulement.
+
+1. Le script de détection de Ruffle décrit le contenu Flash principal de la page (le plus
+   grand) : adresse du SWF, page, flashvars, taille, identifiant et paramètres
+   (`avalonia/Engine/FlashContent.cs`, données de la page bornées et vérifiées).
+2. Quand Ruffle échoue (ou au clic sur ⚡), l'onglet lance `flash\PommeFlashHost.exe` avec le module
+   Flash importé (`avalonia/Legacy/FlashHostProcess.cs`), dans un job Windows qui le ferme avec
+   PommeBrowser.
+3. La fenêtre annoncée par l'hôte (`ready`) est logée dans l'onglet par le même mécanisme que
+   Basilisk ; « Lire avec Ruffle » revient à la page.
+
+Sans le réglage, sans module Flash ou sans description du contenu, Basilisk reste le moteur de secours.
+
 ## Étapes
 
-1. **Hôte NPAPI sous Windows** (fait) : le module lit un contenu dans une fenêtre logée dans l'onglet.
+1. **Hôte NPAPI sous Windows** (fait) : le contenu principal est lu dans une fenêtre logée dans l'onglet.
 2. Contenu à sa place dans la page (suivi du défilement et des dimensions, `wmode`).
 3. Cookies et session partagés avec la page.
 4. `ExternalInterface` : appels entre les scripts de la page et Flash.

@@ -82,6 +82,10 @@ namespace MyHomelabBrowser.classes
         // Contenu que Ruffle ne sait pas lire : la page passe d'elle-même au moteur de secours.
         public bool FlashAutoFallback { get; set; } = true;
 
+        // Moteur Flash intégré (expérimental, Windows) : le module Flash de l'utilisateur lit le
+        // contenu à la place de Basilisk.
+        public bool FlashIntegratedEngine { get; set; }
+
         // Chemin vers basilisk.exe
         public string BasiliskPath { get; set; } = "";
 
@@ -123,6 +127,7 @@ namespace MyHomelabBrowser.classes
                 EnableFlashSupport = EnableFlashSupport,
                 PreferRuffle = PreferRuffle,
                 FlashAutoFallback = FlashAutoFallback,
+                FlashIntegratedEngine = FlashIntegratedEngine,
                 BasiliskPath = BasiliskPath,
                 FlashDebugEnabled = FlashDebugEnabled,
 

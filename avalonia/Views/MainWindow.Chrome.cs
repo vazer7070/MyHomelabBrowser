@@ -192,17 +192,22 @@ namespace PommeBrowser.Views
         // ---------------------------------------------------------------
 
         void UpdateLegacyButton(BrowserTab? tab)
-            => LegacyButton.IsVisible = App.Settings.EnableFlashSupport && App.BasiliskExecutable != null &&
-                                        tab?.Page == TabPage.Web && BasiliskInstall.IsOpenable(tab.WebUrl, out _);
+        {
+            LegacyButton.IsVisible = App.Settings.EnableFlashSupport && tab is { Page: TabPage.Web, HasFlashFallback: true } &&
+                                     BasiliskInstall.IsOpenable(tab.WebUrl, out _);
+            ToolTip.SetTip(LegacyButton, tab?.FallbackIsIntegrated == true
+                ? Tr("Lire le contenu Flash avec votre module Flash (moteur intégré)")
+                : Tr("Ouvrir ce site avec Flash Legacy (Basilisk)"));
+        }
 
         void Legacy_Click(object? sender, RoutedEventArgs e)
         {
             if (_selected is not { } tab || !BasiliskInstall.IsOpenable(tab.WebUrl, out Uri uri))
                 return;
 
-            tab.OpenInBasilisk(uri);
+            tab.OpenFlashFallback(uri);
             // Basilisk lancé : le site peut s'y ouvrir d'office ensuite (« Lire avec Ruffle » annule).
-            if (tab.Page == TabPage.Legacy && FlashDomainRules.GetRule(uri) != FlashRuleMode.Legacy)
+            if (tab.Page == TabPage.Legacy && !tab.IsIntegratedFlash && FlashDomainRules.GetRule(uri) != FlashRuleMode.Legacy)
             {
                 ShowToast(Tr("Toujours ouvrir {0} dans Basilisk ?", uri.Host), Tr("Toujours"),
                     () => FlashDomainRules.SetRule(uri, FlashRuleMode.Legacy), timeout: 8);

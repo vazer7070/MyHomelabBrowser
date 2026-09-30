@@ -21,6 +21,11 @@ namespace PommeBrowser.Views
         bool _ruffleAttached;
         // Un contenu Flash de la page est lu par Ruffle (remis à zéro à chaque page).
         bool _rufflePlaying;
+        // Contenu Flash principal de la page, décrit par le script de détection (le plus grand).
+        FlashContent? _flashContent;
+
+        /// <summary>Contenu Flash principal de la page affichée, s'il est connu.</summary>
+        public FlashContent? FlashContent => _flashContent;
 
         void AttachScripts(IEngineTab engine)
         {
@@ -85,6 +90,17 @@ namespace PommeBrowser.Views
 
         void OnRuffleMessage(string status)
         {
+            if (status.StartsWith(PommeBrowser.Engine.FlashContent.MessagePrefix, StringComparison.Ordinal))
+            {
+                if (PommeBrowser.Engine.FlashContent.Parse(status[PommeBrowser.Engine.FlashContent.MessagePrefix.Length..]) is { } content &&
+                    (_flashContent == null || content.Area > _flashContent.Area))
+                {
+                    _flashContent = content;
+                    RaiseChanged();
+                }
+                return;
+            }
+
             switch (status)
             {
                 case "playing":
@@ -112,28 +128,37 @@ namespace PommeBrowser.Views
 
             RuntimeLogBuffer.Append("[Ruffle] Contenu Flash illisible sur " + uri.Host);
             bool automatic = _app.Settings.FlashAutoFallback && !_rufflePlaying &&
-                             _app.BasiliskExecutable != null && !_app.SessionRuffleHosts.Contains(uri.Host);
+                             HasFlashFallback && !_app.SessionRuffleHosts.Contains(uri.Host);
             if (!automatic)
             {
                 OfferFlashFallback(Tr("Ruffle n'a pas pu lire le contenu Flash de cette page."));
                 return;
             }
 
-            OpenInBasilisk(uri);
-            if (Page == TabPage.Legacy && IsSelected && FlashDomainRules.GetRule(uri) != FlashRuleMode.Legacy)
+            OpenFlashFallback(uri);
+            if (Page != TabPage.Legacy || !IsSelected)
+                return;
+            if (IsIntegratedFlash)
+            {
+                Window.ShowToast(Tr("Ruffle n'a pas pu lire ce contenu : il est lu avec votre module Flash."));
+            }
+            else if (FlashDomainRules.GetRule(uri) != FlashRuleMode.Legacy)
             {
                 Window.ShowToast(Tr("Ruffle n'a pas pu lire ce contenu : {0} s'ouvre dans Basilisk. L'ouvrir toujours ainsi ?", uri.Host),
                     Tr("Toujours"), () => FlashDomainRules.SetRule(uri, FlashRuleMode.Legacy), timeout: 10);
             }
         }
 
-        /// <summary>Contenu Flash illisible : Basilisk, qui lit le Flash sans dépendre de la page, est proposé s'il est installé.</summary>
+        /// <summary>
+        /// Contenu Flash illisible : le moteur de secours (moteur intégré ou Basilisk), qui lit le
+        /// Flash sans dépendre de la page, est proposé s'il est prêt.
+        /// </summary>
         void OfferFlashFallback(string message)
         {
             if (!IsSelected)
                 return;
-            if (_app.BasiliskExecutable != null && BasiliskInstall.IsOpenable(WebUrl, out Uri uri))
-                Window.ShowToast(message, Tr("Ouvrir dans Basilisk"), () => OpenInBasilisk(uri));
+            if (HasFlashFallback && BasiliskInstall.IsOpenable(WebUrl, out Uri uri))
+                Window.ShowToast(message, FallbackIsIntegrated ? Tr("Lire avec le module Flash") : Tr("Ouvrir dans Basilisk"), () => OpenFlashFallback(uri));
             else
                 Window.ShowToast(message);
         }
