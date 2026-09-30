@@ -164,7 +164,7 @@ namespace PommeBrowser.Views.Pages
         /// Journal de la session, puis fin du journal des erreurs (errors.log), qui garde aussi les
         /// erreurs des lancements précédents. Le tout reste sous la limite du serveur (1 Mo).
         /// </summary>
-        static string LogsForReport(string version)
+        internal static string LogsForReport(string version)
         {
             var text = new StringBuilder();
             text.Append("PommeBrowser ").Append(version).Append(" (").Append(AppInfo.Platform).Append(")\n")

@@ -58,6 +58,17 @@ jobs:
           --logger "trx;LogFileName=resultats.trx"
           --results-directory TestResults
 
+      # Le vrai navigateur ouvert sans écran (Avalonia.Headless), piloté au clavier et à la souris.
+      - name: Tests de l'interface
+        timeout-minutes: 15
+        env:
+          AVALONIA_TELEMETRY_OPTOUT: 1
+        run: >
+          dotnet test tests/PommeBrowser.UiTests/PommeBrowser.UiTests.csproj
+          --configuration Release
+          --logger "trx;LogFileName=resultats-interface.trx"
+          --results-directory TestResults
+
       - name: Résultats des tests
         if: always()
         uses: actions/upload-artifact@v4

@@ -34,7 +34,7 @@ namespace PommeBrowser.Core
         {
             Service = new CredentialVaultService(() => AppPaths.Profile("vault.json.enc"));
             _autoLockMinutes = autoLockMinutes;
-            _autoLock = new DispatcherTimer(TimeSpan.FromSeconds(30), DispatcherPriority.Background, (_, _) => CheckAutoLock());
+            _autoLock = new DispatcherTimer(TimeSpan.FromSeconds(30), DispatcherPriority.Background, (_, _) => CheckAutoLock(DateTime.UtcNow));
             _autoLock.Start();
         }
 
@@ -65,10 +65,11 @@ namespace PommeBrowser.Core
         /// <summary>Coffre utilisé (déverrouillage, remplissage, page du coffre) : le délai de verrouillage repart.</summary>
         public void Touch() => _lastUse = DateTime.UtcNow;
 
-        void CheckAutoLock()
+        /// <summary>Verrouille le coffre resté inutilisé plus longtemps que le délai choisi (vérifié toutes les 30 s).</summary>
+        internal void CheckAutoLock(DateTime nowUtc)
         {
             int minutes = _autoLockMinutes();
-            if (minutes > 0 && IsUnlocked && !_prompting && DateTime.UtcNow - _lastUse >= TimeSpan.FromMinutes(minutes))
+            if (minutes > 0 && IsUnlocked && !_prompting && nowUtc - _lastUse >= TimeSpan.FromMinutes(minutes))
                 Lock();
         }
 

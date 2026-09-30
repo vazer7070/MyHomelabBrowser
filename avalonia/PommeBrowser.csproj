@@ -36,6 +36,11 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<!-- Tests de l'interface (tests/PommeBrowser.UiTests) : accès aux contrôles nommés et aux aides internes. -->
+		<InternalsVisibleTo Include="PommeBrowser.UiTests" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="Avalonia" Version="12.1.3" />
 		<PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
 		<PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.3" />

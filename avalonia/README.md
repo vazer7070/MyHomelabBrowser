@@ -138,7 +138,7 @@ avalonia/packaging/macos/build-app.sh all         # PommeBrowser.app arm64 et x6
 .\build-pack-velopack.ps1 -Edition avalonia       # Windows : Velopack + version GitHub
 ```
 
-La CI GitHub (`.github/workflows/build.yml`) lance les tests et construit les paquets Windows, macOS et Linux à chaque modification. Elle essaie aussi de lancer l'AppImage.
+La CI GitHub (`.github/workflows/build.yml`) lance les tests et construit les paquets Windows, macOS et Linux à chaque modification. Elle essaie aussi de lancer l'AppImage. Les tests de l'interface (`tests/PommeBrowser.UiTests`) ouvrent le vrai navigateur sans écran (Avalonia.Headless), avec des données temporaires, et le pilotent au clavier et à la souris : propositions de la barre d'adresse, page du coffre, verrouillage automatique, pages et réglages. Une page qui se reconstruirait sans fin fait échouer le test au lieu de le bloquer.
 
 - **Ruffle** et les outils AppImage sont téléchargés dans une version fixée et vérifiés par SHA-256. Chaque lundi, `.github/workflows/ruffle-update.yml` compare la version de Ruffle à la dernière publiée et ouvre une issue (version, SHA-256, fichiers à modifier) quand une nouvelle version sort.
 - **Pomme Legacy** (moteur Flash d'origine) : compilé par sa propre CI, puis pris dans la version GitHub `legacy-engine-<version>` (voir [`legacy-engine/README.md`](../legacy-engine/README.md)).
