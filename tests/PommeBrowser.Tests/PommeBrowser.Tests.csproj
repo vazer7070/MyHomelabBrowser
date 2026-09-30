@@ -73,6 +73,13 @@
     <Compile Include="..\..\classes\Profiles\Credentials\CredentialCandidate.cs" Link="App\Profiles\Credentials\CredentialCandidate.cs" />
     <Compile Include="..\..\classes\Profiles\Credentials\CredentialOrigin.cs" Link="App\Profiles\Credentials\CredentialOrigin.cs" />
     <Compile Include="..\..\classes\Profiles\Credentials\CredentialScripts.cs" Link="App\Profiles\Credentials\CredentialScripts.cs" />
+    <Compile Include="..\..\classes\Profiles\Credentials\CredentialEntry.cs" Link="App\Profiles\Credentials\CredentialEntry.cs" />
+    <Compile Include="..\..\classes\Profiles\Credentials\CredentialSavePolicy.cs" Link="App\Profiles\Credentials\CredentialSavePolicy.cs" />
+    <Compile Include="..\..\classes\Profiles\Credentials\CredentialVaultService.cs" Link="App\Profiles\Credentials\CredentialVaultService.cs" />
+    <Compile Include="..\..\classes\Profiles\Credentials\SiteCredentialPolicy.cs" Link="App\Profiles\Credentials\SiteCredentialPolicy.cs" />
+    <Compile Include="..\..\classes\Profiles\Credentials\VaultPayload.cs" Link="App\Profiles\Credentials\VaultPayload.cs" />
+    <Compile Include="..\..\classes\Profiles\Credentials\VaultSecurityState.cs" Link="App\Profiles\Credentials\VaultSecurityState.cs" />
+    <Compile Include="..\..\classes\Profiles\Credentials\VaultUnlockFailure.cs" Link="App\Profiles\Credentials\VaultUnlockFailure.cs" />
   </ItemGroup>
 
   <ItemGroup Label="Édition Avalonia (logique sans interface)">

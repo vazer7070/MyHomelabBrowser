@@ -61,7 +61,14 @@ namespace PommeBrowser.Views.Pages
             {
                 content.Children.Add(EmptyState("IconLock", Tr("Coffre verrouillé"),
                     Tr("Déverrouillez le coffre pour voir et utiliser vos identifiants.")));
-                content.Children.Add(Centered(TextButton(Tr("Déverrouiller…"), () => _ = UnlockAsync(), primary: true)));
+                var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+                actions.Children.Add(TextButton(Tr("Déverrouiller…"), () => _ = UnlockAsync(), primary: true));
+                actions.Children.Add(TextButton(Tr("Mot de passe oublié…"), async () =>
+                {
+                    if (await App.Vault.ResetAsync(Window))
+                        ScheduleRefresh();
+                }));
+                content.Children.Add(Centered(actions));
                 return;
             }
 
