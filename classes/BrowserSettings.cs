@@ -46,6 +46,11 @@ namespace MyHomelabBrowser.classes
         public bool ServiceAlerts { get; set; } = true;
 
         // --------------------
+        // Mises à jour (éditions Avalonia et Linux : recherche au démarrage)
+        // --------------------
+        public bool AutoUpdate { get; set; } = true;
+
+        // --------------------
         // Téléchargements
         // --------------------
         public string DownloadFolder { get; set; }
@@ -102,6 +107,7 @@ namespace MyHomelabBrowser.classes
                 ServiceMonitoring = ServiceMonitoring,
                 ServiceCheckIntervalSeconds = ServiceCheckIntervalSeconds,
                 ServiceAlerts = ServiceAlerts,
+                AutoUpdate = AutoUpdate,
 
                 EnableCommands = EnableCommands,
                 DownloadFolder = DownloadFolder,

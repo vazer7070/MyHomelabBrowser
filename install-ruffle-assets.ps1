@@ -1,12 +1,12 @@
 # Installe la version auto-hébergée de Ruffle utilisée par PommeBrowser.
-# La compilation (MyHomelabBrowser.csproj) fait déjà la même chose ; ce script sert à
+# La compilation (build/Ruffle.targets) fait déjà la même chose ; ce script sert à
 # réinstaller les fichiers à la main. L'archive est vérifiée par SHA-256.
 # Run: powershell -ExecutionPolicy Bypass -File .\install-ruffle-assets.ps1
 
 $ErrorActionPreference = "Stop"
 
 $version = "0.3.0"
-# Même valeur que RuffleSha256 dans MyHomelabBrowser.csproj.
+# Même valeur que RuffleSha256 dans build/Ruffle.targets.
 $expectedSha256 = "9cdc5baac95dea452d2ef4a3859f3a4c8576dd3377bb40849e41fb6359170d7d"
 $archiveName = "ruffle-$version-web-selfhosted.zip"
 $downloadUrl = "https://github.com/ruffle-rs/ruffle/releases/download/v$version/$archiveName"

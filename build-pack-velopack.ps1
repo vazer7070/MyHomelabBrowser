@@ -3,6 +3,15 @@
 # Build, package and publish PommeBrowser with Velopack + GitHub Releases.
 # Run:
 #   powershell -ExecutionPolicy Bypass -File .\build-pack-velopack-github.ps1
+#   powershell -ExecutionPolicy Bypass -File .\build-pack-velopack.ps1 -Edition avalonia
+
+param(
+    # « avalonia » : publie l'édition multiplateforme (dossier avalonia) à la place de
+    # l'édition WPF. Même identifiant de paquet, même canal et même nom d'exécutable :
+    # les installations existantes la reçoivent comme une mise à jour, avec leurs données.
+    [ValidateSet("wpf", "avalonia")]
+    [string]$Edition = "wpf"
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -317,13 +326,14 @@ function Get-SigningArguments {
 
 try {
     Clear-Host
-    Write-Host "=== PommeBrowser - Build + Velopack + GitHub ===`n" -ForegroundColor Cyan
+    Write-Host "=== PommeBrowser - Build + Velopack + GitHub ($Edition) ===`n" -ForegroundColor Cyan
 
     $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
     Set-Location $scriptDir
 
     $ruffleMainScript = Join-Path $scriptDir "Assets\Ruffle\ruffle.js"
-    if (-not (Test-Path -LiteralPath $ruffleMainScript)) {
+    # Édition Avalonia : Ruffle est téléchargé et vérifié à la compilation (build\Ruffle.targets).
+    if ($Edition -eq "wpf" -and -not (Test-Path -LiteralPath $ruffleMainScript)) {
         $ruffleInstaller = Join-Path $scriptDir "install-ruffle-assets.ps1"
         if (-not (Test-Path -LiteralPath $ruffleInstaller)) {
             throw "Ruffle local est absent et install-ruffle-assets.ps1 est introuvable."
@@ -341,9 +351,14 @@ try {
     Require-Command "git"
     Require-Command "gh"
 
-    # On publie directement le projet WPF. Utiliser une solution avec -o est fragile.
-    $csproj = Get-ChildItem -Path $scriptDir -Filter *.csproj -File -ErrorAction SilentlyContinue |
-        Select-Object -First 1
+    # On publie directement le projet. Utiliser une solution avec -o est fragile.
+    if ($Edition -eq "avalonia") {
+        $csproj = Get-Item -LiteralPath (Join-Path $scriptDir "avalonia\PommeBrowser.csproj") -ErrorAction SilentlyContinue
+    }
+    else {
+        $csproj = Get-ChildItem -Path $scriptDir -Filter *.csproj -File -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+    }
 
     if (-not $csproj) {
         throw "Aucun fichier .csproj trouvé dans : $scriptDir"
@@ -460,14 +475,31 @@ try {
     }
     New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 
-    Invoke-Native -FilePath "dotnet" -Arguments @(
+    $publishArguments = @(
         "publish", $csproj.FullName,
         "-c", "Release",
         "-r", "win-x64",
         "--self-contained", "true",
         "-o", $publishDir,
         "-p:Version=$version"
-    ) -FailureMessage "dotnet publish a échoué"
+    )
+    if ($Edition -eq "avalonia") {
+        $publishArguments += "-p:RuffleDownloadOptional=false"
+    }
+    Invoke-Native -FilePath "dotnet" -Arguments $publishArguments -FailureMessage "dotnet publish a échoué"
+
+    # Édition Avalonia : son exécutable (pommebrowser.exe) prend le nom de celui de l'édition
+    # WPF. Le lanceur .NET contient le nom de la bibliothèque qu'il charge : le renommer suffit.
+    if ($Edition -eq "avalonia") {
+        $avaloniaExe = Join-Path $publishDir "pommebrowser.exe"
+        if (-not (Test-Path -LiteralPath $avaloniaExe)) {
+            throw "L'exécutable de l'édition Avalonia est absent après publication : $avaloniaExe"
+        }
+        Move-Item -LiteralPath $avaloniaExe -Destination (Join-Path $publishDir $mainExe) -Force
+
+        # Moteur Flash d'origine (Pomme Legacy) livré avec l'application, dans legacy\.
+        & (Join-Path $scriptDir "legacy-engine\fetch-engine.ps1") -Destination (Join-Path $publishDir "legacy")
+    }
 
     $mainExePath = Join-Path $publishDir $mainExe
     if (-not (Test-Path -LiteralPath $mainExePath)) {

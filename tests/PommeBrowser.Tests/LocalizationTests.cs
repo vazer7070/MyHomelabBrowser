@@ -113,6 +113,13 @@ public sealed class LocalizationTests
             }
         }
 
+        // Édition Avalonia : {l:Tr 'Texte'} dans les fichiers .axaml.
+        foreach (string file in RepositoryFiles.Sources("*.axaml"))
+        {
+            foreach (Match m in Regex.Matches(File.ReadAllText(file), @"\{l:Tr\s+'([^']*)'\}"))
+                Add(keys, m.Groups[1].Value, file);
+        }
+
         foreach (string file in RepositoryFiles.Sources("*.xaml"))
         {
             foreach (XElement element in XDocument.Load(file).Descendants())

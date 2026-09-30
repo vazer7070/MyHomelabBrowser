@@ -1,0 +1,29 @@
+# Pomme Legacy (Basilisk sous la marque de PommeBrowser) pour Linux x86_64.
+# Reprend mozconfigs/linux/x86_64/gtk3_unofficial_branding_gcc.mozconfig des sources, avec :
+# - la marque Pomme Legacy ;
+# - sans AV1 (inutile pour lire du Flash, et il demanderait nasm 2.14 sous Windows) ;
+# - ccache pour les recompilations de la CI.
+# Les autres options restent celles des compilations officielles.
+export BASILISK_VERSION=1
+export MOZILLA_OFFICIAL=1
+
+ac_add_options --enable-application=basilisk
+ac_add_options --disable-official-branding
+ac_add_options --with-branding=basilisk/branding/pomme
+ac_add_options --enable-optimize="-O2 -w"
+ac_add_options --enable-default-toolkit=cairo-gtk3
+ac_add_options --enable-jemalloc
+ac_add_options --enable-strip
+ac_add_options --enable-pie
+ac_add_options --enable-update-channel=release
+ac_add_options --disable-tests
+ac_add_options --disable-debug
+ac_add_options --disable-necko-wifi
+ac_add_options --disable-updater
+ac_add_options --disable-av1
+ac_add_options --with-pthreads
+ac_add_options --x-libraries=/usr/lib/x86_64-linux-gnu
+ac_add_options --with-ccache=ccache
+
+export MOZ_PKG_SPECIAL=gtk3
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-pomme

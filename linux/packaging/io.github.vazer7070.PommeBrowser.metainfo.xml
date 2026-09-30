@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.vazer7070.PommeBrowser</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>PommeBrowser</name>
+  <summary xml:lang="fr">Navigateur pour le homelab</summary>
+  <summary>A browser for the homelab</summary>
+  <developer id="io.github.vazer7070">
+    <name>vazer7070</name>
+  </developer>
+  <description>
+    <p xml:lang="fr">PommeBrowser rassemble les services de votre homelab (NAS, Proxmox, routeur…) sur sa page d'accueil, vérifie qu'ils répondent et vous prévient s'ils tombent.</p>
+    <p>PommeBrowser gathers your homelab services (NAS, Proxmox, router…) on its start page, checks that they respond and tells you when they go down.</p>
+    <ul>
+      <li xml:lang="fr">Blocage des publicités et des pisteurs (EasyList, EasyPrivacy)</li>
+      <li>Ad and tracker blocking (EasyList, EasyPrivacy)</li>
+      <li xml:lang="fr">Contenus Flash lus avec Ruffle, intégré, ou avec Basilisk et le lecteur d'origine</li>
+      <li>Flash content played with the built-in Ruffle, or with Basilisk and the original player</li>
+      <li xml:lang="fr">HTTPS automatique, certificats du homelab approuvés et surveillés</li>
+      <li>Automatic HTTPS, trusted and monitored homelab certificates</li>
+      <li xml:lang="fr">Profils protégés par mot de passe, coffre à identifiants et codes de double authentification</li>
+      <li>Password-protected profiles, login vault and two-factor authentication codes</li>
+      <li xml:lang="fr">Espaces de travail et vue côte à côte</li>
+      <li>Workspaces and side-by-side view</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.vazer7070.PommeBrowser.desktop</launchable>
+  <url type="homepage">https://github.com/vazer7070/MyHomelabBrowser</url>
+  <url type="bugtracker">https://github.com/vazer7070/MyHomelabBrowser/issues</url>
+  <provides>
+    <binary>pommebrowser</binary>
+  </provides>
+  <categories>
+    <category>Network</category>
+    <category>WebBrowser</category>
+  </categories>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.9.8" date="2026-09-28">
+      <description>
+        <p xml:lang="fr">Première édition Linux, avec les profils, le coffre à identifiants, les codes 2FA, les espaces de travail, la vue côte à côte, Basilisk, le formulaire « Signaler un problème » et la mise à jour automatique.</p>
+        <p>First Linux edition, with profiles, the login vault, 2FA codes, workspaces, side-by-side view, Basilisk, the “Report a problem” form and automatic updates.</p>
+      </description>
+    </release>
+  </releases>
+</component>

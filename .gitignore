@@ -362,6 +362,15 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
-# Ruffle : téléchargé et vérifié (SHA-256) à la compilation, voir MyHomelabBrowser.csproj
+# Ruffle : téléchargé et vérifié (SHA-256) à la compilation, voir build/Ruffle.targets
 Assets/Ruffle/*
 !Assets/Ruffle/README.txt
+linux/Assets/Ruffle/
+avalonia/Assets/Ruffle/
+
+# Paquets AppImage de l'édition Linux
+linux/packaging/out/
+avalonia/packaging/out/
+
+# Moteur Flash d'origine compilé ou téléchargé (voir legacy-engine/README.md)
+legacy-engine/out/

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>PommeBrowser</string>
+	<key>CFBundleDisplayName</key>
+	<string>PommeBrowser</string>
+	<key>CFBundleIdentifier</key>
+	<string>__BUNDLE_ID__</string>
+	<key>CFBundleVersion</key>
+	<string>__VERSION__</string>
+	<key>CFBundleShortVersionString</key>
+	<string>__VERSION__</string>
+	<key>CFBundleExecutable</key>
+	<string>pommebrowser</string>
+	<key>CFBundleIconFile</key>
+	<string>PommeBrowser</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>fr</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>fr</string>
+		<string>en</string>
+	</array>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>12.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Un site que vous visitez demande à utiliser la caméra (visioconférence…).</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Un site que vous visitez demande à utiliser le micro (visioconférence…).</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Un site que vous visitez demande votre position.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Navigateur : les pages HTTP (réseau local du homelab…) doivent pouvoir s'afficher. -->
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+</dict>
+</plist>

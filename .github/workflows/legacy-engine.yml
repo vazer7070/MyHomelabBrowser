@@ -1,0 +1,168 @@
+name: Moteur Flash d'origine (Pomme Legacy)
+
+# Compile Basilisk depuis ses sources, sous la marque « Pomme Legacy », pour Linux x86_64 et
+# Windows x64 (voir legacy-engine/README.md). Lancé quand la version ou les réglages de
+# compilation changent ; « Run workflow » avec « publish » crée la version legacy-engine-<version>
+# dont les paquets de PommeBrowser tirent le moteur.
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publier les archives (version GitHub legacy-engine-<version>)"
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - "legacy-engine/**"
+      - ".github/workflows/legacy-engine.yml"
+  push:
+    branches: [master]
+    paths:
+      - "legacy-engine/**"
+      - ".github/workflows/legacy-engine.yml"
+
+permissions:
+  contents: read
+
+# Une compilation prend plus d'une heure : un nouveau passage attend la fin du précédent au
+# lieu de l'annuler.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  linux-x64:
+    name: Linux x86_64
+    runs-on: ubuntu-22.04
+    timeout-minutes: 340
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 5G
+      CCACHE_COMPRESS: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Outils de compilation
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            autoconf2.13 build-essential ccache pkg-config python3 python3-distutils python3-dbus yasm nasm zip unzip \
+            libasound2-dev libbz2-dev libdbus-glib-1-dev libegl1-mesa-dev libgtk-3-dev libgtk2.0-dev \
+            libpulse-dev libsqlite3-dev libssl-dev libx11-xcb-dev libxt-dev libxcomposite-dev \
+            libxdamage-dev libxrandr-dev zlib1g-dev
+
+      - name: Sources de Basilisk
+        run: legacy-engine/fetch-sources.sh "$RUNNER_TEMP/basilisk"
+
+      - name: Cache de compilation
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: legacy-engine-linux-${{ hashFiles('legacy-engine/**') }}-${{ github.run_id }}
+          restore-keys: legacy-engine-linux-
+
+      - name: Compilation
+        run: legacy-engine/build-linux.sh "$RUNNER_TEMP/basilisk" legacy-engine/out
+
+      - name: Enregistrement du cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: legacy-engine-linux-${{ hashFiles('legacy-engine/**') }}-${{ github.run_id }}
+
+      - name: Essai de lancement
+        run: |
+          sudo apt-get install --yes --no-install-recommends xvfb xauth
+          mkdir -p "$RUNNER_TEMP/engine" && tar -xJf legacy-engine/out/*.tar.xz -C "$RUNNER_TEMP/engine"
+          "$RUNNER_TEMP/engine/basilisk" --version
+          HOME="$RUNNER_TEMP/home" timeout --preserve-status 20 xvfb-run --auto-servernum \
+            "$RUNNER_TEMP/engine/basilisk" -no-remote -profile "$RUNNER_TEMP/profile" about:blank || status=$?
+          # Arrêté par timeout (143) : il tournait encore.
+          [ "${status:-0}" = 0 ] || [ "${status:-0}" = 143 ]
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pomme-legacy-linux-x86_64
+          path: legacy-engine/out/*
+          if-no-files-found: error
+
+  windows-x64:
+    name: Windows x64
+    runs-on: windows-2022
+    timeout-minutes: 340
+
+    steps:
+      # Sources lues par bash : pas de conversion des fins de ligne.
+      - run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      # MozillaBuild 3.4 : la version qu'attend UXP (shell MSYS dans msys\, compilation MSVC).
+      - name: MozillaBuild
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://ftp.mozilla.org/pub/mozilla/libraries/win32/MozillaBuildSetup-3.4.exe -OutFile "$env:RUNNER_TEMP\MozillaBuildSetup.exe"
+          Start-Process "$env:RUNNER_TEMP\MozillaBuildSetup.exe" -ArgumentList '/S' -Wait
+          Get-ChildItem C:\mozilla-build | Select-Object Name
+
+      - name: Sources de Basilisk
+        shell: bash
+        run: legacy-engine/fetch-sources.sh /c/pb
+
+      # Environnement de Visual Studio (vcvars64). Le PATH ne garde que Visual Studio, le SDK,
+      # Windows et MozillaBuild : les outils installés sur la machine (Git, Strawberry Perl…)
+      # seraient pris à la place des siens (gmake, pkg-config, runtime MSYS).
+      - name: Compilation
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          cmd /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2]) }
+          }
+          $system = $env:PATH -split ';' | Where-Object { $_ -match 'Microsoft Visual Studio|Windows Kits|Microsoft SDKs|^C:\\Windows' }
+          $nsis = Get-ChildItem C:\mozilla-build -Directory -Filter 'nsis-*' | ForEach-Object FullName
+          $env:PATH = (@('C:\mozilla-build\msys\bin', 'C:\mozilla-build\bin', 'C:\mozilla-build\python3') + $nsis + $system) -join ';'
+          Write-Host "PATH : $env:PATH"
+          $env:MOZILLABUILD = 'C:\mozilla-build\'
+          $workspace = '/' + $env:GITHUB_WORKSPACE.Substring(0, 1).ToLower() + $env:GITHUB_WORKSPACE.Substring(2).Replace('\', '/')
+          & C:\mozilla-build\msys\bin\bash.exe --login -c "cd '$workspace' && legacy-engine/build-windows.sh /c/pb legacy-engine/out"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pomme-legacy-windows-x64
+          path: legacy-engine/out/*
+          if-no-files-found: error
+
+  publish:
+    name: Publication
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    needs: [linux-x64, windows-x64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Version legacy-engine-<version>
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          source legacy-engine/engine.env
+          tag="legacy-engine-$BASILISK_VERSION"
+          (cd out && sha256sum --check *.sha256)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" out/* --clobber
+          else
+            gh release create "$tag" out/* --target "$GITHUB_SHA" --title "Pomme Legacy $BASILISK_VERSION" \
+              --notes "Moteur Flash d'origine de PommeBrowser : Basilisk $BASILISK_VERSION compilé depuis ses sources (repo.palemoon.org/Basilisk-Dev/Basilisk, licence MPL 2.0), sous la marque Pomme Legacy. Sans Flash Player."
+          fi

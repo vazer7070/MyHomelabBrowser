@@ -1,0 +1,55 @@
+#!/bin/sh
+# Lanceur de l'AppImage (édition Avalonia) : le moteur web (WebKitGTK 4.1) et GTK 3 viennent
+# du système ; l'AppImage apporte le navigateur, .NET, Avalonia et Ruffle. Les bibliothèques
+# sont vérifiées avant .NET, pour afficher un message clair plutôt qu'un plantage.
+HERE="$(dirname "$(readlink -f "$0")")"
+
+libraries="$( (ldconfig -p || /sbin/ldconfig -p) 2>/dev/null )"
+missing=""
+for lib in libwebkit2gtk-4.1.so.0 libgtk-3.so.0 libicuuc.so; do
+    case "$libraries" in
+        *"$lib"*) ;;
+        *) missing="$missing $lib" ;;
+    esac
+done
+
+if [ -n "$libraries" ] && [ -n "$missing" ]; then
+    ids="$( . /etc/os-release 2>/dev/null; echo " $ID $ID_LIKE " )"
+    case "$ids" in
+        *" fedora "*|*" rhel "*) command="sudo dnf install webkit2gtk4.1 gtk3 gstreamer1-plugins-good" ;;
+        *" arch "*) command="sudo pacman -S --needed webkit2gtk-4.1 gtk3 gst-plugins-good" ;;
+        *" suse "*|*" opensuse "*) command="sudo zypper install libwebkit2gtk-4_1-0 gtk3 gstreamer-plugins-good" ;;
+        *) command="sudo apt install libwebkit2gtk-4.1-0 libgtk-3-0 gstreamer1.0-plugins-good" ;;
+    esac
+
+    case "${LC_ALL:-${LC_MESSAGES:-${LANG:-fr}}}" in
+        fr*|C|C.*|POSIX)
+            message="PommeBrowser utilise le moteur web et l'interface fournis par votre système.
+
+Bibliothèques manquantes :$missing
+
+Pour les installer :
+$command
+
+Distributions prises en charge : Ubuntu 22.04, Debian 12, Fedora 38, Linux Mint 21 et versions plus récentes, Arch, openSUSE Tumbleweed." ;;
+        *)
+            message="PommeBrowser uses the web engine and user interface provided by your system.
+
+Missing libraries:$missing
+
+To install them:
+$command
+
+Supported distributions: Ubuntu 22.04, Debian 12, Fedora 38, Linux Mint 21 and newer, Arch, openSUSE Tumbleweed." ;;
+    esac
+
+    echo "$message" >&2
+    if [ -n "$DISPLAY$WAYLAND_DISPLAY" ]; then
+        zenity --error --no-markup --title=PommeBrowser --text="$message" 2>/dev/null ||
+            kdialog --title PommeBrowser --error "$message" 2>/dev/null ||
+            notify-send PommeBrowser "$message" 2>/dev/null
+    fi
+    exit 1
+fi
+
+exec "$HERE/usr/lib/pommebrowser/pommebrowser" "$@"

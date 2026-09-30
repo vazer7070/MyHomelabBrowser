@@ -69,6 +69,22 @@
     <Compile Include="..\..\classes\Support\Models\SupportReportRequest.cs" Link="App\Support\SupportReportRequest.cs" />
     <Compile Include="..\..\classes\Support\Models\SupportSubmissionResult.cs" Link="App\Support\SupportSubmissionResult.cs" />
     <Compile Include="..\..\classes\Support\Transports\LocalSupportExportTransport.cs" Link="App\Support\LocalSupportExportTransport.cs" />
+    <Compile Include="..\..\classes\RuntimeLogBuffer.cs" Link="App\RuntimeLogBuffer.cs" />
+    <Compile Include="..\..\classes\Profiles\Credentials\CredentialCandidate.cs" Link="App\Profiles\Credentials\CredentialCandidate.cs" />
+    <Compile Include="..\..\classes\Profiles\Credentials\CredentialOrigin.cs" Link="App\Profiles\Credentials\CredentialOrigin.cs" />
+    <Compile Include="..\..\classes\Profiles\Credentials\CredentialScripts.cs" Link="App\Profiles\Credentials\CredentialScripts.cs" />
+  </ItemGroup>
+
+  <ItemGroup Label="Édition Avalonia (logique sans interface)">
+    <!-- Types du clavier (Key, KeyModifiers) des raccourcis. -->
+    <PackageReference Include="Avalonia" Version="12.1.3" />
+    <Compile Include="..\..\avalonia\Engine\BrowserShortcuts.cs" Link="Avalonia\BrowserShortcuts.cs" />
+    <Compile Include="..\..\avalonia\Engine\UserScripts.cs" Link="Avalonia\UserScripts.cs" />
+    <Compile Include="..\..\avalonia\Legacy\FlashModuleSearch.cs" Link="Avalonia\FlashModuleSearch.cs" />
+  </ItemGroup>
+
+  <ItemGroup Label="Édition Linux (logique sans interface)">
+    <Compile Include="..\..\linux\Core\*.cs" Link="Linux\Core\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

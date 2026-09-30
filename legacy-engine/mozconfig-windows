@@ -1,0 +1,25 @@
+# Pomme Legacy (Basilisk sous la marque de PommeBrowser) pour Windows x64.
+# Reprend mozconfigs/windows/win64/win64_unofficial_branding.mozconfig des sources, avec la
+# marque Pomme Legacy et sans AV1 (nasm 2.14 absent de MozillaBuild 3.4). Compilé dans
+# MozillaBuild, avec l'environnement de Visual Studio 2022 (vcvars64). Les dossiers des
+# bibliothèques d'exécution (WIN32_REDIST_DIR, WIN_UCRT_REDIST_DIR) sont ajoutés par
+# build-windows.sh.
+export BASILISK_VERSION=1
+export MOZILLA_OFFICIAL=1
+
+ac_add_options --target=x86_64-pc-mingw32
+ac_add_options --host=x86_64-pc-mingw32
+ac_add_options --enable-application=basilisk
+ac_add_options --disable-official-branding
+ac_add_options --with-branding=basilisk/branding/pomme
+ac_add_options --enable-optimize="-O2 -GTs -GS- -utf-8"
+ac_add_options --enable-update-channel=release
+ac_add_options --enable-jemalloc
+ac_add_options --enable-strip
+ac_add_options --disable-tests
+ac_add_options --disable-debug
+ac_add_options --disable-updater
+ac_add_options --disable-av1
+ac_add_options --disable-precompiled-startupcache
+
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-pomme

@@ -5,13 +5,25 @@ namespace MyHomelabBrowser.classes.Profiles
 {
     static class AppDataContext
     {
+        static string? _baseOverride;
         static string _currentRoot = DefaultRoot;
 
         static string DefaultRoot =>
-            Path.Combine(
+            _baseOverride ?? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "MyHomelabBrowser"
             );
+
+        /// <summary>
+        /// Racine propre au système (macOS : ~/Library/Application Support/PommeBrowser),
+        /// à définir avant toute lecture de profil.
+        /// </summary>
+        public static void UseBaseDirectory(string path)
+        {
+            _baseOverride = path;
+            _currentRoot = path;
+            Directory.CreateDirectory(path);
+        }
 
         public static string Root => _currentRoot;
 

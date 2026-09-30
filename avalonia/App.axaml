@@ -1,0 +1,51 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="PommeBrowser.App"
+             Name="PommeBrowser"
+             RequestedThemeVariant="Dark">
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://pommebrowser/Themes/Colors.axaml" />
+                <ResourceInclude Source="avares://pommebrowser/Themes/Icons.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme>
+            <FluentTheme.Palettes>
+                <ColorPaletteResources x:Key="Dark"
+                                       Accent="#3B7BF6"
+                                       RegionColor="#111317"
+                                       ErrorText="#F2677A"
+                                       AltHigh="#111317"
+                                       ChromeMediumLow="#1B1E24"
+                                       ChromeMedium="#22262D"
+                                       ChromeLow="#16191E"
+                                       ChromeAltLow="#EEF1F6"
+                                       BaseHigh="#EEF1F6"
+                                       BaseMediumHigh="#A9B1BF"
+                                       BaseMedium="#8A93A2"
+                                       BaseMediumLow="#3A414C"
+                                       BaseLow="#2A2F37"
+                                       ListLow="#22262D"
+                                       ListMedium="#2A2F37" />
+                <ColorPaletteResources x:Key="Light"
+                                       Accent="#1F6FEB"
+                                       RegionColor="#F7F8FA"
+                                       ErrorText="#D1334B"
+                                       AltHigh="#FFFFFF"
+                                       BaseHigh="#1B1F24"
+                                       BaseMediumHigh="#4B5563"
+                                       BaseMedium="#6B7280"
+                                       BaseLow="#D9DEE5"
+                                       ListLow="#EEF1F5"
+                                       ListMedium="#E1E5EB" />
+            </FluentTheme.Palettes>
+        </FluentTheme>
+        <StyleInclude Source="avares://pommebrowser/Themes/Styles.axaml" />
+    </Application.Styles>
+
+</Application>

@@ -34,10 +34,7 @@ namespace MyHomelabBrowser.classes
         /// </summary>
         public string Language { get; set; } = "fr";
 
-        public static string DefaultPath => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "MyHomelabBrowser",
-            "appearance.json");
+        public static string DefaultPath => Path.Combine(Profiles.AppDataContext.GlobalRoot, "appearance.json");
 
         public static AppearanceSettings Load(string? path = null)
         {

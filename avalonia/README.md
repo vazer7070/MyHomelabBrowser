@@ -1,0 +1,168 @@
+# PommeBrowser — édition Avalonia (Windows, macOS, Linux)
+
+Une seule application pour les trois systèmes. L'interface est écrite avec **Avalonia 12** ; les pages sont affichées par le moteur web de chaque système, via Avalonia.Controls.WebView :
+
+| Système | Moteur | Paquet |
+|---|---|---|
+| Windows 10 / 11 | **WebView2** (Edge Chromium, fourni par Windows) | Velopack (installation et mises à jour), ou dossier publié |
+| macOS 12 et suivants | **WKWebView** (le moteur de Safari) | `PommeBrowser.app` dans une archive `.zip` |
+| Linux | **WebKitGTK 4.1** (le moteur de GNOME Web) | AppImage |
+
+Elle reprend les fonctions de l'édition Windows (WPF) et de l'édition Linux (GTK) :
+- le code du navigateur, partagé et lié depuis `../classes` et `../linux/Core` ;
+- les formats de fichiers ;
+- les dossiers de données.
+
+Chaque installation existante retrouve donc ses profils, favoris, coffre, historique et réglages.
+
+## Installer
+
+### Windows
+
+WebView2 est déjà présent sur Windows 11 et sur Windows 10 à jour (sinon : [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)).
+
+- **Version publiée** : l'installateur Velopack (`…-Setup.exe`) de la page des versions. Les mises à jour se font ensuite toutes seules.
+- **Compilation GitHub** : onglet **Actions**, artefact *PommeBrowser-Avalonia-Windows-x64*. Décompressez-le et lancez `MyHomelabBrowser.exe`.
+
+L'édition Avalonia est publiée avec le même identifiant et le même nom d'exécutable que l'édition WPF (voir **Publier**). Une installation existante la reçoit comme une mise à jour, avec ses données.
+
+### macOS
+
+Téléchargez `PommeBrowser-<version>-macos-arm64.zip` (Mac à puce Apple) ou `…-macos-x64.zip` (Mac Intel). Décompressez-le et placez `PommeBrowser.app` dans **Applications**.
+
+Tant que l'app n'est pas signée avec un certificat Developer ID, macOS demande une confirmation au premier lancement : clic droit sur l'app, puis **Ouvrir**.
+
+### Linux
+
+Le moteur web et GTK viennent de votre distribution, qui leur apporte ses mises à jour de sécurité :
+
+| Distribution | Commande |
+|---|---|
+| Ubuntu 22.04+, Linux Mint 21+, Debian 12+ | `sudo apt install libwebkit2gtk-4.1-0 libgtk-3-0 gstreamer1.0-plugins-good` |
+| Fedora 38+ | `sudo dnf install webkit2gtk4.1 gtk3 gstreamer1-plugins-good` |
+| Arch, Manjaro, EndeavourOS | `sudo pacman -S --needed webkit2gtk-4.1 gtk3 gst-plugins-good` |
+| openSUSE Tumbleweed | `sudo zypper install libwebkit2gtk-4_1-0 gtk3 gstreamer-plugins-good` |
+
+WebKitGTK 2.40 minimum. Si une bibliothèque manque, PommeBrowser l'indique au lancement, avec la commande à exécuter.
+
+Lancez ensuite l'AppImage (x86_64 pour les PC, aarch64 pour l'ARM 64 bits : Raspberry Pi 4/5…) :
+
+```bash
+chmod +x PommeBrowser-*-x86_64.AppImage
+./PommeBrowser-*-x86_64.AppImage
+```
+
+Elle porte le même nom que celle de l'édition GTK. Gardez-la dans un dossier modifiable (`~/Applications`…) : les versions suivantes s'installent toutes seules.
+
+## Fonctions
+
+**Navigation**
+- Onglets réorganisables et épinglables. `Ctrl+Maj+T` rouvre le dernier fermé.
+- Onglets privés (`Ctrl+Maj+N`), avec leur couleur propre.
+- Reprise de la session, plusieurs fenêtres, déplacement d'un onglet dans une nouvelle fenêtre.
+- Vue côte à côte : un clic dans un volet en fait l'onglet actif.
+- Espaces de travail et mise en veille des onglets inactifs.
+
+**Barre d'adresse et page d'accueil**
+- Propositions au fil de la saisie : services du homelab, favoris, pages visitées.
+- Commandes (`:`) et accès direct à un onglet (`@`).
+- Page d'accueil avec les services du homelab, leur état en direct, les favoris et les pages récentes.
+
+**Profils et mots de passe**
+- Profils protégés par mot de passe, avec leurs propres réglages, favoris, historique, cookies et coffre.
+- Coffre chiffré, au même format que les autres éditions :
+  - PommeBrowser propose d'enregistrer les identifiants et remplit les formulaires ;
+  - codes de double authentification (TOTP) ;
+  - page « Mots de passe ».
+
+**Anti-pub** (listes EasyList et EasyPrivacy, mêmes réglages partout)
+- Linux et macOS : les listes sont converties en règles WebKit, compilées une fois, puis appliquées par le moteur.
+- Windows : chaque requête passe par le moteur de règles de l'édition WPF, avec le même masquage des emplacements publicitaires.
+- Désactivable par site. Le réseau local n'est pas filtré par défaut.
+
+**Sécurité**
+- HTTPS automatique, avec une page claire quand un site ne le propose pas.
+- Certificats du homelab : la page de PommeBrowser montre l'émetteur et l'empreinte, vous pouvez les approuver, et vous êtes prévenu s'ils changent.
+- Autorisations des sites (position, caméra, micro, notifications…) mémorisées par site.
+- Protection contre le pistage.
+
+**Flash**
+- Ruffle, intégré et vérifié par SHA-256 à la compilation, sans aucun CDN.
+- Pour les contenus que Ruffle ne lit pas : Basilisk, livré avec PommeBrowser sous le nom « Pomme Legacy » (Windows x64, Linux x86_64). La page s'ouvre dans l'onglet, avec le lecteur Flash d'origine. Adobe interdit de redistribuer Flash Player : chacun ajoute sa copie dans **Paramètres › Avancé**. Le bouton **Rechercher le module Flash** la trouve sur l'ordinateur (dossier d'installation de Flash, Bureau, Téléchargements, Documents, autres disques sous Windows), par exemple dans un Basilisk ou un Pale Moon portable ; sans résultat, il propose de choisir le dossier où chercher. Le module est vérifié (bibliothèque 64 bits) puis copié dans les données de PommeBrowser, et les versions qui bloquent les contenus depuis janvier 2021 sont signalées. Détails dans [`legacy-engine/README.md`](../legacy-engine/README.md).
+
+**Autres**
+- Téléchargements sans boîte de dialogue, jamais par-dessus un fichier existant.
+- Recherche dans la page, zoom mémorisé par site, impression, outils de développement, plein écran.
+- Import des favoris des autres navigateurs (dont Safari sous macOS).
+- « Signaler un problème » : même rapport que les autres éditions.
+- Mises à jour : Velopack sous Windows, AppImage sous Linux.
+- Thème clair, sombre ou celui du système. Français ou anglais.
+
+**Différences selon le moteur**
+
+| | Windows (WebView2) | macOS (WKWebView) | Linux (WebKitGTK) |
+|---|---|---|---|
+| Scripts de PommeBrowser (coffre, Ruffle) | dans la page | monde isolé, invisible pour la page | monde isolé, invisible pour la page |
+| Ruffle servi depuis | `https://ruffle.pommebrowser.invalid/` (intercepté) | `http://127.0.0.1:<port>/ruffle/` | schéma `pomme-ruffle://` |
+| Raccourcis | `Ctrl` | `Cmd` (ou `Ctrl`) | `Ctrl` |
+
+## Où sont les données ?
+
+| Système | Réglages des profils | Historique, session, cookies | Cache |
+|---|---|---|---|
+| Windows | `%APPDATA%\MyHomelabBrowser\` (comme l'édition WPF) | `%APPDATA%\MyHomelabBrowser\profiles\<nom>\`, et WebView2 dans `%LOCALAPPDATA%\PommeBrowser\Profiles\<nom>\WebView2` | `%LOCALAPPDATA%\PommeBrowser\Cache\` |
+| macOS | `~/Library/Application Support/PommeBrowser/` | `~/Library/Application Support/PommeBrowser/profiles/<nom>/` | `~/Library/Caches/PommeBrowser/` |
+| Linux | `~/.config/MyHomelabBrowser/` (comme l'édition GTK) | `~/.local/share/pommebrowser/` | `~/.cache/pommebrowser/` |
+
+Les fichiers des profils ont le même format sur les trois systèmes. Vous pouvez copier `favorites.json`, `services.json`, `workspaces.json` ou `vault.json.enc` d'un système à l'autre.
+
+## Compiler
+
+Il faut le SDK .NET 10 et, sous Linux, les bibliothèques ci-dessus.
+
+```bash
+dotnet run --project avalonia                     # lancer depuis les sources
+dotnet test tests/PommeBrowser.Tests              # tests de la logique commune
+```
+
+Paquets :
+
+```bash
+avalonia/packaging/linux/build-appimage.sh all    # AppImage x86_64 et aarch64 (depuis Linux)
+linux/packaging/smoke-test.sh avalonia/packaging/out/PommeBrowser-*-x86_64.AppImage
+avalonia/packaging/macos/build-app.sh all         # PommeBrowser.app arm64 et x64 (depuis un Mac)
+```
+
+```powershell
+.\build-pack-velopack.ps1 -Edition avalonia       # Windows : Velopack + version GitHub
+```
+
+La CI GitHub (`.github/workflows/build.yml`) construit les trois paquets à chaque modification. Elle essaie aussi de lancer l'AppImage.
+
+- **Ruffle** et les outils AppImage sont téléchargés dans une version fixée et vérifiés par SHA-256.
+- **Pomme Legacy** (moteur Flash d'origine) : compilé par sa propre CI, puis pris dans la version GitHub `legacy-engine-<version>` (voir [`legacy-engine/README.md`](../legacy-engine/README.md)).
+- **Signature macOS** (facultative) : `POMMEBROWSER_MACOS_SIGN_IDENTITY` (certificat Developer ID) et `POMMEBROWSER_NOTARY_PROFILE` (notarisation).
+- **Signature Windows** : mêmes variables que l'édition WPF (`POMMEBROWSER_AZURE_SIGN_METADATA` ou `POMMEBROWSER_SIGN_PARAMS`).
+- **Serveur de support** : `-p:SupportApiUrl=https://…` à la compilation, ou la variable `POMMEBROWSER_SUPPORT_API_URL`.
+
+## Publier
+
+Les trois éditions cherchent leurs mises à jour sur `vazer7070/PommeBrowser-release`.
+
+1. **Windows** : `.\build-pack-velopack.ps1 -Edition avalonia`. Même identifiant de paquet (`com.vazer7070.myhomelabbrowser`), même canal et même `MyHomelabBrowser.exe` que l'édition WPF : ses utilisateurs passent à l'édition Avalonia à la mise à jour suivante.
+2. **Linux** : `avalonia/packaging/linux/build-appimage.sh all`, puis `linux/packaging/publish-release.sh --avalonia`. Mêmes noms que les AppImage de l'édition GTK : ses utilisateurs passent à l'édition Avalonia de la même façon.
+3. **macOS** : ajoutez les archives `.zip` et leurs `.sha256` à la version.
+
+## Organisation du code
+
+| Dossier | Contenu |
+|---|---|
+| `Core/` | Logique propre à l'édition : emplacements des données par système, anti-pub, coffre, téléchargements, relance, migrations |
+| `Engine/` | Interface commune des moteurs (`IEngineTab`, `EngineHost`), raccourcis, Ruffle |
+| `Engine/Gtk/` | WebKitGTK : appels directs à WebKit, clavier de la vue intégrée sous X11, fenêtres surgissantes |
+| `Engine/WebView2/` | WebView2 : onglet, téléchargements, fenêtres de connexion, raccourcis |
+| `Engine/Apple/` | WKWebView : runtime Objective-C (délégués, blocs), onglet, téléchargements, fenêtres |
+| `Views/` | Fenêtre, onglets, barre d'adresse, pages internes, boîtes de dialogue |
+| `Legacy/` | Basilisk (Linux et Windows) : lancement, fenêtre logée dans l'onglet (X11, Win32), moteur livré et module Flash |
+| `Updates/` | Velopack (Windows), AppImage (Linux) |
+| `packaging/` | AppImage, app macOS |
