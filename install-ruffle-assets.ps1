@@ -5,9 +5,9 @@
 
 $ErrorActionPreference = "Stop"
 
-$version = "0.3.0"
+$version = "0.6.0"
 # Même valeur que RuffleSha256 dans build/Ruffle.targets.
-$expectedSha256 = "9cdc5baac95dea452d2ef4a3859f3a4c8576dd3377bb40849e41fb6359170d7d"
+$expectedSha256 = "e8acfacc37443303872379d0e215999af846854d1dd3fa8fac0a765445b43dbf"
 $archiveName = "ruffle-$version-web-selfhosted.zip"
 $downloadUrl = "https://github.com/ruffle-rs/ruffle/releases/download/v$version/$archiveName"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path

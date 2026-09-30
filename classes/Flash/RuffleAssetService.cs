@@ -14,7 +14,7 @@ namespace MyHomelabBrowser.classes.Flash
         public const string VirtualHost = "ruffle.pomme.internal";
 
         /// <summary>Version attendue (propriété RuffleVersion de build/Ruffle.targets).</summary>
-        public const string PinnedVersion = "0.3.0";
+        public const string PinnedVersion = "0.6.0";
 
         public static string AssetDirectory =>
             Path.Combine(AppContext.BaseDirectory, "Assets", "Ruffle");

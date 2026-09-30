@@ -140,7 +140,7 @@ avalonia/packaging/macos/build-app.sh all         # PommeBrowser.app arm64 et x6
 
 La CI GitHub (`.github/workflows/build.yml`) lance les tests et construit les paquets Windows, macOS et Linux à chaque modification. Elle essaie aussi de lancer l'AppImage.
 
-- **Ruffle** et les outils AppImage sont téléchargés dans une version fixée et vérifiés par SHA-256.
+- **Ruffle** et les outils AppImage sont téléchargés dans une version fixée et vérifiés par SHA-256. Chaque lundi, `.github/workflows/ruffle-update.yml` compare la version de Ruffle à la dernière publiée et ouvre une issue (version, SHA-256, fichiers à modifier) quand une nouvelle version sort.
 - **Pomme Legacy** (moteur Flash d'origine) : compilé par sa propre CI, puis pris dans la version GitHub `legacy-engine-<version>` (voir [`legacy-engine/README.md`](../legacy-engine/README.md)).
 - **Signature macOS** (facultative) : `POMMEBROWSER_MACOS_SIGN_IDENTITY` (certificat Developer ID) et `POMMEBROWSER_NOTARY_PROFILE` (notarisation).
 - **Signature Windows** : mêmes variables que l'édition WPF (`POMMEBROWSER_AZURE_SIGN_METADATA` ou `POMMEBROWSER_SIGN_PARAMS`).

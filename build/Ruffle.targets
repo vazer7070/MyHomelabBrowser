@@ -8,8 +8,8 @@
 		install-ruffle-assets.ps1).
 	-->
 	<PropertyGroup>
-		<RuffleVersion>0.3.0</RuffleVersion>
-		<RuffleSha256>9cdc5baac95dea452d2ef4a3859f3a4c8576dd3377bb40849e41fb6359170d7d</RuffleSha256>
+		<RuffleVersion>0.6.0</RuffleVersion>
+		<RuffleSha256>e8acfacc37443303872379d0e215999af846854d1dd3fa8fac0a765445b43dbf</RuffleSha256>
 		<RuffleArchive>ruffle-$(RuffleVersion)-web-selfhosted.zip</RuffleArchive>
 		<RuffleUrl>https://github.com/ruffle-rs/ruffle/releases/download/v$(RuffleVersion)/$(RuffleArchive)</RuffleUrl>
 		<RuffleAssetDir Condition="'$(RuffleAssetDir)' == ''">$(MSBuildProjectDirectory)/Assets/Ruffle</RuffleAssetDir>
