@@ -30,6 +30,7 @@ namespace PommeBrowser.Engine.WebView2
     sealed class WebView2EngineTab : IEngineTab, IAdBlockWebView
     {
         readonly NativeWebView _host;
+        readonly nint _viewWindow;
         readonly CoreWebView2 _core;
         readonly CoreWebView2Controller? _controller;
         readonly HashSet<string> _channels = new(StringComparer.Ordinal);
@@ -46,9 +47,10 @@ namespace PommeBrowser.Engine.WebView2
         string? _hoveredLink;
         bool _findAttached;
 
-        WebView2EngineTab(NativeWebView host, CoreWebView2 core, CoreWebView2Controller? controller, bool isPrivate)
+        WebView2EngineTab(NativeWebView host, nint viewWindow, CoreWebView2 core, CoreWebView2Controller? controller, bool isPrivate)
         {
             _host = host;
+            _viewWindow = viewWindow;
             _core = core;
             _controller = controller;
             IsPrivate = isPrivate;
@@ -103,7 +105,7 @@ namespace PommeBrowser.Engine.WebView2
                 if (corePointer == 0)
                     throw new InvalidOperationException("WebView2 : vue sans CoreWebView2.");
                 CoreWebView2 core = CoreWebView2.CreateFromComICoreWebView2(corePointer);
-                return new WebView2EngineTab(host, core, WrapController(controllerPointer), isPrivate);
+                return new WebView2EngineTab(host, handle.Handle, core, WrapController(controllerPointer), isPrivate);
             }
             finally
             {
@@ -574,15 +576,26 @@ namespace PommeBrowser.Engine.WebView2
         void OnHostFocusChanged(object? sender, RoutedEventArgs e) => Dispatcher.UIThread.Post(() => SyncKeyboard());
 
         /// <summary>
-        /// Un champ d'Avalonia prend le focus : Windows le laisse à la fenêtre de WebView2 tant qu'on
-        /// ne le reprend pas (Avalonia ne le fait pas), et la saisie irait dans la page.
+        /// Un champ d'Avalonia prend le focus, ou la page est cachée : Windows laisse le clavier à
+        /// WebView2 tant qu'on ne le reprend pas (Avalonia ne le fait pas), et la saisie irait dans
+        /// la page. Seul le clavier gardé par cette page-ci est repris, pas celui d'un autre onglet
+        /// ni de Basilisk logé dans la fenêtre.
+        /// Aucun élément d'Avalonia n'a le focus : Windows l'a donné à une fenêtre enfant (clic dans
+        /// la page ou dans Basilisk), et Avalonia l'a perdu avec la fenêtre. Le clavier y reste :
+        /// le reprendre couperait la saisie de la page qu'on vient de cliquer.
         /// </summary>
         public void SyncKeyboard(bool force = false)
         {
-            if (_disposed || (_host.IsKeyboardFocusWithin && _host.IsEffectivelyVisible))
+            if (_disposed || _viewWindow == 0)
                 return;
-            if (TopLevel.GetTopLevel(_host)?.TryGetPlatformHandle() is { HandleDescriptor: "HWND" } handle)
-                VirtualKeys.TakeFocusFromChild(handle.Handle);
+            bool shown = _host.IsEffectivelyVisible;
+            if (shown && _host.IsKeyboardFocusWithin)
+                return;
+            TopLevel? topLevel = TopLevel.GetTopLevel(_host);
+            if (shown && topLevel?.FocusManager?.GetFocusedElement() == null)
+                return;
+            if (topLevel?.TryGetPlatformHandle() is { HandleDescriptor: "HWND" } handle)
+                VirtualKeys.TakeFocusFromChild(handle.Handle, _viewWindow);
         }
 
         public void Focus()
@@ -691,7 +704,8 @@ namespace PommeBrowser.Engine.WebView2
             }
         }
 
-        public void AddUserScript(string id, string source, bool allFrames, bool atDocumentStart)
+        /// <summary>Toujours dans le monde de la page (WebView2 n'en a pas d'autre).</summary>
+        public void AddUserScript(string id, string source, bool allFrames, bool atDocumentStart, bool pageWorld = false)
         {
             if (_disposed)
                 return;

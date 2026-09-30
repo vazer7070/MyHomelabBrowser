@@ -25,6 +25,12 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
         private byte[]? _salt;
 
         public bool IsUnlocked => _key is { Length: > 0 };
+
+        /// <summary>
+        /// Cause technique du dernier échec « coffre illisible » (type et message de l'erreur,
+        /// jamais le mot de passe ni le contenu), pour le journal des erreurs.
+        /// </summary>
+        public string? LastUnlockError { get; private set; }
         public bool IsSessionUnlocked => IsUnlocked;
         public bool VaultExists => File.Exists(_getVaultPath()) || File.Exists(GetBackupPath());
         public DateTime? UnlockAvailableAtUtc => LoadSecurityState().LockedUntilUtc;
@@ -83,10 +89,27 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             }
         }
 
-        public bool TryUnlock(string vaultPassword)
+        public bool TryUnlock(string vaultPassword) => TryUnlock(vaultPassword, out _);
+
+        /// <summary>
+        /// Déverrouille le coffre ; en cas d'échec, <paramref name="failure"/> dit pourquoi. Seul un
+        /// mot de passe refusé par le chiffrement compte comme un essai raté : un fichier abîmé ou
+        /// d'un format inconnu est signalé comme tel (<see cref="LastUnlockError"/>), sans bloquer.
+        /// </summary>
+        public bool TryUnlock(string vaultPassword, out VaultUnlockFailure failure)
         {
-            if (string.IsNullOrEmpty(vaultPassword) || IsUnlockBlocked())
+            failure = VaultUnlockFailure.None;
+            LastUnlockError = null;
+            if (string.IsNullOrEmpty(vaultPassword))
+            {
+                failure = VaultUnlockFailure.WrongPassword;
                 return false;
+            }
+            if (IsUnlockBlocked())
+            {
+                failure = VaultUnlockFailure.Locked;
+                return false;
+            }
 
             var primaryPath = _getVaultPath();
             var backupPath = GetBackupPath();
@@ -104,7 +127,8 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                     out var primaryBytes,
                     out var primaryKey,
                     out var primaryNeedsMigration,
-                    out var authenticationFailed);
+                    out var authenticationFailed,
+                    out var primaryError);
 
                 if (primaryLoaded)
                 {
@@ -122,11 +146,15 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                 {
                     RegisterUnlockFailure();
                     Lock();
+                    failure = VaultUnlockFailure.WrongPassword;
                     return false;
                 }
+                LastUnlockError = Path.GetFileName(primaryPath) + " : " + primaryError;
             }
 
             // La sauvegarde n'est utilisée que si le principal manque ou est corrompu.
+            bool backupAuthenticationFailed = false;
+            string? backupError = null;
             if (File.Exists(backupPath)
                 && TryLoadVault(
                     backupPath,
@@ -136,7 +164,8 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                     out var backupBytes,
                     out var backupKey,
                     out var backupNeedsMigration,
-                    out _))
+                    out backupAuthenticationFailed,
+                    out backupError))
             {
                 CompleteUnlock(
                     backupPayload!,
@@ -148,9 +177,42 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                 return true;
             }
 
-            RegisterUnlockFailure();
             Lock();
+            if (backupAuthenticationFailed)
+            {
+                RegisterUnlockFailure();
+                failure = VaultUnlockFailure.WrongPassword;
+                return false;
+            }
+
+            // Aucun fichier lisible : ce n'est pas le mot de passe qui est en cause.
+            if (backupError != null)
+                LastUnlockError = (LastUnlockError != null ? LastUnlockError + " ; " : string.Empty) + Path.GetFileName(backupPath) + " : " + backupError;
+            failure = VaultUnlockFailure.Unreadable;
             return false;
+        }
+
+        /// <summary>
+        /// Mot de passe perdu : le coffre (et sa sauvegarde) est mis de côté sous un autre nom,
+        /// jamais effacé, puisqu'il reste déchiffrable si le mot de passe revient. Un nouveau
+        /// coffre peut ensuite être créé. Renvoie le fichier mis de côté, ou null s'il n'y en avait pas.
+        /// </summary>
+        public string? ResetVault()
+        {
+            Lock();
+            string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
+            string? archived = null;
+            foreach (string path in new[] { _getVaultPath(), GetBackupPath() })
+            {
+                if (!File.Exists(path))
+                    continue;
+                string target = path + ".reset-" + stamp;
+                File.Move(path, target);
+                archived ??= target;
+            }
+            ResetUnlockProtection();
+            LastUnlockError = null;
+            return archived;
         }
 
         private bool TryLoadVault(
@@ -161,8 +223,10 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             out byte[]? bytes,
             out byte[]? derivedKey,
             out bool needsMigration,
-            out bool authenticationFailed)
+            out bool authenticationFailed,
+            out string? error)
         {
+            error = null;
             payload = null;
             envelope = null;
             bytes = null;
@@ -184,9 +248,10 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                         envelope.Nonce,
                         envelope.Ciphertext);
                 }
-                catch (CryptographicException)
+                catch (CryptographicException ex)
                 {
                     authenticationFailed = true;
+                    error = ex.GetType().Name;
                     CryptographicOperations.ZeroMemory(derivedKey);
                     derivedKey = null;
                     return false;
@@ -196,8 +261,9 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                 payload = DeserializePayload(decryptedJson);
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
+                error = ex.GetType().Name + ": " + ex.Message;
                 if (derivedKey != null)
                 {
                     CryptographicOperations.ZeroMemory(derivedKey);

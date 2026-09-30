@@ -47,13 +47,10 @@ namespace PommeBrowser.Views.Pages
             };
 
             SuggestionList.ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<OmniboxEntry>((entry, _) => _window.BuildSuggestion(entry), supportsRecycling: false);
-            SuggestionList.AddHandler(PointerReleasedEvent, (_, _) =>
-            {
-                if (SuggestionList.SelectedItem is OmniboxEntry entry)
-                    Run(entry);
-            }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+            MainWindow.HandleSuggestionClicks(SuggestionList, Run);
 
-            SearchBox.TextChanged += (_, _) =>
+            // TextChanging : signalé tout de suite, pendant que _settingText est levé (voir la barre d'adresse).
+            SearchBox.TextChanging += (_, _) =>
             {
                 ClearButton.IsVisible = !string.IsNullOrEmpty(SearchBox.Text);
                 if (_settingText)

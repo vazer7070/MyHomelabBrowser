@@ -18,9 +18,10 @@ namespace MyHomelabBrowser.classes.Flash
         public const string UserChrome =
             "/* Fichier géré par PommeBrowser. */\n" +
             "#navigator-toolbox, #TabsToolbar, #nav-bar, #toolbar-menubar, #PersonalToolbar,\n" +
-            "#titlebar, #sidebar-box, #sidebar-splitter { visibility: collapse !important; }\n";
+            "#titlebar, #titlebar-buttonbox-container, #sidebar-box, #sidebar-splitter { visibility: collapse !important; }\n";
 
-        public static IReadOnlyList<(string Name, object Value)> For(bool isPrivate)
+        /// <summary><paramref name="embedded"/> : Basilisk est logé dans l'onglet (Windows, X11).</summary>
+        public static IReadOnlyList<(string Name, object Value)> For(bool isPrivate, bool embedded = true)
         {
             var prefs = new List<(string, object)>
             {
@@ -84,6 +85,12 @@ namespace MyHomelabBrowser.classes.Flash
                 ("browser.cache.disk.capacity", 262144)
             };
 
+            // Logé dans l'onglet : pas d'onglets dessinés dans la barre de titre. Sous Windows,
+            // Basilisk y étend le cadre de la fenêtre, où Windows dessine les boutons (dont ✕)
+            // même sans barre de titre.
+            if (embedded)
+                prefs.Add(("browser.tabs.drawInTitlebar", false));
+
             if (isPrivate)
             {
                 // Onglet privé : profil jetable, rien n'est conservé même avant sa suppression.
@@ -95,10 +102,10 @@ namespace MyHomelabBrowser.classes.Flash
             return prefs;
         }
 
-        public static string BuildUserJs(bool isPrivate)
+        public static string BuildUserJs(bool isPrivate, bool embedded = true)
         {
             var builder = new StringBuilder(Header);
-            foreach ((string name, object value) in For(isPrivate))
+            foreach ((string name, object value) in For(isPrivate, embedded))
                 builder.Append("user_pref(\"").Append(name).Append("\", ").Append(Format(value)).Append(");\n");
             return builder.ToString();
         }
@@ -113,7 +120,7 @@ namespace MyHomelabBrowser.classes.Flash
         public static void Apply(string profileDirectory, bool isPrivate, bool embedded = true)
         {
             Directory.CreateDirectory(Path.Combine(profileDirectory, "chrome"));
-            AtomicFile.WriteAllText(Path.Combine(profileDirectory, "user.js"), BuildUserJs(isPrivate));
+            AtomicFile.WriteAllText(Path.Combine(profileDirectory, "user.js"), BuildUserJs(isPrivate, embedded));
             AtomicFile.WriteAllText(Path.Combine(profileDirectory, "chrome", "userChrome.css"), embedded ? UserChrome : SeparateWindowChrome);
         }
 

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Profiles.Credentials;
 using MyHomelabBrowser.classes.Security;
 using PommeBrowser.Views;
@@ -78,17 +79,65 @@ namespace PommeBrowser.Core
             var form = new FormDialog(Tr("Déverrouiller le coffre"), Tr("Déverrouiller"));
             form.AddText(Tr("Saisissez le mot de passe du coffre pour utiliser vos identifiants enregistrés."));
             TextBox password = form.AddEntry(Tr("Mot de passe du coffre"), password: true);
+            bool forgotten = false;
+            form.AddExtraButton(Tr("Mot de passe oublié…"), destructive: false, () =>
+            {
+                forgotten = true;
+                form.Close();
+            });
             form.Submit = async () =>
             {
                 if (LockMessage() is { } locked)
                     return locked;
                 string text = password.Text ?? string.Empty;
-                if (!await RunAsync(() => Service.TryUnlock(text)))
-                    return LockMessage() ?? Tr("Mot de passe du coffre incorrect.");
-                Changed?.Invoke();
-                return null;
+                (bool unlocked, VaultUnlockFailure failure) = await RunAsync(() => (Service.TryUnlock(text, out VaultUnlockFailure reason), reason));
+                if (unlocked)
+                {
+                    Changed?.Invoke();
+                    return null;
+                }
+                if (failure == VaultUnlockFailure.Unreadable)
+                {
+                    ErrorLog.Write("Coffre", new System.IO.InvalidDataException(Service.LastUnlockError ?? "Coffre illisible"));
+                    return Tr("Le fichier du coffre est illisible : il est abîmé ou d'un format inconnu (détails dans le journal des erreurs). Le mot de passe n'est pas en cause.");
+                }
+                return LockMessage() ?? Tr("Mot de passe du coffre incorrect. Vérifiez la saisie avec l'œil du champ (majuscules, accents, caractères spéciaux).");
             };
-            return await form.ShowAsync(owner);
+            if (await form.ShowAsync(owner))
+                return true;
+            return forgotten && await ResetAsync(owner);
+        }
+
+        /// <summary>
+        /// Mot de passe perdu : l'ancien coffre est mis de côté (jamais effacé, il reste lisible si
+        /// le mot de passe revient) et un nouveau coffre vide est créé.
+        /// </summary>
+        public async Task<bool> ResetAsync(Window owner)
+        {
+            if (!await Dialogs.ConfirmAsync(owner, Tr("Réinitialiser le coffre ?"),
+                    Tr("Sans son mot de passe, le coffre ne peut pas être ouvert : personne ne peut le récupérer, pas même PommeBrowser. Un nouveau coffre vide va être créé. L'ancien n'est pas effacé : il est gardé de côté et pourra encore être ouvert si le mot de passe vous revient."),
+                    Tr("Réinitialiser"), destructive: true))
+                return false;
+
+            string? archived;
+            try
+            {
+                archived = Service.ResetVault();
+            }
+            catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+            {
+                ErrorLog.Write("Coffre", ex);
+                await Dialogs.AlertAsync(owner, Tr("Réinitialiser le coffre ?"), Tr("Impossible de mettre l'ancien coffre de côté : {0}", ex.Message));
+                return false;
+            }
+            if (archived != null)
+                RuntimeLogBuffer.Append("[Coffre] Ancien coffre mis de côté : " + archived);
+            Changed?.Invoke();
+
+            bool created = await CreateAsync(owner);
+            if (created && archived != null && owner is MainWindow window)
+                window.ShowToast(Tr("Nouveau coffre créé. L'ancien est gardé dans {0}.", archived));
+            return created;
         }
 
         string? LockMessage()

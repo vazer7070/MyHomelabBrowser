@@ -873,14 +873,17 @@ namespace PommeBrowser.Engine.Gtk
             completion.TrySetResult(text);
         }
 
-        public void AddUserScript(string id, string source, bool allFrames, bool atDocumentStart)
+        public void AddUserScript(string id, string source, bool allFrames, bool atDocumentStart, bool pageWorld = false)
             => Glib.Post(() =>
             {
                 if (_disposed || _manager == 0)
                     return;
                 RemoveScriptOnGlib(id);
-                nint script = webkit_user_script_new_for_world(source, allFrames ? InjectAllFrames : InjectTopFrame,
-                    atDocumentStart ? InjectAtStart : InjectAtEnd, GtkEngine.World, 0, 0);
+                int frames = allFrames ? InjectAllFrames : InjectTopFrame;
+                int time = atDocumentStart ? InjectAtStart : InjectAtEnd;
+                nint script = pageWorld
+                    ? webkit_user_script_new(source, frames, time, 0, 0)
+                    : webkit_user_script_new_for_world(source, frames, time, GtkEngine.World, 0, 0);
                 webkit_user_content_manager_add_script(_manager, script);
                 _scripts[id] = script;
             });

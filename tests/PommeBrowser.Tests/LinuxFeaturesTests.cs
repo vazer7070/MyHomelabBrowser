@@ -235,9 +235,12 @@ public sealed class LinuxFeaturesTests : IDisposable
         LegacyProfilePreferences.Apply(profile, isPrivate: false, embedded: false);
         string chrome = File.ReadAllText(Path.Combine(profile, "chrome", "userChrome.css"));
         Assert.DoesNotContain("collapse", chrome);
+        Assert.DoesNotContain("drawInTitlebar", File.ReadAllText(Path.Combine(profile, "user.js")));
 
+        // Logé dans l'onglet : ni barres d'outils, ni onglets dans la barre de titre (boutons de fenêtre).
         LegacyProfilePreferences.Apply(profile, isPrivate: false);
         Assert.Contains("collapse", File.ReadAllText(Path.Combine(profile, "chrome", "userChrome.css")));
+        Assert.Contains("user_pref(\"browser.tabs.drawInTitlebar\", false);", File.ReadAllText(Path.Combine(profile, "user.js")));
     }
 
     // ---------------------------------------------------------------

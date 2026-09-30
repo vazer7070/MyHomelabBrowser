@@ -191,7 +191,7 @@ namespace PommeBrowser.Views
         async Task CreateProfileAsync()
         {
             var form = new FormDialog(Tr("Créer un profil"), Tr("Créer"));
-            form.AddText(Tr("Le nouveau profil a ses propres réglages, favoris, historique, cookies et mots de passe. PommeBrowser redémarre avec lui."));
+            form.AddText(Tr("Le nouveau profil a ses propres réglages, favoris, historique, cookies et mots de passe."));
             TextBox name = form.AddEntry(Tr("Nom du profil"));
             TextBox password = form.AddEntry(Tr("Mot de passe (6 caractères minimum)"), password: true);
             TextBox confirm = form.AddEntry(Tr("Confirmer le mot de passe"), password: true);
@@ -202,6 +202,7 @@ namespace PommeBrowser.Views
             confirm.TextChanged += (_, _) => Validate();
             Validate();
 
+            UserProfile? created = null;
             form.Submit = async () =>
             {
                 string username = (name.Text ?? string.Empty).Trim();
@@ -224,10 +225,21 @@ namespace PommeBrowser.Views
                     return ex.Message;
                 }
 
-                UserProfile? created = App.Profiles.FindProfile(username);
-                return created == null ? Tr("Impossible de créer le profil.") : ApplyProfileChange(() => App.Profiles.LoginSilent(created));
+                created = App.Profiles.FindProfile(username);
+                return created == null ? Tr("Impossible de créer le profil.") : null;
             };
             await form.ShowAsync(this);
+
+            // Le profil est créé sans quitter celui-ci : l'ouvrir relance PommeBrowser (ses cookies
+            // et ses données de sites ne peuvent pas remplacer ceux des pages ouvertes), seulement si
+            // on le demande.
+            if (created == null)
+                return;
+            int choice = await Dialogs.Dialogs.ChoiceAsync(this, Tr("Profil « {0} » créé", created.Username),
+                Tr("Ouvrir ce profil maintenant ? PommeBrowser redémarre avec lui. Les onglets ouverts restent dans le profil actuel et reviennent quand vous le rouvrez."),
+                (Tr("Ouvrir maintenant"), true, false), (Tr("Plus tard"), false, false));
+            if (choice == 0 && ApplyProfileChange(() => App.Profiles.LoginSilent(created)) is { } error)
+                ShowToast(error, warning: true);
         }
 
         /// <summary>Nom, mot de passe ou suppression du profil ouvert : son mot de passe actuel est demandé.</summary>

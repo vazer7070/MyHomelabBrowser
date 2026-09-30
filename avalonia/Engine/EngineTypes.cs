@@ -217,8 +217,11 @@ namespace PommeBrowser.Engine
         /// <summary>Exécute un script dans la page ; isolé : invisible pour les scripts de la page.</summary>
         Task<string?> EvaluateAsync(string script, bool isolated);
 
-        /// <summary>Script injecté à chaque chargement (monde isolé de PommeBrowser).</summary>
-        void AddUserScript(string id, string source, bool allFrames, bool atDocumentStart);
+        /// <summary>
+        /// Script injecté à chaque chargement, dans le monde isolé de PommeBrowser ; avec
+        /// <paramref name="pageWorld"/>, dans celui de la page (pour ce qui doit la modifier avant ses scripts).
+        /// </summary>
+        void AddUserScript(string id, string source, bool allFrames, bool atDocumentStart, bool pageWorld = false);
         void RemoveUserScript(string id);
 
         /// <summary>Canal de messages des scripts isolés vers PommeBrowser.</summary>

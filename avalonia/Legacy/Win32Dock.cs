@@ -59,7 +59,8 @@ namespace PommeBrowser.Legacy
             _client = client;
             SetParent(client, Host);
             int style = GetWindowLongW(client, GwlStyle);
-            style = (style & ~(WsPopup | WsCaption | WsThickFrame)) | WsChild | WsVisible;
+            // Ni cadre ni boutons de fenêtre : Basilisk n'est plus qu'une page de l'onglet.
+            style = (style & ~(WsPopup | WsCaption | WsThickFrame | WsSysMenu | WsMinimizeBox | WsMaximizeBox)) | WsChild | WsVisible;
             SetWindowLongW(client, GwlStyle, style);
             int exStyle = GetWindowLongW(client, GwlExStyle);
             SetWindowLongW(client, GwlExStyle, (exStyle & ~WsExAppWindow) | WsExToolWindow);
@@ -87,7 +88,7 @@ namespace PommeBrowser.Legacy
             ShowWindow(client, SwHide);
             SetParent(client, 0);
             int style = GetWindowLongW(client, GwlStyle);
-            SetWindowLongW(client, GwlStyle, (style & ~WsChild) | WsPopup | WsCaption | WsThickFrame);
+            SetWindowLongW(client, GwlStyle, (style & ~WsChild) | WsPopup | WsCaption | WsThickFrame | WsSysMenu | WsMinimizeBox | WsMaximizeBox);
             int exStyle = GetWindowLongW(client, GwlExStyle);
             SetWindowLongW(client, GwlExStyle, (exStyle & ~WsExToolWindow) | WsExAppWindow);
         }
@@ -290,6 +291,9 @@ namespace PommeBrowser.Legacy
         const int WsPopup = unchecked((int)0x80000000);
         const int WsCaption = 0x00C00000;
         const int WsThickFrame = 0x00040000;
+        const int WsSysMenu = 0x00080000;
+        const int WsMinimizeBox = 0x00020000;
+        const int WsMaximizeBox = 0x00010000;
         const int WsExAppWindow = 0x00040000;
         const int WsExToolWindow = 0x00000080;
         const uint SwpNoSize = 0x0001;
