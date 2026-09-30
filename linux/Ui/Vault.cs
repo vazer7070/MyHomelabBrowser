@@ -64,7 +64,7 @@ namespace PommeBrowser.Linux.Ui
                 Create(parent, onReady);
         }
 
-        /// <summary>Calcul de la clé (PBKDF2) hors du fil de l'interface ; le coffre n'est pas lu pendant ce temps.</summary>
+        /// <summary>Calcul de la clé (Argon2id) hors du fil de l'interface ; le coffre n'est pas lu pendant ce temps.</summary>
         async Task<T> RunAsync<T>(Func<T> work)
         {
             _busy = true;

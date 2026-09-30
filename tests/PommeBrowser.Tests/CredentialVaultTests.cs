@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using MyHomelabBrowser.classes.Profiles.Credentials;
 
 namespace PommeBrowser.Tests;
@@ -125,5 +128,119 @@ public sealed class CredentialVaultTests : IDisposable
     public void Reset_without_a_vault_does_nothing()
     {
         Assert.Null(NewService().ResetVault());
+    }
+
+    // ---------------------------------------------------------------
+    // Argon2id
+    // ---------------------------------------------------------------
+
+    static bool IsArgon2File(string path) => File.ReadAllBytes(path).AsSpan().StartsWith("PVK2"u8);
+
+    /// <summary>Vecteur de test de la RFC 9106 (5.3, Argon2id).</summary>
+    [Fact]
+    public void Argon2id_matches_the_RFC_9106_test_vector()
+    {
+        byte[] tag = VaultKeyDerivation.Argon2id(
+            Enumerable.Repeat((byte)1, 32).ToArray(),
+            Enumerable.Repeat((byte)2, 16).ToArray(),
+            memoryKiB: 32, iterations: 3, parallelism: 4, length: 32,
+            secret: Enumerable.Repeat((byte)3, 8).ToArray(),
+            associatedData: Enumerable.Repeat((byte)4, 12).ToArray());
+
+        Assert.Equal("0d640df58d78766c08c037a34a8b53c9d01ef0452d75b65eb52520e96b01e659", Convert.ToHexString(tag).ToLowerInvariant());
+    }
+
+    [Fact]
+    public void A_new_vault_is_protected_with_Argon2id()
+    {
+        CreateVaultWithOneEntry();
+        Assert.True(IsArgon2File(VaultPath));
+    }
+
+    /// <summary>Coffre au format d'avant (PBKDF2), tel que l'écrivaient les versions précédentes.</summary>
+    void WritePbkdf2Vault(string path, string password, string site, string user, string secret)
+    {
+        byte[] salt = RandomNumberGenerator.GetBytes(16);
+        byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, 200_000, HashAlgorithmName.SHA256, 32);
+        string json = JsonSerializer.Serialize(new
+        {
+            Credentials = new[] { new { Host = site, Username = user, Password = secret, UpdatedAt = DateTime.UtcNow } },
+            Policies = Array.Empty<object>()
+        });
+        byte[] plain = Encoding.UTF8.GetBytes(json);
+        byte[] nonce = RandomNumberGenerator.GetBytes(12);
+        byte[] tag = new byte[16];
+        byte[] cipher = new byte[plain.Length];
+        using (var aes = new AesGcm(key, 16))
+            aes.Encrypt(nonce, plain, cipher, tag);
+
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var writer = new BinaryWriter(File.Create(path));
+        writer.Write(salt.Length);
+        writer.Write(salt);
+        writer.Write(nonce.Length);
+        writer.Write(nonce);
+        writer.Write(tag.Length + cipher.Length);
+        writer.Write(tag);
+        writer.Write(cipher);
+    }
+
+    [Fact]
+    public void An_older_PBKDF2_vault_opens_and_is_converted_to_Argon2id()
+    {
+        WritePbkdf2Vault(VaultPath, Password, "https://jeu.exemple.com", "moi", "secret-du-site");
+        File.Copy(VaultPath, VaultPath + ".bak");
+        Assert.False(IsArgon2File(VaultPath));
+
+        CredentialVaultService vault = NewService();
+        Assert.True(vault.TryUnlock(Password, out VaultUnlockFailure failure));
+        Assert.Equal(VaultUnlockFailure.None, failure);
+        Assert.Equal("secret-du-site", Assert.Single(vault.GetAll()).Password);
+
+        // Converti sans rien demander : coffre et sauvegarde, même mot de passe.
+        Assert.True(IsArgon2File(VaultPath));
+        Assert.True(IsArgon2File(VaultPath + ".bak"));
+        CredentialVaultService reopened = NewService();
+        Assert.True(reopened.TryUnlock(Password));
+        Assert.Equal("secret-du-site", Assert.Single(reopened.GetAll()).Password);
+        Assert.False(NewService().TryUnlock("Paques@2026#€", out VaultUnlockFailure wrong));
+        Assert.Equal(VaultUnlockFailure.WrongPassword, wrong);
+    }
+
+    [Fact]
+    public void A_wrong_password_leaves_an_older_vault_untouched()
+    {
+        WritePbkdf2Vault(VaultPath, Password, "https://jeu.exemple.com", "moi", "secret-du-site");
+        byte[] before = File.ReadAllBytes(VaultPath);
+
+        Assert.False(NewService().TryUnlock("mauvais", out VaultUnlockFailure failure));
+
+        Assert.Equal(VaultUnlockFailure.WrongPassword, failure);
+        Assert.Equal(before, File.ReadAllBytes(VaultPath));
+    }
+
+    [Fact]
+    public void Excessive_Argon2id_parameters_make_the_file_unreadable_not_slow()
+    {
+        CreateVaultWithOneEntry();
+        byte[] bytes = File.ReadAllBytes(VaultPath);
+        BitConverter.GetBytes(64 * 1024 * 1024).CopyTo(bytes, 4); // 64 Gio demandés
+        File.WriteAllBytes(VaultPath, bytes);
+        File.Delete(VaultPath + ".bak");
+
+        Assert.False(NewService().TryUnlock(Password, out VaultUnlockFailure failure));
+        Assert.Equal(VaultUnlockFailure.Unreadable, failure);
+    }
+
+    [Fact]
+    public void Changed_Argon2id_parameters_are_detected()
+    {
+        CreateVaultWithOneEntry();
+        byte[] bytes = File.ReadAllBytes(VaultPath);
+        BitConverter.GetBytes(2).CopyTo(bytes, 8); // passes : 3 → 2
+        File.WriteAllBytes(VaultPath, bytes);
+
+        Assert.False(NewService().TryUnlock(Password, out VaultUnlockFailure failure));
+        Assert.Equal(VaultUnlockFailure.WrongPassword, failure);
     }
 }

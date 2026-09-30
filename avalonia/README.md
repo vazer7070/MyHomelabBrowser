@@ -71,10 +71,11 @@ Elle porte le même nom que celle de l'édition GTK. Gardez-la dans un dossier m
 **Profils et mots de passe**
 - Profils protégés par mot de passe, avec leurs propres réglages, favoris, historique, cookies et coffre.
 - Changement de profil sans redémarrer sous Windows et macOS : les fenêtres du profil quitté se ferment et celles du nouveau profil s'ouvrent au même endroit, avec ses onglets. Sous Linux, WebKitGTK fixe ses dossiers de données au démarrage : PommeBrowser redémarre. Renommer ou supprimer un profil redémarre partout (ses dossiers ne se déplacent qu'au démarrage).
-- Coffre chiffré, au même format que les autres éditions :
+- Coffre chiffré (AES-256-GCM, clé dérivée du mot de passe avec Argon2id : 64 Mio, 3 passes, 4 voies) :
   - PommeBrowser propose d'enregistrer les identifiants et remplit les formulaires ;
   - codes de double authentification (TOTP) ;
-  - page « Mots de passe ».
+  - page « Mots de passe », verrouillage automatique après un délai sans utilisation ;
+  - un coffre créé par une version précédente (clé PBKDF2) est converti à son premier déverrouillage, sans rien demander. Les éditions WPF et GTK, gelées, ne lisent le nouveau format qu'à partir de cette version.
 
 **Anti-pub** (listes EasyList et EasyPrivacy, mêmes réglages partout)
 - Linux et macOS : les listes sont converties en règles WebKit, compilées une fois, puis appliquées par le moteur.

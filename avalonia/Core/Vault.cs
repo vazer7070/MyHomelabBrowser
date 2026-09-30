@@ -88,7 +88,7 @@ namespace PommeBrowser.Core
         public Task<bool> EnsureUnlockedAsync(Window owner)
             => IsUnlocked ? Task.FromResult(true) : Service.VaultExists ? UnlockAsync(owner) : CreateAsync(owner);
 
-        /// <summary>Calcul de la clé (PBKDF2) hors du fil de l'interface ; le coffre n'est pas lu pendant ce temps.</summary>
+        /// <summary>Calcul de la clé (Argon2id) hors du fil de l'interface ; le coffre n'est pas lu pendant ce temps.</summary>
         async Task<T> RunAsync<T>(Func<T> work)
         {
             _busy = true;
