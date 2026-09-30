@@ -45,6 +45,7 @@ namespace PommeBrowser
             History = new HistoryService(AppPaths.HistoryDatabase);
             Zoom = new SiteZoomStore(() => AppPaths.Profile("zoom.json"));
             CertificatePins = new CertificatePinStore(() => AppPaths.Profile("pinned-certificates.json"));
+            Vault = new Vault(() => Settings.VaultAutoLockMinutes);
         }
 
         public static BrowserApp Current { get; private set; } = null!;
@@ -62,6 +63,9 @@ namespace PommeBrowser
 
         /// <summary>Hôtes dont le certificat a été accepté pendant cette session (non épinglé).</summary>
         public HashSet<string> SessionTrustedHosts { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Hôtes ramenés sur Ruffle après une bascule automatique : plus de bascule pendant la session.</summary>
+        public HashSet<string> SessionRuffleHosts { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Hôtes qui ne répondent pas en HTTPS (pas de nouvel essai pendant la session).</summary>
         public HashSet<string> HttpOnlyHosts { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -123,6 +127,14 @@ namespace PommeBrowser
             placement?.ApplyTo(window);
             RestoreSession(window, urls);
             window.Show();
+
+            // Durée du démarrage, jusqu'à la fenêtre affichée (journal joint aux rapports).
+            if (placement == null)
+            {
+                Dispatcher.UIThread.Post(() => RuntimeLogBuffer.Append(
+                    $"[Démarrage] fenêtre affichée en {System.Diagnostics.Stopwatch.GetElapsedTime(Program.StartedAt).TotalMilliseconds:F0} ms"),
+                    DispatcherPriority.Background);
+            }
         }
 
         void OnShutdownRequested(object? sender, ShutdownRequestedEventArgs e)

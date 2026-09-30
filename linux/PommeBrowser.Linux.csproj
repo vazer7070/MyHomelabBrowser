@@ -29,6 +29,8 @@
 		<PackageReference Include="GirCore.Adw-1" Version="0.8.1" />
 		<PackageReference Include="GirCore.WebKit-6.0" Version="0.8.1" />
 		<PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+		<!-- Argon2id : clé du coffre des mots de passe. -->
+		<PackageReference Include="Konscious.Security.Cryptography.Argon2" Version="1.3.1" />
 		<!-- Même bibliothèque SQLite native que l'édition Windows (la version tirée par défaut est vulnérable). -->
 		<PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
 	</ItemGroup>
@@ -61,6 +63,7 @@
 		<Compile Include="../classes/Profiles/Credentials/VaultPayload.cs" Link="Shared/Profiles/Credentials/VaultPayload.cs" />
 		<Compile Include="../classes/Profiles/Credentials/VaultSecurityState.cs" Link="Shared/Profiles/Credentials/VaultSecurityState.cs" />
 		<Compile Include="../classes/Profiles/Credentials/VaultUnlockFailure.cs" Link="Shared/Profiles/Credentials/VaultUnlockFailure.cs" />
+		<Compile Include="../classes/Profiles/Credentials/VaultKeyDerivation.cs" Link="Shared/Profiles/Credentials/VaultKeyDerivation.cs" />
 		<Compile Include="../classes/Security/Totp.cs" Link="Shared/Security/Totp.cs" />
 		<Compile Include="../classes/Workspaces/WorkspaceStore.cs" Link="Shared/Workspaces/WorkspaceStore.cs" />
 		<Compile Include="../classes/Flash/FlashDebugConsole.cs" Link="Shared/Flash/FlashDebugConsole.cs" />

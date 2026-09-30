@@ -64,6 +64,10 @@ namespace MyHomelabBrowser.classes
         public bool ReportIncludeLogs { get; set; } = true;
         public bool ReportIncludePcInfo { get; set; } = true;
         public bool ReportIncludeMode { get; set; } = true;
+
+        // Coffre verrouillé après ce délai sans utilisation (0 : jamais).
+        public int VaultAutoLockMinutes { get; set; } = 15;
+
         public StartupMode Startup { get; set; }
         public string? CustomStartupPage { get; set; }
 
@@ -74,6 +78,9 @@ namespace MyHomelabBrowser.classes
 
         // Ruffle intégré est le moteur principal. Basilisk reste un secours manuel.
         public bool PreferRuffle { get; set; } = true;
+
+        // Contenu que Ruffle ne sait pas lire : la page passe d'elle-même au moteur de secours.
+        public bool FlashAutoFallback { get; set; } = true;
 
         // Chemin vers basilisk.exe
         public string BasiliskPath { get; set; } = "";
@@ -115,6 +122,7 @@ namespace MyHomelabBrowser.classes
                 // 🔥 Flash
                 EnableFlashSupport = EnableFlashSupport,
                 PreferRuffle = PreferRuffle,
+                FlashAutoFallback = FlashAutoFallback,
                 BasiliskPath = BasiliskPath,
                 FlashDebugEnabled = FlashDebugEnabled,
 
@@ -122,6 +130,7 @@ namespace MyHomelabBrowser.classes
                 ReportIncludeLogs = ReportIncludeLogs,
                 ReportIncludePcInfo = ReportIncludePcInfo,
                 ReportIncludeMode = ReportIncludeMode,
+                VaultAutoLockMinutes = VaultAutoLockMinutes,
 
                 Commands = Commands
                     .Select(c => new CommandSetting

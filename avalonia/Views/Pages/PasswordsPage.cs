@@ -32,6 +32,9 @@ namespace PommeBrowser.Views.Pages
         public PasswordsPage(MainWindow window) : base(window, Tr("Mots de passe"))
         {
             App.Vault.Changed += ScheduleRefresh;
+            // Clic ou saisie dans la page : le coffre sert, le délai de verrouillage repart.
+            AddHandler(PointerPressedEvent, (_, _) => App.Vault.Touch(), Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
+            AddHandler(KeyDownEvent, (_, _) => App.Vault.Touch(), Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
             // Codes 2FA : mis à jour chaque seconde tant que la page est affichée.
             _timer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => UpdateCodes());
             _timer.Start();

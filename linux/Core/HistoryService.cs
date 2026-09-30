@@ -24,7 +24,8 @@ namespace PommeBrowser.Linux.Core
             try
             {
                 var store = new HistoryStore(databasePath);
-                store.Trim();
+                // Élagage des visites les plus anciennes : sans attendre, il ne touche pas aux récentes.
+                store.TrimInBackground();
                 _recent.AddRange(store.LoadRecent(InMemory));
                 _store = store;
             }

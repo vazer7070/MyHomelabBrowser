@@ -344,6 +344,15 @@ namespace PommeBrowser.Views.Pages
                     : Tr("« Essentielle » active la protection intelligente contre le pistage ; « Équilibrée » et « Stricte » bloquent en plus les cookies tiers.")),
                 Buttons(Action(Tr("Autorisations des sites…"), () => _ = SitePermissionsDialog.ShowAsync(_window)))));
 
+            // Coffre des mots de passe
+            var lockDelays = new[] { 5, 15, 30, 60 }.Select(m => (m, Tr("{0} min", m))).Append((0, Tr("Jamais"))).ToList();
+            panel.Children.Add(Card(Tr("Coffre des mots de passe"), Tr("Le coffre se verrouille tout seul quand il n’a pas servi depuis ce délai ; son mot de passe est alors redemandé."),
+                Choice(Tr("Verrouiller automatiquement après"), lockDelays, Settings.VaultAutoLockMinutes, minutes =>
+                {
+                    Settings.VaultAutoLockMinutes = minutes;
+                    Save();
+                })));
+
             // DNS sécurisé (WebView2 seulement)
             if (EngineHost.Kind == EngineKind.WebView2)
                 panel.Children.Add(BuildSecureDns());
@@ -512,6 +521,11 @@ namespace PommeBrowser.Views.Pages
                 Check(Tr("Activer le moteur Flash intégré (Ruffle)"), Settings.EnableFlashSupport, value =>
                 {
                     Settings.EnableFlashSupport = value;
+                    Save();
+                }),
+                Check(Tr("Ouvrir dans Basilisk les contenus que Ruffle ne sait pas lire"), Settings.FlashAutoFallback, value =>
+                {
+                    Settings.FlashAutoFallback = value;
                     Save();
                 }),
                 Check(Tr("Mode debug Flash (journal détaillé)"), Settings.FlashDebugEnabled, value =>

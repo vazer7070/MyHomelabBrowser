@@ -109,4 +109,30 @@ public sealed class HistoryStoreTests : IDisposable
 
         Assert.Equal(Enumerable.Range(15, 5).Select(i => $"https://site{i}.fr/"), store.LoadRecent(50).Select(h => h.Url));
     }
+
+    [Fact]
+    public void Trim_in_background_keeps_the_most_recent_visits()
+    {
+        using var store = new HistoryStore(DatabasePath);
+        for (int i = 0; i < 20; i++)
+            store.Add(Visit($"https://site{i}.fr/", 100 - i));
+
+        store.TrimInBackground(maxEntries: 5);
+        store.Flush();
+
+        Assert.Equal(Enumerable.Range(15, 5).Select(i => $"https://site{i}.fr/"), store.LoadRecent(50).Select(h => h.Url));
+    }
+
+    [Fact]
+    public void Trim_below_the_limit_keeps_everything()
+    {
+        using var store = new HistoryStore(DatabasePath);
+        for (int i = 0; i < 5; i++)
+            store.Add(Visit($"https://site{i}.fr/", 100 - i));
+        store.Flush();
+
+        store.Trim(maxEntries: 5);
+
+        Assert.Equal(5, store.LoadRecent(50).Count);
+    }
 }

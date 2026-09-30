@@ -45,6 +45,10 @@ namespace PommeBrowser
         /// ouvre les données du profil (dossier WebView2, magasin de données WebKit). Sous Linux,
         /// WebKitGTK fixe ses dossiers de données au démarrage du programme : PommeBrowser se relance,
         /// sinon cookies et données des sites passeraient d'un profil à l'autre.
+        /// Les dossiers qu'accepte Avalonia.Controls.WebView (BaseDataDirectory) n'y changent rien :
+        /// chaque onglet aurait alors sa propre session WebKit (et son processus réseau) sur les mêmes
+        /// fichiers — connexions invisibles d'un onglet à l'autre, bases des sites ouvertes par
+        /// plusieurs processus. Il faudrait que le paquet accepte un contexte WebKit partagé.
         /// </summary>
         public static bool SwitchesProfileInPlace => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS();
 
@@ -116,7 +120,7 @@ namespace PommeBrowser
             _lifetime.ShutdownRequested -= OnShutdownRequested;
             _monitor?.Stop();
             AdBlock.Detach();
-            Vault.Lock();
+            Vault.Dispose();
             History.Dispose();
             LegacyBrowser.CloseAll();
         }

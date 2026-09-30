@@ -1,5 +1,8 @@
 name: Compilation et tests
 
+# Seule l'édition Avalonia (avalonia/) est maintenue et construite. Les éditions WPF (racine) et
+# GTK (linux/) sont gelées : leur code reste dans le dépôt, linux/Core est commun avec Avalonia.
+
 on:
   push:
     branches: [master]
@@ -14,42 +17,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Windows
-    runs-on: windows-latest
-    env:
-      DOTNET_NOLOGO: true
-      DOTNET_CLI_TELEMETRY_OPTOUT: true
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Restauration des paquets
-        run: dotnet restore MyHomelabBrowser.sln
-
-      - name: Compilation de l'application
-        run: dotnet build MyHomelabBrowser.csproj --configuration Release --no-restore
-
-      - name: Tests
-        run: >
-          dotnet test tests/PommeBrowser.Tests/PommeBrowser.Tests.csproj
-          --configuration Release
-          --no-restore
-          --logger "trx;LogFileName=resultats.trx"
-          --results-directory TestResults
-
-      - name: Résultats des tests
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: resultats-tests
-          path: TestResults
-          if-no-files-found: ignore
-
   support-server:
     name: Serveur de support
     runs-on: ubuntu-latest
@@ -70,44 +37,6 @@ jobs:
       - name: Image Docker
         run: docker build --tag pommebrowser-support:ci support-server
 
-  linux:
-    name: Linux (AppImage)
-    runs-on: ubuntu-24.04
-    env:
-      DOTNET_NOLOGO: true
-      DOTNET_CLI_TELEMETRY_OPTOUT: true
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Tests (logique commune et édition Linux)
-        run: dotnet test tests/PommeBrowser.Tests/PommeBrowser.Tests.csproj --configuration Release
-
-      - name: Compilation de l'édition Linux
-        run: dotnet build linux/PommeBrowser.Linux.csproj --configuration Release
-
-      - name: AppImage (x86_64 et aarch64)
-        run: linux/packaging/build-appimage.sh all
-
-      - name: Essai de lancement
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends libwebkitgtk-6.0-4 libadwaita-1-0 gstreamer1.0-plugins-good xvfb xauth dbus
-          linux/packaging/smoke-test.sh linux/packaging/out/PommeBrowser-*-x86_64.AppImage
-
-      - name: Paquets AppImage
-        uses: actions/upload-artifact@v4
-        with:
-          name: PommeBrowser-Linux-AppImage
-          path: |
-            linux/packaging/out/*.AppImage
-            linux/packaging/out/*.sha256
-          if-no-files-found: error
-
   avalonia-linux:
     name: Avalonia Linux (AppImage)
     runs-on: ubuntu-24.04
@@ -121,6 +50,32 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+
+      - name: Tests
+        run: >
+          dotnet test tests/PommeBrowser.Tests/PommeBrowser.Tests.csproj
+          --configuration Release
+          --logger "trx;LogFileName=resultats.trx"
+          --results-directory TestResults
+
+      # Le vrai navigateur ouvert sans écran (Avalonia.Headless), piloté au clavier et à la souris.
+      - name: Tests de l'interface
+        timeout-minutes: 15
+        env:
+          AVALONIA_TELEMETRY_OPTOUT: 1
+        run: >
+          dotnet test tests/PommeBrowser.UiTests/PommeBrowser.UiTests.csproj
+          --configuration Release
+          --logger "trx;LogFileName=resultats-interface.trx"
+          --results-directory TestResults
+
+      - name: Résultats des tests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultats-tests
+          path: TestResults
+          if-no-files-found: ignore
 
       - name: Compilation de l'édition Avalonia
         run: dotnet build avalonia/PommeBrowser.csproj --configuration Release
@@ -183,10 +138,6 @@ jobs:
 
   avalonia-macos:
     name: Avalonia macOS (.app)
-    # Une minute de macOS en coûte dix de Linux : l'app n'est construite que sur master, à la
-    # demande (Run workflow) ou pour une PR portant l'étiquette « macos ». Le code macOS est
-    # compilé à chaque fois avec le reste de l'édition Avalonia (job Avalonia Linux).
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'macos')
     runs-on: macos-latest
     env:
       DOTNET_NOLOGO: true

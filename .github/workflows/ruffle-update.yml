@@ -1,0 +1,69 @@
+name: Ruffle à jour
+
+# Chaque lundi, compare la version de Ruffle fixée dans build/Ruffle.targets à la dernière version
+# publiée par Ruffle. Une version plus récente ouvre une issue (une seule par version) avec son
+# empreinte SHA-256 et les fichiers à modifier. Le changement de version reste manuel : chaque
+# nouvelle version est essayée avant d'être intégrée.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: Vérifier la version de Ruffle
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Comparer avec la dernière version publiée
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pinned=$(sed -n 's:.*<RuffleVersion>\(.*\)</RuffleVersion>.*:\1:p' build/Ruffle.targets)
+          # « latest » : dernière version stable (les versions nightly sont des préversions).
+          latest=$(gh release view --repo ruffle-rs/ruffle --json tagName --jq '.tagName' | sed 's/^v//')
+          echo "Version fixée : $pinned, dernière version : $latest"
+
+          if [ -z "$latest" ] || [ "$latest" = "$pinned" ] || \
+             [ "$(printf '%s\n%s\n' "$pinned" "$latest" | sort -V | tail -n1)" = "$pinned" ]; then
+            echo "Ruffle est à jour."
+            exit 0
+          fi
+
+          title="Ruffle $latest est disponible"
+          existing=$(gh issue list --state all --search "\"$title\" in:title" --json title --jq "map(select(.title == \"$title\")) | length")
+          if [ "$existing" != "0" ]; then
+            echo "Issue déjà ouverte pour Ruffle $latest."
+            exit 0
+          fi
+
+          archive="ruffle-$latest-web-selfhosted.zip"
+          gh release download "v$latest" --repo ruffle-rs/ruffle --pattern "$archive" --dir "$RUNNER_TEMP"
+          sha=$(sha256sum "$RUNNER_TEMP/$archive" | cut -d' ' -f1)
+
+          body=$(cat <<EOF
+          Ruffle **$latest** est publié : https://github.com/ruffle-rs/ruffle/releases/tag/v$latest
+          PommeBrowser utilise la version **$pinned**.
+
+          Archive : \`$archive\`
+          SHA-256 : \`$sha\`
+
+          Pour changer de version :
+          - \`build/Ruffle.targets\` : \`RuffleVersion\` et \`RuffleSha256\` ;
+          - \`classes/Flash/RuffleAssetService.cs\` : \`PinnedVersion\` ;
+          - \`install-ruffle-assets.ps1\` : \`\$version\` et \`\$expectedSha256\`.
+
+          Avant d'intégrer la version, vérifier qu'une page Flash détectée par SWFObject s'affiche,
+          et que la bascule vers Basilisk se déclenche toujours sur un SWF illisible
+          (écran d'erreur \`#panic\` dans le lecteur).
+          EOF
+          )
+          gh issue create --title "$title" --body "$body"

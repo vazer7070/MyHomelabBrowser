@@ -8,6 +8,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
 {
     public sealed class CredentialVaultService
     {
+        // Coffres créés avant Argon2id : déverrouillés avec PBKDF2, puis convertis (voir UpgradeKeyDerivation).
         private const int Pbkdf2Iterations = 200_000;
         private const int MaxVaultBytes = 16 * 1024 * 1024;
 
@@ -23,6 +24,9 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
 
         private byte[]? _key;
         private byte[]? _salt;
+
+        // Dérivation qui a produit _key : Argon2id (paramètres), ou null pour PBKDF2 (ancien format).
+        private Argon2Parameters? _kdf;
 
         public bool IsUnlocked => _key is { Length: > 0 };
 
@@ -55,6 +59,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
 
             _key = null;
             _salt = null;
+            _kdf = null;
             _cache.Clear();
             _policies.Clear();
         }
@@ -73,7 +78,8 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
                 _salt = RandomNumberGenerator.GetBytes(16);
-                _key = DeriveKey(vaultPassword, _salt);
+                _kdf = Argon2Parameters.Recommended;
+                _key = DeriveKey(vaultPassword, _salt, _kdf);
                 _cache.Clear();
                 _policies.Clear();
 
@@ -139,6 +145,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                         primaryKey!,
                         fromBackup: false,
                         needsMigration: primaryNeedsMigration);
+                    UpgradeKeyDerivation(vaultPassword);
                     return true;
                 }
 
@@ -174,6 +181,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                     backupKey!,
                     fromBackup: true,
                     needsMigration: backupNeedsMigration);
+                UpgradeKeyDerivation(vaultPassword);
                 return true;
             }
 
@@ -238,7 +246,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             {
                 bytes = ReadVaultFile(path);
                 envelope = VaultEnvelope.Deserialize(bytes);
-                derivedKey = DeriveKey(password, envelope.Salt);
+                derivedKey = DeriveKey(password, envelope.Salt, envelope.Kdf);
 
                 string decryptedJson;
                 try
@@ -246,7 +254,8 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                     decryptedJson = DecryptToString(
                         derivedKey,
                         envelope.Nonce,
-                        envelope.Ciphertext);
+                        envelope.Ciphertext,
+                        envelope.AssociatedData());
                 }
                 catch (CryptographicException ex)
                 {
@@ -286,6 +295,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             Lock();
             _key = derivedKey;
             _salt = envelope.Salt.ToArray();
+            _kdf = envelope.Kdf;
             _cache.AddRange(payload.Credentials);
             _policies.AddRange(payload.Policies);
 
@@ -299,6 +309,58 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                 Save();
         }
 
+        /// <summary>
+        /// Coffre d'avant Argon2id, tout juste déverrouillé : clé dérivée à nouveau avec Argon2id
+        /// (nouveau sel, même mot de passe), coffre et sauvegarde réécrits. Sans rien demander à
+        /// l'utilisateur. Si l'écriture échoue, le coffre reste ouvert avec l'ancienne clé, et la
+        /// conversion sera retentée au prochain déverrouillage.
+        /// </summary>
+        private void UpgradeKeyDerivation(string password)
+        {
+            if (_kdf != null || !IsUnlocked)
+                return;
+
+            byte[]? oldKey = _key;
+            byte[]? oldSalt = _salt;
+            byte[] salt = RandomNumberGenerator.GetBytes(16);
+            _kdf = Argon2Parameters.Recommended;
+            _salt = salt;
+            _key = DeriveKey(password, salt, _kdf);
+            try
+            {
+                Save();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                CryptographicOperations.ZeroMemory(_key);
+                _key = oldKey;
+                _salt = oldSalt;
+                _kdf = null;
+                return;
+            }
+
+            if (oldKey != null)
+                CryptographicOperations.ZeroMemory(oldKey);
+            if (oldSalt != null)
+                CryptographicOperations.ZeroMemory(oldSalt);
+
+            // La sauvegarde garde sinon l'ancien format, plus facile à attaquer : remplacée, ou retirée.
+            try
+            {
+                RefreshBackupFromPrimary();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+            {
+                try
+                {
+                    File.Delete(GetBackupPath());
+                }
+                catch (Exception deleteError) when (deleteError is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+
         public bool TryChangeVaultPassword(string currentVaultPassword, string newVaultPassword)
         {
             if (string.IsNullOrWhiteSpace(newVaultPassword) || !TryUnlock(currentVaultPassword))
@@ -310,7 +372,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             try
             {
                 newSalt = RandomNumberGenerator.GetBytes(16);
-                newKey = DeriveKey(newVaultPassword, newSalt);
+                newKey = DeriveKey(newVaultPassword, newSalt, Argon2Parameters.Recommended);
 
                 if (_key != null)
                     CryptographicOperations.ZeroMemory(_key);
@@ -319,6 +381,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
 
                 _key = newKey;
                 _salt = newSalt;
+                _kdf = Argon2Parameters.Recommended;
                 newKey = null;
                 newSalt = null;
 
@@ -528,7 +591,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             };
 
             var json = JsonSerializer.Serialize(payload, JsonOpts);
-            var envelope = VaultEnvelope.CreateFromPlaintext(json, _key!, _salt);
+            var envelope = VaultEnvelope.CreateFromPlaintext(json, _key!, _salt, _kdf);
             WriteAllBytesAtomic(_getVaultPath(), envelope.Serialize());
         }
 
@@ -835,17 +898,31 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             return actionUri.GetLeftPart(UriPartial.Path);
         }
 
-        private static byte[] DeriveKey(string password, byte[] salt)
+        /// <summary>Clé AES-256 du coffre : Argon2id (<paramref name="kdf"/>), ou PBKDF2 pour l'ancien format.</summary>
+        private static byte[] DeriveKey(string password, byte[] salt, Argon2Parameters? kdf)
         {
-            return Rfc2898DeriveBytes.Pbkdf2(
-                password,
-                salt,
-                Pbkdf2Iterations,
-                HashAlgorithmName.SHA256,
-                32);
+            if (kdf == null)
+            {
+                return Rfc2898DeriveBytes.Pbkdf2(
+                    password,
+                    salt,
+                    Pbkdf2Iterations,
+                    HashAlgorithmName.SHA256,
+                    32);
+            }
+
+            byte[] secret = Encoding.UTF8.GetBytes(password);
+            try
+            {
+                return VaultKeyDerivation.Argon2id(secret, salt, kdf.MemoryKiB, kdf.Iterations, kdf.Parallelism, 32);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(secret);
+            }
         }
 
-        private static string DecryptToString(byte[] key, byte[] nonce, byte[] ciphertext)
+        private static string DecryptToString(byte[] key, byte[] nonce, byte[] ciphertext, byte[]? associatedData)
         {
             if (ciphertext.Length < 17)
                 throw new InvalidDataException(Tr("Contenu chiffré invalide."));
@@ -857,7 +934,7 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             try
             {
                 using var aes = new AesGcm(key, 16);
-                aes.Decrypt(nonce, data, tag, plain);
+                aes.Decrypt(nonce, data, tag, plain, associatedData);
                 return Encoding.UTF8.GetString(plain);
             }
             finally
@@ -866,14 +943,13 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             }
         }
 
-        private static byte[] EncryptFromString(byte[] key, byte[] plaintextUtf8, out byte[] nonce)
+        private static byte[] EncryptFromString(byte[] key, byte[] plaintextUtf8, byte[] nonce, byte[]? associatedData)
         {
-            nonce = RandomNumberGenerator.GetBytes(12);
             var tag = new byte[16];
             var cipher = new byte[plaintextUtf8.Length];
 
             using var aes = new AesGcm(key, 16);
-            aes.Encrypt(nonce, plaintextUtf8, cipher, tag);
+            aes.Encrypt(nonce, plaintextUtf8, cipher, tag, associatedData);
 
             var result = new byte[tag.Length + cipher.Length];
             Buffer.BlockCopy(tag, 0, result, 0, tag.Length);
@@ -899,21 +975,46 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             public bool NeverSave { get; set; }
         }
 
+        /// <summary>Paramètres d'Argon2id enregistrés avec le coffre (bornés à la lecture).</summary>
+        private sealed record Argon2Parameters(int MemoryKiB, int Iterations, int Parallelism)
+        {
+            /// <summary>Deuxième choix recommandé par la RFC 9106 : 64 Mio, 3 passes, 4 voies.</summary>
+            public static readonly Argon2Parameters Recommended = new(64 * 1024, 3, 4);
+
+            // Un fichier modifié ne doit pas pouvoir réclamer des Go de mémoire ou des minutes de calcul.
+            public bool IsAcceptable =>
+                MemoryKiB is >= 8 * 1024 and <= 1024 * 1024 &&
+                Iterations is >= 1 and <= 20 &&
+                Parallelism is >= 1 and <= 16;
+        }
+
+        /// <summary>
+        /// Fichier du coffre. Format Argon2id : « PVK2 », paramètres d'Argon2id (mémoire en Kio,
+        /// passes, voies), puis sel, nonce et contenu chiffré (AES-256-GCM, étiquette en tête), le
+        /// début du fichier étant authentifié avec le contenu. Ancien format (PBKDF2) : sel, nonce
+        /// et contenu seulement. Chaque bloc est précédé de sa longueur (Int32).
+        /// </summary>
         private sealed class VaultEnvelope
         {
+            private static readonly byte[] Magic = "PVK2"u8.ToArray();
+
+            public Argon2Parameters? Kdf { get; init; }
             public byte[] Salt { get; init; } = Array.Empty<byte>();
             public byte[] Nonce { get; init; } = Array.Empty<byte>();
             public byte[] Ciphertext { get; init; } = Array.Empty<byte>();
+
+            /// <summary>Début du fichier (format, paramètres, sel, nonce), authentifié avec le contenu ; rien pour l'ancien format.</summary>
+            public byte[]? AssociatedData() => Kdf == null ? null : Header(Kdf, Salt, Nonce);
 
             public byte[] Serialize()
             {
                 using var stream = new MemoryStream();
                 using var writer = new BinaryWriter(stream);
 
-                writer.Write(Salt.Length);
-                writer.Write(Salt);
-                writer.Write(Nonce.Length);
-                writer.Write(Nonce);
+                if (Kdf != null)
+                    writer.Write(Header(Kdf, Salt, Nonce));
+                else
+                    WriteSaltAndNonce(writer, Salt, Nonce);
                 writer.Write(Ciphertext.Length);
                 writer.Write(Ciphertext);
                 writer.Flush();
@@ -925,6 +1026,15 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                 using var stream = new MemoryStream(bytes, writable: false);
                 using var reader = new BinaryReader(stream);
 
+                Argon2Parameters? kdf = null;
+                if (bytes.AsSpan().StartsWith(Magic))
+                {
+                    reader.ReadBytes(Magic.Length);
+                    kdf = new Argon2Parameters(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32());
+                    if (!kdf.IsAcceptable)
+                        throw new InvalidDataException(Tr("Paramètres de chiffrement du coffre invalides."));
+                }
+
                 var salt = ReadBounded(reader, min: 16, max: 64);
                 var nonce = ReadBounded(reader, min: 12, max: 32);
                 var ciphertext = ReadBounded(reader, min: 17, max: MaxVaultBytes);
@@ -934,20 +1044,23 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
 
                 return new VaultEnvelope
                 {
+                    Kdf = kdf,
                     Salt = salt,
                     Nonce = nonce,
                     Ciphertext = ciphertext
                 };
             }
 
-            public static VaultEnvelope CreateFromPlaintext(string json, byte[] key, byte[] salt)
+            public static VaultEnvelope CreateFromPlaintext(string json, byte[] key, byte[] salt, Argon2Parameters? kdf)
             {
                 var plain = Encoding.UTF8.GetBytes(json);
                 try
                 {
-                    var ciphertext = EncryptFromString(key, plain, out var nonce);
+                    byte[] nonce = RandomNumberGenerator.GetBytes(12);
+                    var ciphertext = EncryptFromString(key, plain, nonce, kdf == null ? null : Header(kdf, salt, nonce));
                     return new VaultEnvelope
                     {
+                        Kdf = kdf,
                         Salt = salt.ToArray(),
                         Nonce = nonce,
                         Ciphertext = ciphertext
@@ -957,6 +1070,27 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
                 {
                     CryptographicOperations.ZeroMemory(plain);
                 }
+            }
+
+            private static byte[] Header(Argon2Parameters kdf, byte[] salt, byte[] nonce)
+            {
+                using var stream = new MemoryStream();
+                using var writer = new BinaryWriter(stream);
+                writer.Write(Magic);
+                writer.Write(kdf.MemoryKiB);
+                writer.Write(kdf.Iterations);
+                writer.Write(kdf.Parallelism);
+                WriteSaltAndNonce(writer, salt, nonce);
+                writer.Flush();
+                return stream.ToArray();
+            }
+
+            private static void WriteSaltAndNonce(BinaryWriter writer, byte[] salt, byte[] nonce)
+            {
+                writer.Write(salt.Length);
+                writer.Write(salt);
+                writer.Write(nonce.Length);
+                writer.Write(nonce);
             }
 
             private static byte[] ReadBounded(BinaryReader reader, int min, int max)

@@ -1,5 +1,7 @@
 # PommeBrowser pour Linux
 
+> **Édition gelée.** Elle n'est plus mise à jour ni construite par la CI. Utilisez l'[édition Avalonia](../avalonia/README.md), qui fonctionne sous Linux, Windows et macOS et reprend vos profils. Le dossier `Core/` reste utilisé par l'édition Avalonia.
+
 Édition Linux de PommeBrowser, distribuée en **AppImage** : un seul fichier, sans installation.
 
 > L'**édition Avalonia** (dossier [`avalonia`](../avalonia/README.md)) réunit Windows, macOS et Linux dans une même application, avec les mêmes données. Son AppImage porte le même nom : publiée à la place de celle-ci, elle arrive comme une mise à jour.

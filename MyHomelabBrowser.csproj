@@ -55,6 +55,8 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+		<!-- Argon2id : clé du coffre des mots de passe. -->
+		<PackageReference Include="Konscious.Security.Cryptography.Argon2" Version="1.3.1" />
 		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
 		<PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
 		<PackageReference Include="Velopack" Version="1.2.0" />
@@ -66,10 +68,10 @@
 		<EmbeddedResource Include="lang\en.json" LogicalName="lang.en.json" />
 	</ItemGroup>
 
-	<ItemGroup>
-		<Content Include="Assets\Ruffle\**\*" Exclude="Assets\Ruffle\README.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-	</ItemGroup>
-
-	<!-- Ruffle embarqué : téléchargé et vérifié à la compilation (commun avec l'édition Linux). -->
+	<!--
+		Ruffle embarqué : téléchargé et vérifié à la compilation (commun avec l'édition Linux).
+		Ses fichiers sont ajoutés par la cible, après téléchargement : une liste figée ici réclamerait
+		encore ceux de la version précédente après un changement de version.
+	-->
 	<Import Project="build\Ruffle.targets" />
 </Project>

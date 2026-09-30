@@ -71,10 +71,11 @@ Elle porte le même nom que celle de l'édition GTK. Gardez-la dans un dossier m
 **Profils et mots de passe**
 - Profils protégés par mot de passe, avec leurs propres réglages, favoris, historique, cookies et coffre.
 - Changement de profil sans redémarrer sous Windows et macOS : les fenêtres du profil quitté se ferment et celles du nouveau profil s'ouvrent au même endroit, avec ses onglets. Sous Linux, WebKitGTK fixe ses dossiers de données au démarrage : PommeBrowser redémarre. Renommer ou supprimer un profil redémarre partout (ses dossiers ne se déplacent qu'au démarrage).
-- Coffre chiffré, au même format que les autres éditions :
+- Coffre chiffré (AES-256-GCM, clé dérivée du mot de passe avec Argon2id : 64 Mio, 3 passes, 4 voies) :
   - PommeBrowser propose d'enregistrer les identifiants et remplit les formulaires ;
   - codes de double authentification (TOTP) ;
-  - page « Mots de passe ».
+  - page « Mots de passe », verrouillage automatique après un délai sans utilisation ;
+  - un coffre créé par une version précédente (clé PBKDF2) est converti à son premier déverrouillage, sans rien demander. Les éditions WPF et GTK, gelées, ne lisent le nouveau format qu'à partir de cette version.
 
 **Anti-pub** (listes EasyList et EasyPrivacy, mêmes réglages partout)
 - Linux et macOS : les listes sont converties en règles WebKit, compilées une fois, puis appliquées par le moteur.
@@ -88,7 +89,7 @@ Elle porte le même nom que celle de l'édition GTK. Gardez-la dans un dossier m
 - Protection contre le pistage.
 
 **Flash**
-- Ruffle, intégré et vérifié par SHA-256 à la compilation, sans aucun CDN. Comme l'extension Ruffle, PommeBrowser annonce un lecteur Flash aux pages (`navigator.plugins`) : les sites qui vérifient la présence de Flash avant d'afficher leur contenu (SWFObject…) l'affichent, et Ruffle le lit. Le bouton Basilisk de la barre d'adresse ouvre la page avec le lecteur Flash d'origine, puis propose d'y ouvrir toujours ce site.
+- Ruffle, intégré et vérifié par SHA-256 à la compilation, sans aucun CDN. Comme l'extension Ruffle, PommeBrowser annonce un lecteur Flash aux pages (`navigator.plugins`) : les sites qui vérifient la présence de Flash avant d'afficher leur contenu (SWFObject…) l'affichent, et Ruffle le lit. Le bouton Basilisk de la barre d'adresse ouvre la page avec le lecteur Flash d'origine, puis propose d'y ouvrir toujours ce site. Quand Ruffle s'arrête sur une erreur (fichier illisible, contenu non pris en charge…), la page passe d'elle-même dans Basilisk, sauf si un autre contenu de la page est déjà lu ou si l'on est revenu à Ruffle pour ce site (réglage dans **Paramètres › Avancé**).
 - Pour les contenus que Ruffle ne lit pas : Basilisk, livré avec PommeBrowser sous le nom « Pomme Legacy » (Windows x64, Linux x86_64). La page s'ouvre dans l'onglet, avec le lecteur Flash d'origine. Adobe interdit de redistribuer Flash Player : chacun ajoute sa copie dans **Paramètres › Avancé**. Le bouton **Rechercher le module Flash** la trouve sur l'ordinateur (dossier d'installation de Flash, Bureau, Téléchargements, Documents, autres disques sous Windows), par exemple dans un Basilisk ou un Pale Moon portable ; sans résultat, il propose de choisir le dossier où chercher. Le module est vérifié (bibliothèque 64 bits) puis copié dans les données de PommeBrowser, et les versions qui bloquent les contenus depuis janvier 2021 sont signalées. Détails dans [`legacy-engine/README.md`](../legacy-engine/README.md).
 
 **Autres**
@@ -138,9 +139,9 @@ avalonia/packaging/macos/build-app.sh all         # PommeBrowser.app arm64 et x6
 .\build-pack-velopack.ps1 -Edition avalonia       # Windows : Velopack + version GitHub
 ```
 
-La CI GitHub (`.github/workflows/build.yml`) construit les paquets Windows et Linux à chaque modification, et essaie de lancer l'AppImage. L'app macOS, dix fois plus coûteuse en minutes, n'est construite que sur `master`, à la demande (**Actions › Compilation et tests › Run workflow**) ou pour une PR portant l'étiquette `macos` ; son code est quand même compilé à chaque fois avec le reste de l'édition Avalonia.
+La CI GitHub (`.github/workflows/build.yml`) lance les tests et construit les paquets Windows, macOS et Linux à chaque modification. Elle essaie aussi de lancer l'AppImage. Les tests de l'interface (`tests/PommeBrowser.UiTests`) ouvrent le vrai navigateur sans écran (Avalonia.Headless), avec des données temporaires, et le pilotent au clavier et à la souris : propositions de la barre d'adresse, page du coffre, verrouillage automatique, pages et réglages. Une page qui se reconstruirait sans fin fait échouer le test au lieu de le bloquer.
 
-- **Ruffle** et les outils AppImage sont téléchargés dans une version fixée et vérifiés par SHA-256.
+- **Ruffle** et les outils AppImage sont téléchargés dans une version fixée et vérifiés par SHA-256. Chaque lundi, `.github/workflows/ruffle-update.yml` compare la version de Ruffle à la dernière publiée et ouvre une issue (version, SHA-256, fichiers à modifier) quand une nouvelle version sort.
 - **Pomme Legacy** (moteur Flash d'origine) : compilé par sa propre CI, puis pris dans la version GitHub `legacy-engine-<version>` (voir [`legacy-engine/README.md`](../legacy-engine/README.md)).
 - **Signature macOS** (facultative) : `POMMEBROWSER_MACOS_SIGN_IDENTITY` (certificat Developer ID) et `POMMEBROWSER_NOTARY_PROFILE` (notarisation).
 - **Signature Windows** : mêmes variables que l'édition WPF (`POMMEBROWSER_AZURE_SIGN_METADATA` ou `POMMEBROWSER_SIGN_PARAMS`).

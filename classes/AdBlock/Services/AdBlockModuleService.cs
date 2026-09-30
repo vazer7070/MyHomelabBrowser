@@ -225,8 +225,8 @@ namespace MyHomelabBrowser.classes.AdBlock.Services
                 _statusMessage = Tr("Chargement des règles…");
                 StatusChanged?.Invoke(_statusMessage);
 
-                var sources = FilterLists.LoadAvailableLists();
-                await Task.Run(() => Engine.ReplaceRules(sources)).ConfigureAwait(false);
+                // Listes lues (plusieurs Mo) et compilées hors du fil de l'interface.
+                await Task.Run(() => Engine.ReplaceRules(FilterLists.LoadAvailableLists())).ConfigureAwait(false);
 
                 _statusMessage = Tr("{0:N0} règles réseau et {1:N0} règles visuelles chargées.", Engine.NetworkRuleCount, Engine.CosmeticRuleCount);
                 RulesChanged?.Invoke();

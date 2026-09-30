@@ -59,8 +59,10 @@ namespace PommeBrowser.Engine
         public const string PluginScript = RufflePluginScript.Source;
 
         /// <summary>
-        /// Détection des contenus Flash. <paramref name="post"/> : expression qui envoie « status »
-        /// à PommeBrowser (propre au moteur).
+        /// Détection des contenus Flash, puis suivi des lecteurs. <paramref name="post"/> : expression
+        /// qui envoie « status » à PommeBrowser (propre au moteur) : detected, loaded, blocked
+        /// (Ruffle refusé par la page), playing (un contenu a démarré) ou failed (Ruffle s'est arrêté
+        /// sur une erreur).
         /// </summary>
         public static string ProbeScript(string baseUrl, string post) => """
             (() => {
@@ -68,6 +70,7 @@ namespace PommeBrowser.Engine
               window.__pommeRuffleProbe = true;
               const FLASH_TYPES = ['application/x-shockwave-flash', 'application/futuresplash', 'application/vnd.adobe.flash.movie'];
               const CLSID = 'clsid:d27cdb6e-ae6d-11cf-96b8-444553540000';
+              const PLAYERS = 'ruffle-object, ruffle-embed, ruffle-player';
               const post = (status) => { try { __POST__; } catch (e) { } };
               const isSwf = (value) => {
                 try { const path = new URL(value, document.baseURI).pathname.toLowerCase(); return path.endsWith('.swf') || path.endsWith('.spl'); }
@@ -97,6 +100,31 @@ namespace PommeBrowser.Engine
                 script.onerror = reject;
                 (document.head || document.documentElement).appendChild(script);
               });
+              // Lecteurs Ruffle : « playing » dès qu'un contenu démarre, « failed » s'il s'arrête sur
+              // son écran d'erreur (#panic, dans son shadow root ouvert), à tout moment de la lecture.
+              const watch = () => {
+                const seen = new WeakSet();
+                let playing = false, failed = false;
+                const fail = () => { if (!failed) { failed = true; post('failed'); } };
+                const attach = (player) => {
+                  if (seen.has(player)) return;
+                  seen.add(player);
+                  player.addEventListener('loadedmetadata', () => { if (!playing) { playing = true; post('playing'); } });
+                  const box = player.shadowRoot && player.shadowRoot.getElementById('container');
+                  if (!box) return;
+                  if (box.querySelector('#panic')) { fail(); return; }
+                  new MutationObserver(() => { if (box.querySelector('#panic')) fail(); }).observe(box, { childList: true });
+                };
+                const scan = (node) => {
+                  if (!node || node.nodeType !== 1) return;
+                  if (node.localName.startsWith('ruffle-')) { attach(node); return; }
+                  if (node.firstElementChild) for (const el of node.querySelectorAll(PLAYERS)) attach(el);
+                };
+                scan(document.documentElement);
+                new MutationObserver((mutations) => {
+                  for (const m of mutations) for (const node of m.addedNodes) scan(node);
+                }).observe(document.documentElement, { childList: true, subtree: true });
+              };
               let observer = null;
               const inject = () => {
                 if (observer) observer.disconnect();
@@ -105,7 +133,7 @@ namespace PommeBrowser.Engine
                 post('detected');
                 load('__BASE__pomme-config.js')
                   .then(() => load('__BASE__ruffle.js'))
-                  .then(() => post('loaded'), () => post('blocked'));
+                  .then(() => { post('loaded'); watch(); }, () => post('blocked'));
               };
               if (contains(document.documentElement)) { inject(); return; }
               // Les contenus ajoutés après coup (SWFObject…) sont aussi détectés, pendant 30 secondes.
