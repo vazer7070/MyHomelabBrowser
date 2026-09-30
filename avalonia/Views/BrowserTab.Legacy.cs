@@ -37,13 +37,24 @@ namespace PommeBrowser.Views
         /// <summary>La page affichée est lue par le moteur intégré.</summary>
         public bool IsIntegratedFlash => Page == TabPage.Legacy && _integrated != null;
 
-        /// <summary>Contenu que Ruffle ne lit pas : moteur intégré s'il est prêt, sinon Basilisk.</summary>
+        /// <summary>
+        /// Contenu que Ruffle ne lit pas : moteur intégré s'il est prêt (à sa place dans la page si
+        /// possible, sinon à la place de la page), sinon Basilisk.
+        /// </summary>
         public void OpenFlashFallback(Uri uri)
         {
             if (OperatingSystem.IsWindows() && UsesIntegratedFlash)
-                OpenInIntegratedFlash(_flashContent!);
+            {
+                FlashContent content = _flashContent!;
+                if (CanPlaceInPage(content) && LegacyEngine.InstalledModule is { } module)
+                    OpenFlashInPage(content, module);
+                else
+                    OpenInIntegratedFlash(content);
+            }
             else
+            {
                 OpenInBasilisk(uri);
+            }
         }
 
         /// <summary>
@@ -252,7 +263,11 @@ namespace PommeBrowser.Views
         }
 
         /// <summary>Clavier de Basilisk logé dans l'onglet (voir MainWindow.SyncAllKeyboards).</summary>
-        public void SyncLegacyKeyboard(bool force) => _legacyView?.SyncKeyboard(force);
+        public void SyncLegacyKeyboard(bool force)
+        {
+            _legacyView?.SyncKeyboard(force);
+            _overlayView?.SyncKeyboard(force);
+        }
 
         void StopBasilisk() => _basilisk?.Close();
 
@@ -273,6 +288,7 @@ namespace PommeBrowser.Views
                 FlashDomainRules.RemoveRule(uri);
             _app.SessionRuffleHosts.Add(uri.Host);
             StopBasilisk();
+            CloseFlashOverlay();
             _basilisk = null;
             _legacyUri = null;
             _integrated = null;

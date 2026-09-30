@@ -97,4 +97,80 @@ namespace PommeBrowser.Engine
             return true;
         }
     }
+
+    /// <summary>
+    /// Position du contenu lu par le moteur intégré dans la page (script de suivi, voir
+    /// RuffleContent.FlashTrackerScript) : rectangle en pixels CSS par rapport à la zone affichée,
+    /// rapport pixels CSS / pixels de l'écran, et visibilité. Données de la page : bornées.
+    /// </summary>
+    public sealed record FlashRect(double X, double Y, double Width, double Height, double PixelRatio, bool Visible)
+    {
+        const double MaxCoordinate = 1_000_000;
+        const double MaxSize = 100_000;
+
+        /// <summary>Position reçue de la page, ou null si elle est invalide.</summary>
+        public static FlashRect? Parse(string json)
+        {
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(json);
+                JsonElement root = document.RootElement;
+                if (root.ValueKind != JsonValueKind.Object ||
+                    !Number(root, "x", out double x) || !Number(root, "y", out double y) ||
+                    !Number(root, "w", out double width) || !Number(root, "h", out double height) ||
+                    !Number(root, "dpr", out double ratio))
+                    return null;
+                if (Math.Abs(x) > MaxCoordinate || Math.Abs(y) > MaxCoordinate ||
+                    width is < 0 or > MaxSize || height is < 0 or > MaxSize || ratio is <= 0 or > 16)
+                    return null;
+                bool visible = root.TryGetProperty("visible", out JsonElement shown) && shown.ValueKind == JsonValueKind.True;
+                return new FlashRect(x, y, width, height, ratio, visible && width >= 1 && height >= 1);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        static bool Number(JsonElement root, string name, out double value)
+        {
+            value = 0;
+            return root.TryGetProperty(name, out JsonElement element) && element.ValueKind == JsonValueKind.Number &&
+                   element.TryGetDouble(out value) && double.IsFinite(value);
+        }
+
+        /// <summary>
+        /// Placement dans la zone de la page web (<paramref name="areaWidth"/> × <paramref name="areaHeight"/>
+        /// DIP, <paramref name="scaling"/> pixels de l'écran par DIP) : partie visible du contenu, en DIP,
+        /// et position et taille du contenu entier dans cette partie, en pixels de l'écran (négative
+        /// quand le haut ou la gauche est hors de la zone). Null si rien n'est visible.
+        /// </summary>
+        public FlashPlacement? Place(double areaWidth, double areaHeight, double scaling)
+        {
+            if (!Visible || !(scaling > 0) || !(areaWidth > 0) || !(areaHeight > 0))
+                return null;
+            double factor = PixelRatio / scaling;
+            double left = Math.Max(0, X * factor);
+            double top = Math.Max(0, Y * factor);
+            double right = Math.Min(areaWidth, (X + Width) * factor);
+            double bottom = Math.Min(areaHeight, (Y + Height) * factor);
+            if (right - left < 1 || bottom - top < 1)
+                return null;
+
+            // Origine de la fenêtre logée : celle qu'Avalonia lui donne (pixels tronqués).
+            int hostX = (int)(left * scaling);
+            int hostY = (int)(top * scaling);
+            return new FlashPlacement(left, top, right - left, bottom - top,
+                (int)Math.Round(X * PixelRatio) - hostX, (int)Math.Round(Y * PixelRatio) - hostY,
+                Math.Max(1, (int)Math.Round(Width * PixelRatio)), Math.Max(1, (int)Math.Round(Height * PixelRatio)));
+        }
+    }
+
+    /// <summary>
+    /// Contenu placé dans la page : partie visible (DIP, dans la zone de la page web), et fenêtre
+    /// du lecteur dans cette partie (pixels de l'écran).
+    /// </summary>
+    public readonly record struct FlashPlacement(
+        double Left, double Top, double Width, double Height,
+        int ClientX, int ClientY, int ClientWidth, int ClientHeight);
 }

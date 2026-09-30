@@ -75,15 +75,27 @@ Réglage **Paramètres › Avancé › Moteur Flash intégré (expérimental)**,
 2. Quand Ruffle échoue (ou au clic sur ⚡), l'onglet lance `flash\PommeFlashHost.exe` avec le module
    Flash importé (`avalonia/Legacy/FlashHostProcess.cs`), dans un job Windows qui le ferme avec
    PommeBrowser.
-3. La fenêtre annoncée par l'hôte (`ready`) est logée dans l'onglet par le même mécanisme que
-   Basilisk ; « Lire avec Ruffle » revient à la page.
+3. **Contenu du document principal : à sa place dans la page.** Le script de suivi
+   (`RuffleContent.FlashTrackerScript`) remplace l'élément repéré par la détection
+   (`data-pomme-flash`, gardé par Ruffle quand il remplace l'élément) par un emplacement noir de
+   même taille, ce qui arrête Ruffle, puis envoie sa position à chaque changement (défilement,
+   taille de la fenêtre, mise en page, zoom) : `rect:{x, y, w, h, dpr, visible}` en pixels CSS
+   (`FlashRect`, bornée). L'onglet loge la fenêtre de l'hôte dans une vue posée par-dessus la
+   page web (`BrowserTab.FlashOverlay.cs`) : la vue couvre la partie visible du contenu, et la
+   fenêtre du lecteur y garde sa taille entière, décalée quand le contenu dépasse de la zone
+   (`FlashRect.Place`, `Win32Dock.SetClientPlacement`). Les éléments de la page qui passent
+   par-dessus le contenu restent dessous, comme avec `wmode=window` dans les anciens navigateurs.
+4. **Contenu d'un cadre (iframe), ou élément introuvable** : la fenêtre de l'hôte est logée à la
+   place de la page, par le même mécanisme que Basilisk.
+5. ⚡ ou « Lire avec Ruffle » revient à Ruffle pour le site pendant la session. Si le lecteur
+   s'arrête, « Relancer » reprend l'emplacement laissé dans la page.
 
 Sans le réglage, sans module Flash ou sans description du contenu, Basilisk reste le moteur de secours.
 
 ## Étapes
 
 1. **Hôte NPAPI sous Windows** (fait) : le contenu principal est lu dans une fenêtre logée dans l'onglet.
-2. Contenu à sa place dans la page (suivi du défilement et des dimensions, `wmode`).
+2. **Contenu à sa place dans la page** (fait) : suivi du défilement, des dimensions et du zoom.
 3. Cookies et session partagés avec la page.
 4. `ExternalInterface` : appels entre les scripts de la page et Flash.
 5. Linux (`libflashplayer.so`, GTK 2 / XEmbed).

@@ -100,6 +100,11 @@ namespace PommeBrowser.Views
                 }
                 return;
             }
+            if (status.StartsWith(RuffleContent.RectPrefix, StringComparison.Ordinal))
+            {
+                OnFlashRect(status[RuffleContent.RectPrefix.Length..]);
+                return;
+            }
 
             switch (status)
             {
@@ -123,7 +128,8 @@ namespace PommeBrowser.Views
         /// </summary>
         void OnRuffleFailed()
         {
-            if (Page != TabPage.Web || !BasiliskInstall.IsOpenable(WebUrl, out Uri uri))
+            // Contenu déjà lu par le moteur intégré dans la page : l'erreur d'un autre lecteur Ruffle n'y change rien.
+            if (Page != TabPage.Web || HasFlashOverlay || !BasiliskInstall.IsOpenable(WebUrl, out Uri uri))
                 return;
 
             RuntimeLogBuffer.Append("[Ruffle] Contenu Flash illisible sur " + uri.Host);
@@ -136,13 +142,17 @@ namespace PommeBrowser.Views
             }
 
             OpenFlashFallback(uri);
-            if (Page != TabPage.Legacy || !IsSelected)
+            if (!IsSelected)
                 return;
-            if (IsIntegratedFlash)
+            if (HasFlashOverlay)
+            {
+                Window.ShowToast(Tr("Ruffle n'a pas pu lire ce contenu : il est lu avec votre module Flash."), Tr("Lire avec Ruffle"), StopFlashOverlay, timeout: 8);
+            }
+            else if (IsIntegratedFlash)
             {
                 Window.ShowToast(Tr("Ruffle n'a pas pu lire ce contenu : il est lu avec votre module Flash."));
             }
-            else if (FlashDomainRules.GetRule(uri) != FlashRuleMode.Legacy)
+            else if (Page == TabPage.Legacy && FlashDomainRules.GetRule(uri) != FlashRuleMode.Legacy)
             {
                 Window.ShowToast(Tr("Ruffle n'a pas pu lire ce contenu : {0} s'ouvre dans Basilisk. L'ouvrir toujours ainsi ?", uri.Host),
                     Tr("Toujours"), () => FlashDomainRules.SetRule(uri, FlashRuleMode.Legacy), timeout: 10);

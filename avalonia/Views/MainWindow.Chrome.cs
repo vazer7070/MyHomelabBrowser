@@ -193,17 +193,24 @@ namespace PommeBrowser.Views
 
         void UpdateLegacyButton(BrowserTab? tab)
         {
-            LegacyButton.IsVisible = App.Settings.EnableFlashSupport && tab is { Page: TabPage.Web, HasFlashFallback: true } &&
-                                     BasiliskInstall.IsOpenable(tab.WebUrl, out _);
-            ToolTip.SetTip(LegacyButton, tab?.FallbackIsIntegrated == true
-                ? Tr("Lire le contenu Flash avec votre module Flash (moteur intégré)")
-                : Tr("Ouvrir ce site avec Flash Legacy (Basilisk)"));
+            LegacyButton.IsVisible = App.Settings.EnableFlashSupport && tab is { Page: TabPage.Web } &&
+                                     (tab.HasFlashFallback || tab.HasFlashOverlay) && BasiliskInstall.IsOpenable(tab.WebUrl, out _);
+            ToolTip.SetTip(LegacyButton, tab?.HasFlashOverlay == true
+                ? Tr("Revenir à Ruffle pour le contenu Flash de cette page")
+                : tab?.FallbackIsIntegrated == true
+                    ? Tr("Lire le contenu Flash avec votre module Flash (moteur intégré)")
+                    : Tr("Ouvrir ce site avec Flash Legacy (Basilisk)"));
         }
 
         void Legacy_Click(object? sender, RoutedEventArgs e)
         {
             if (_selected is not { } tab || !BasiliskInstall.IsOpenable(tab.WebUrl, out Uri uri))
                 return;
+            if (tab.HasFlashOverlay)
+            {
+                tab.StopFlashOverlay();
+                return;
+            }
 
             tab.OpenFlashFallback(uri);
             // Basilisk lancé : le site peut s'y ouvrir d'office ensuite (« Lire avec Ruffle » annule).
