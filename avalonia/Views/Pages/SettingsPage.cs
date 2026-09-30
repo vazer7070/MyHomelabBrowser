@@ -528,6 +528,7 @@ namespace PommeBrowser.Views.Pages
                     Settings.FlashAutoFallback = value;
                     Save();
                 }),
+                IntegratedEngineOption(),
                 Check(Tr("Mode debug Flash (journal détaillé)"), Settings.FlashDebugEnabled, value =>
                 {
                     Settings.FlashDebugEnabled = value;
@@ -632,6 +633,25 @@ namespace PommeBrowser.Views.Pages
                     FlashCompatibilityMemory.ClearForCurrentProfile();
                     _window.ShowToast(Tr("La compatibilité apprise a été réinitialisée."));
                 }))));
+            return panel;
+        }
+
+        /// <summary>Moteur Flash intégré (Windows) : réglage expérimental, ou raison de son absence.</summary>
+        Control IntegratedEngineOption()
+        {
+            if (!OperatingSystem.IsWindows())
+                return new Panel { IsVisible = false };
+
+            var panel = new StackPanel { Spacing = 4 };
+            panel.Children.Add(Check(Tr("Moteur Flash intégré (expérimental) : lire ces contenus avec votre module Flash, sans Basilisk"), Settings.FlashIntegratedEngine, value =>
+            {
+                Settings.FlashIntegratedEngine = value;
+                Save();
+            }));
+            if (!FlashHostProcess.IsAvailable)
+                panel.Children.Add(Hint(Tr("Le moteur intégré n'est pas présent dans cette compilation.")));
+            else if (LegacyEngine.InstalledModule == null)
+                panel.Children.Add(Hint(Tr("Il utilise votre module Flash : ajoutez-le ci-dessous.")));
             return panel;
         }
 

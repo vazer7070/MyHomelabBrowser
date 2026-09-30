@@ -37,13 +37,18 @@ namespace PommeBrowser.Legacy
             throw new PlatformNotSupportedException("Basilisk");
         }
 
-        /// <summary>Arrêt de PommeBrowser : tous les Basilisk lancés par lui se ferment.</summary>
+        /// <summary>Arrêt de PommeBrowser : tous les Basilisk et moteurs Flash intégrés lancés par lui se ferment.</summary>
         public static void CloseAll()
         {
             if (OperatingSystem.IsLinux())
+            {
                 BasiliskProcess.CloseAll();
+            }
             else if (OperatingSystem.IsWindows())
+            {
                 WindowsBasilisk.CloseAll();
+                FlashHostProcess.CloseAll();
+            }
         }
     }
 }

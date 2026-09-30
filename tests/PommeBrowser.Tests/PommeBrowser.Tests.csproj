@@ -90,6 +90,7 @@
     <Compile Include="..\..\avalonia\Engine\BrowserShortcuts.cs" Link="Avalonia\BrowserShortcuts.cs" />
     <Compile Include="..\..\avalonia\Engine\UserScripts.cs" Link="Avalonia\UserScripts.cs" />
     <Compile Include="..\..\avalonia\Legacy\FlashModuleSearch.cs" Link="Avalonia\FlashModuleSearch.cs" />
+    <Compile Include="..\..\avalonia\Engine\FlashContent.cs" Link="Avalonia\FlashContent.cs" />
   </ItemGroup>
 
   <ItemGroup Label="Édition Linux (logique sans interface)">

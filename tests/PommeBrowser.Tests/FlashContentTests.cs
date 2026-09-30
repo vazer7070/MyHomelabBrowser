@@ -1,0 +1,55 @@
+using PommeBrowser.Engine;
+
+namespace PommeBrowser.Tests;
+
+/// <summary>Description du contenu Flash envoyée par la page : données non fiables, bornées.</summary>
+public sealed class FlashContentTests
+{
+    [Fact]
+    public void A_complete_description_is_read()
+    {
+        FlashContent? content = FlashContent.Parse("""
+            {"swf":"https://jeu.exemple.com/jeu.swf","page":"https://jeu.exemple.com/jouer",
+             "flashvars":"niveau=3&son=1","width":800,"height":600,"id":"jeu",
+             "params":{"quality":"high","WMODE":"opaque","allowscriptaccess":"sameDomain"}}
+            """);
+
+        Assert.NotNull(content);
+        Assert.Equal("https://jeu.exemple.com/jeu.swf", content.Swf.AbsoluteUri);
+        Assert.Equal("https://jeu.exemple.com/jouer", content.Page.AbsoluteUri);
+        Assert.Equal("niveau=3&son=1", content.FlashVars);
+        Assert.Equal((800, 600), (content.Width, content.Height));
+        Assert.Equal("jeu", content.Id);
+        Assert.Contains(new KeyValuePair<string, string>("wmode", "opaque"), content.Params);
+        Assert.Equal(3, content.Params.Count);
+    }
+
+    [Theory]
+    [InlineData("""{"swf":"file:///C:/secret.swf","page":"https://a.fr/"}""")]
+    [InlineData("""{"swf":"javascript:alert(1)","page":"https://a.fr/"}""")]
+    [InlineData("""{"swf":"https://a.fr/a.swf","page":"about:blank"}""")]
+    [InlineData("""{"swf":"jeu.swf","page":"https://a.fr/"}""")]
+    [InlineData("""{"page":"https://a.fr/"}""")]
+    [InlineData("""["https://a.fr/a.swf"]""")]
+    [InlineData("pas du json")]
+    public void Only_web_contents_on_web_pages_are_accepted(string json)
+    {
+        Assert.Null(FlashContent.Parse(json));
+    }
+
+    [Fact]
+    public void Implausible_sizes_and_oversized_values_are_dropped()
+    {
+        string flashVars = new('a', 20_000);
+        string json = "{\"swf\":\"https://a.fr/a.swf\",\"page\":\"https://a.fr/\",\"width\":0,\"height\":99999," +
+                      "\"flashvars\":\"" + flashVars + "\",\"id\":\"" + new string('i', 200) + "\"," +
+                      "\"params\":{\"--plugin\":\"C:/autre.dll\",\"bon-nom\":\"ok\",\"long\":\"" + new string('v', 3000) + "\",\"nombre\":3}}";
+        FlashContent? content = FlashContent.Parse(json);
+
+        Assert.NotNull(content);
+        Assert.Equal((800, 600), (content.Width, content.Height));
+        Assert.Null(content.FlashVars);
+        Assert.Null(content.Id);
+        Assert.Equal(new[] { new KeyValuePair<string, string>("bon-nom", "ok") }, content.Params);
+    }
+}

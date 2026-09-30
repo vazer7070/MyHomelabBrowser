@@ -1,8 +1,10 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.Versioning;
 using Avalonia.Controls;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Flash;
+using PommeBrowser.Engine;
 using PommeBrowser.Legacy;
 using PommeBrowser.Linux.Core;
 using PommeBrowser.Views.Pages;
@@ -10,12 +12,101 @@ using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace PommeBrowser.Views
 {
-    /// <summary>Contenus Flash que Ruffle ne lit pas : la page s'ouvre dans Basilisk (lecteur Flash d'origine).</summary>
+    /// <summary>
+    /// Contenus Flash que Ruffle ne lit pas : moteur Flash intégré (module Flash de l'utilisateur,
+    /// Windows, expérimental) ou Basilisk (lecteur Flash d'origine), logés dans l'onglet.
+    /// </summary>
     public sealed partial class BrowserTab
     {
         ILegacyBrowser? _basilisk;
         LegacyView? _legacyView;
         Uri? _legacyUri;
+        // Contenu lu par le moteur intégré (null : Basilisk).
+        FlashContent? _integrated;
+
+        /// <summary>Moteur intégré prêt pour le contenu de la page : Windows, réglage activé, module importé.</summary>
+        bool UsesIntegratedFlash => OperatingSystem.IsWindows() && _app.Settings.FlashIntegratedEngine &&
+                                    FlashHostProcess.IsAvailable && LegacyEngine.InstalledModule != null && _flashContent != null;
+
+        /// <summary>Un moteur de secours peut lire le Flash de cette page.</summary>
+        public bool HasFlashFallback => UsesIntegratedFlash || _app.BasiliskExecutable != null;
+
+        /// <summary>Le moteur de secours de cette page est le moteur intégré.</summary>
+        public bool FallbackIsIntegrated => UsesIntegratedFlash;
+
+        /// <summary>La page affichée est lue par le moteur intégré.</summary>
+        public bool IsIntegratedFlash => Page == TabPage.Legacy && _integrated != null;
+
+        /// <summary>Contenu que Ruffle ne lit pas : moteur intégré s'il est prêt, sinon Basilisk.</summary>
+        public void OpenFlashFallback(Uri uri)
+        {
+            if (OperatingSystem.IsWindows() && UsesIntegratedFlash)
+                OpenInIntegratedFlash(_flashContent!);
+            else
+                OpenInBasilisk(uri);
+        }
+
+        /// <summary>
+        /// Le contenu principal de la page lu par le moteur intégré : PommeFlashHost charge le module
+        /// Flash de l'utilisateur, et sa fenêtre est logée dans l'onglet.
+        /// </summary>
+        [SupportedOSPlatform("windows")]
+        void OpenInIntegratedFlash(FlashContent content)
+        {
+            if (LegacyEngine.InstalledModule is not { } module)
+            {
+                Window.ShowToast(Tr("Module Flash absent : ajoutez votre copie de Flash Player dans les paramètres."), Tr("Paramètres"), () => Window.OpenSettings("flash"), warning: true);
+                return;
+            }
+
+            StopBasilisk();
+            _engine?.Stop();
+            _legacyUri = content.Page;
+            _integrated = content;
+            FlashHostProcess host;
+            try
+            {
+                host = FlashHostProcess.Start(content, module, IsPrivate);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or System.IO.IOException or UnauthorizedAccessException)
+            {
+                RuntimeLogBuffer.Append("[Flash] " + ex.Message);
+                ShowError(content.Page.AbsoluteUri, Tr("Impossible de lancer le moteur Flash intégré"), ex.Message,
+                    (Tr("Réessayer"), true, () => OpenInIntegratedFlash(content)),
+                    (Tr("Lire avec Ruffle"), false, () => BackToRuffle(content.Page)));
+                return;
+            }
+
+            _basilisk = host;
+            host.Exited += () =>
+            {
+                if (_basilisk != host)
+                    return;
+                _basilisk = null;
+                if (Page == TabPage.Legacy)
+                    ShowLegacyPage(running: false);
+            };
+            host.NavigateRequested += OnFlashNavigate;
+            host.SetBackground(!IsSelected);
+            ShowEmbeddedLegacy(host, Tr("Ouverture du lecteur Flash…"), Tr("{0} s'ouvre avec votre module Flash.", content.Swf.Host), content.Page);
+        }
+
+        /// <summary>Page demandée par le contenu : dans l'onglet (_self, _top) ou dans un nouvel onglet.</summary>
+        void OnFlashNavigate(Uri url, string target)
+        {
+            if (target is "_self" or "_top" or "_parent")
+            {
+                StopBasilisk();
+                _basilisk = null;
+                _legacyUri = null;
+                _integrated = null;
+                Navigate(url.AbsoluteUri);
+            }
+            else
+            {
+                Window.OpenTab(url.AbsoluteUri, background: false, opener: this);
+            }
+        }
 
         /// <summary>Site réglé sur « toujours dans Basilisk », et Basilisk installé.</summary>
         bool WantsBasilisk(string? url, [NotNullWhen(true)] out Uri? uri)
@@ -44,6 +135,7 @@ namespace PommeBrowser.Views
             StopBasilisk();
             _engine?.Stop();
             _legacyUri = uri;
+            _integrated = null;
             bool embedded = LegacyView.IsSupported;
             try
             {
@@ -75,18 +167,16 @@ namespace PommeBrowser.Views
                 Window.ShowToast(Tr("Module Flash absent : ajoutez votre copie de Flash Player dans les paramètres."), Tr("Paramètres"), () => Window.OpenSettings("flash"), warning: true);
 
             if (embedded)
-                ShowEmbeddedBasilisk(started, uri);
+                ShowEmbeddedLegacy(started, Tr("Ouverture de Basilisk…"), Tr("{0} s'ouvre avec le lecteur Flash d'origine.", uri.Host), uri);
             else
                 ShowLegacyPage(running: true);
         }
 
-        /// <summary>Page de l'onglet : Basilisk dès que sa fenêtre est logée, un message d'attente avant.</summary>
-        void ShowEmbeddedBasilisk(ILegacyBrowser browser, Uri uri)
+        /// <summary>Page de l'onglet : la fenêtre du lecteur dès qu'elle est logée, un message d'attente avant.</summary>
+        void ShowEmbeddedLegacy(ILegacyBrowser browser, string title, string text, Uri uri)
         {
             var view = new LegacyView { IsVisible = false };
-            var waiting = new StatusPage("IconGames",
-                Tr("Ouverture de Basilisk…"),
-                Tr("{0} s'ouvre avec le lecteur Flash d'origine.", uri.Host),
+            var waiting = new StatusPage("IconGames", title, text,
                 new (string, bool, Action)[] { (Tr("Lire avec Ruffle"), false, () => BackToRuffle(uri)) });
             var page = new Grid();
             page.Children.Add(view);
@@ -126,6 +216,22 @@ namespace PommeBrowser.Views
 
             Uri target = uri;
             _errorUrl = null;
+            if (!running && _integrated is { } content)
+            {
+                ShowPage(TabPage.Legacy, new StatusPage("IconGames",
+                    Tr("Le lecteur Flash s'est arrêté"),
+                    Tr("Le contenu de {0} ne s'affiche plus : le module Flash s'est fermé ou a planté.", content.Swf.Host),
+                    new (string, bool, Action)[]
+                    {
+                        (Tr("Relancer"), true, () =>
+                        {
+                            if (OperatingSystem.IsWindows())
+                                OpenInIntegratedFlash(content);
+                        }),
+                        (Tr("Lire avec Ruffle"), false, () => BackToRuffle(target))
+                    }));
+                return;
+            }
             ShowPage(TabPage.Legacy, running
                 ? new StatusPage("IconGames",
                     Tr("Ouvert dans Basilisk"),
@@ -169,6 +275,7 @@ namespace PommeBrowser.Views
             StopBasilisk();
             _basilisk = null;
             _legacyUri = null;
+            _integrated = null;
             Navigate(uri.AbsoluteUri);
         }
     }

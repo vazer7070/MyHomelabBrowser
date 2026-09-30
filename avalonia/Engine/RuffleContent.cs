@@ -61,8 +61,8 @@ namespace PommeBrowser.Engine
         /// <summary>
         /// Détection des contenus Flash, puis suivi des lecteurs. <paramref name="post"/> : expression
         /// qui envoie « status » à PommeBrowser (propre au moteur) : detected, loaded, blocked
-        /// (Ruffle refusé par la page), playing (un contenu a démarré) ou failed (Ruffle s'est arrêté
-        /// sur une erreur).
+        /// (Ruffle refusé par la page), playing (un contenu a démarré), failed (Ruffle s'est arrêté
+        /// sur une erreur), et « content: » suivi de la description du contenu principal (FlashContent).
         /// </summary>
         public static string ProbeScript(string baseUrl, string post) => """
             (() => {
@@ -125,11 +125,48 @@ namespace PommeBrowser.Engine
                   for (const m of mutations) for (const node of m.addedNodes) scan(node);
                 }).observe(document.documentElement, { childList: true, subtree: true });
               };
+              // Contenu principal (le plus grand) : décrit pour le moteur Flash intégré, avant
+              // que Ruffle ne remplace les éléments.
+              const describe = () => {
+                let best = null, bestArea = -1;
+                for (const el of document.querySelectorAll('object, embed')) {
+                  if (!isFlash(el)) continue;
+                  if (el.localName === 'embed' && el.parentElement && el.parentElement.localName === 'object' && isFlash(el.parentElement)) continue;
+                  // Taille donnée en pixels par l'élément, sinon celle affichée (un <object> sans
+                  // lecteur n'affiche que son contenu de repli).
+                  const rect = el.getBoundingClientRect();
+                  const size = (name, shown) => {
+                    const value = (el.getAttribute(name) || '').trim();
+                    return /^\d+(px)?$/i.test(value) ? parseInt(value, 10) : Math.round(shown);
+                  };
+                  const width = size('width', rect.width);
+                  const height = size('height', rect.height);
+                  if (width * height > bestArea) { best = { el, width, height }; bestArea = width * height; }
+                }
+                if (!best) return null;
+                const el = best.el;
+                const params = {};
+                if (el.localName === 'object') {
+                  for (const p of el.querySelectorAll(':scope > param')) {
+                    const name = (p.getAttribute('name') || '').toLowerCase();
+                    if (name) params[name] = p.getAttribute('value') || '';
+                  }
+                } else {
+                  for (const a of el.attributes) params[a.name.toLowerCase()] = a.value;
+                }
+                const source = el.localName === 'object' ? (el.getAttribute('data') || params.movie || params.src || '') : (el.getAttribute('src') || '');
+                let swf;
+                try { swf = new URL(source, document.baseURI).href; } catch (e) { return null; }
+                const flashvars = params.flashvars || el.getAttribute('flashvars') || null;
+                for (const name of ['movie', 'src', 'data', 'flashvars', 'width', 'height', 'type', 'id', 'name', 'classid', 'codebase', 'pluginspage', 'style', 'class']) delete params[name];
+                return { swf, page: location.href, flashvars, width: best.width, height: best.height, id: el.id || el.getAttribute('name') || null, params };
+              };
               let observer = null;
               const inject = () => {
                 if (observer) observer.disconnect();
                 if (window.__pommeRuffleInjected) return;
                 window.__pommeRuffleInjected = true;
+                try { const content = describe(); if (content) post('__CONTENT__' + JSON.stringify(content)); } catch (e) { }
                 post('detected');
                 load('__BASE__pomme-config.js')
                   .then(() => load('__BASE__ruffle.js'))
@@ -143,7 +180,8 @@ namespace PommeBrowser.Engine
               observer.observe(document.documentElement, { childList: true, subtree: true });
               setTimeout(() => observer.disconnect(), 30000);
             })();
-            """.Replace("__BASE__", baseUrl, StringComparison.Ordinal).Replace("__POST__", post, StringComparison.Ordinal);
+            """.Replace("__BASE__", baseUrl, StringComparison.Ordinal).Replace("__POST__", post, StringComparison.Ordinal)
+               .Replace("__CONTENT__", FlashContent.MessagePrefix, StringComparison.Ordinal);
 
         /// <summary>Fichier demandé par la page (nom seul) : contenu et type, ou null s'il n'existe pas.</summary>
         public static (byte[] Data, string ContentType)? Read(string name, string baseUrl)
