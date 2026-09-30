@@ -57,11 +57,14 @@ namespace PommeBrowser.Engine.WebView2
             _ => Key.None
         };
 
-        /// <summary>Rend le clavier à la fenêtre quand une fenêtre enfant (WebView2) l'a gardé.</summary>
-        public static void TakeFocusFromChild(nint window)
+        /// <summary>
+        /// Rend le clavier à la fenêtre <paramref name="window"/> quand la vue <paramref name="view"/>
+        /// (fenêtre de WebView2 dans l'onglet) ou une de ses fenêtres enfants l'a gardé.
+        /// </summary>
+        public static void TakeFocusFromChild(nint window, nint view)
         {
             nint focus = GetFocus();
-            if (focus != 0 && focus != window && IsChild(window, focus))
+            if (focus != 0 && (focus == view || IsChild(view, focus)))
                 SetFocus(window);
         }
     }

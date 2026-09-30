@@ -187,7 +187,13 @@ namespace PommeBrowser.Legacy
             if (OperatingSystem.IsLinux() && _x11 != null)
                 _x11.PostKeyboard(page, topLevel);
             else if (_win32 != null && OperatingSystem.IsWindows())
+            {
+                // Aucun élément d'Avalonia n'a le focus : Windows l'a donné à une fenêtre enfant
+                // (clic dans Basilisk) et Avalonia l'a perdu avec la fenêtre. Le clavier y reste.
+                if (!page && IsEffectivelyVisible && TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() == null)
+                    return;
                 _win32.SetKeyboard(page, topLevel);
+            }
         }
 
         protected override IPlatformHandle CreateNativeControlCore(IPlatformHandle parent)
