@@ -177,7 +177,6 @@ namespace PommeBrowser.Views
                 Item(Tr("Effacer les données de navigation…"), () => _ = Dialogs.ClearDataDialog.ShowAsync(this), "Ctrl+Shift+Delete", "IconDelete"),
                 new Separator(),
                 Item(WindowState == WindowState.FullScreen ? Tr("Quitter le plein écran") : Tr("Plein écran"), ToggleFullscreen, "F11", "IconFullScreen"),
-                Item(Tr("Outils de développement"), () => tab?.Engine?.ShowDevTools(), "F12", "IconBug", web),
                 Item(Tr("Paramètres"), () => OpenSettings(), "Ctrl+OemComma", "IconSettings"),
                 Item(Tr("Signaler un problème"), OpenReport, icon: "IconBug"),
                 Item(Tr("Diagnostic"), OpenDiagnostics, icon: "IconPulse"),
