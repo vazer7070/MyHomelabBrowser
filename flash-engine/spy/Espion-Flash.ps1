@@ -18,11 +18,15 @@
     Remet le vrai module à sa place et copie les journaux sur le Bureau.
 
 .PARAMETER Dossier
-    Dossier des modules (par défaut : celui de PommeBrowser).
+    Dossier des modules (par défaut : celui de PommeBrowser). Pour un Basilisk lancé à part, qui
+    prend le Flash installé dans Windows : C:\Windows\System32\Macromed\Flash (PowerShell en
+    administrateur). Le navigateur n'ayant alors pas le droit d'écrire à côté du module, les
+    journaux vont dans %LOCALAPPDATA%\PommeBrowser\espion-journaux.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\Espion-Flash.ps1
     powershell -ExecutionPolicy Bypass -File .\Espion-Flash.ps1 -Retirer
+    powershell -ExecutionPolicy Bypass -File .\Espion-Flash.ps1 -Dossier C:\Windows\System32\Macromed\Flash
 #>
 param(
     [switch]$Retirer,
@@ -32,6 +36,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $rangement = Join-Path $Dossier 'espion'
 $journaux = Join-Path $rangement 'journaux'
+# Journaux écrits par un navigateur qui n'a pas le droit d'écrire à côté du module (voir npspy.c).
+$journauxSecours = Join-Path $env:LOCALAPPDATA 'PommeBrowser\espion-journaux'
 
 Add-Type -TypeDefinition @'
 using System;
@@ -114,6 +120,10 @@ if ($ouverts) {
 if (-not (Test-Path $Dossier)) {
     throw "Dossier des modules introuvable : $Dossier. Importez d'abord votre module Flash dans PommeBrowser."
 }
+$administrateur = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if ($Dossier.StartsWith($env:WINDIR, [StringComparison]::OrdinalIgnoreCase) -and -not $administrateur) {
+    throw "Le dossier $Dossier appartient à Windows : lancez PowerShell en tant qu'administrateur."
+}
 
 if ($Retirer) {
     $reels = @(Get-ChildItem -Path $rangement -Filter 'NPSWF64_*.dll' -File -ErrorAction SilentlyContinue)
@@ -124,11 +134,13 @@ if ($Retirer) {
         Move-Item -Force -Path $reel.FullName -Destination (Join-Path $Dossier $reel.Name)
         Write-Host "Module remis en place : $($reel.Name)"
     }
-    if (Test-Path $journaux) {
-        $bureau = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Journaux espion Flash'
-        New-Item -ItemType Directory -Force -Path $bureau | Out-Null
-        Copy-Item -Force -Path (Join-Path $journaux '*') -Destination $bureau
-        Write-Host "Journaux copiés dans : $bureau"
+    $bureau = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Journaux espion Flash'
+    foreach ($source in @($journaux, $journauxSecours)) {
+        if (Test-Path (Join-Path $source '*.log')) {
+            New-Item -ItemType Directory -Force -Path $bureau | Out-Null
+            Copy-Item -Force -Path (Join-Path $source '*.log') -Destination $bureau
+            Write-Host "Journaux copiés dans : $bureau"
+        }
     }
     return
 }
@@ -168,4 +180,4 @@ Write-Host "Espion installé devant $($module.Name)."
 Write-Host "1. Ouvrez la page dans Basilisk (Pomme Legacy) depuis PommeBrowser, jusqu'au problème, puis fermez l'onglet."
 Write-Host "2. Ouvrez la même page avec le moteur Flash intégré, jusqu'au problème, puis fermez l'onglet."
 Write-Host "3. Fermez PommeBrowser et lancez : .\Espion-Flash.ps1 -Retirer"
-Write-Host "Journaux : $journaux"
+Write-Host "Journaux : $journaux (ou $journauxSecours si le navigateur ne peut pas écrire à côté du module)"

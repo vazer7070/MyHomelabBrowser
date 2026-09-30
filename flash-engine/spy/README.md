@@ -25,6 +25,19 @@ Ce n'est pas une partie de PommeBrowser : il n'est livré que par la CI (artefac
    les journaux sont copiés sur le Bureau (`Journaux espion Flash`), un par processus
    (`plugin-container.exe` pour Basilisk, `PommeFlashHost.exe` pour le moteur intégré).
 
+## Basilisk lancé à part
+
+Un Basilisk lancé hors de PommeBrowser prend souvent le Flash installé dans Windows (inscrit dans le
+registre) : l'espion se place alors devant lui, depuis PowerShell **en administrateur** :
+
+```
+powershell -ExecutionPolicy Bypass -File .\Espion-Flash.ps1 -Dossier C:\Windows\System32\Macromed\Flash
+powershell -ExecutionPolicy Bypass -File .\Espion-Flash.ps1 -Dossier C:\Windows\System32\Macromed\Flash -Retirer
+```
+
+Le navigateur, lui, n'a pas le droit d'écrire dans ce dossier : l'espion écrit ses journaux dans
+`%LOCALAPPDATA%\PommeBrowser\espion-journaux`, que `-Retirer` copie aussi sur le Bureau.
+
 ## Données masquées
 
 Valeurs des flashvars et des paramètres d'adresse (noms seuls), cookies (noms seuls), corps des

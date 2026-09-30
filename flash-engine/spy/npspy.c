@@ -40,30 +40,53 @@ static NPPluginFuncs module;     /* table du module */
 /* Journal                                                             */
 /* ------------------------------------------------------------------ */
 
-static void openLog(void)
+/* Journal dans <dossier>, créé au besoin ; faux si le fichier ne peut pas être créé. */
+static int openLogIn(const WCHAR *dir)
 {
-    if (logFile)
-        return;
-    WCHAR path[MAX_PATH], dir[MAX_PATH], exe[MAX_PATH];
-    if (!GetModuleFileNameW(self, path, MAX_PATH))
-        return;
-    WCHAR *slash = wcsrchr(path, L'\\');
-    if (!slash)
-        return;
-    *slash = 0;
-    _snwprintf(dir, MAX_PATH, L"%ls\\espion\\journaux", path);
+    WCHAR exe[MAX_PATH], file[MAX_PATH];
     CreateDirectoryW(dir, NULL);
     GetModuleFileNameW(NULL, exe, MAX_PATH);
     WCHAR *exeName = wcsrchr(exe, L'\\');
     exeName = exeName ? exeName + 1 : exe;
     SYSTEMTIME now;
     GetLocalTime(&now);
-    WCHAR file[MAX_PATH];
     _snwprintf(file, MAX_PATH, L"%ls\\%04d%02d%02d-%02d%02d%02d-%ls-%lu.log", dir,
                now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond, exeName, GetCurrentProcessId());
     logFile = _wfopen(file, L"wb");
+    if (!logFile)
+        return 0;
+    fputs("\xEF\xBB\xBF", logFile); /* UTF-8 */
+    return 1;
+}
+
+/*
+ * Journal à côté du vrai module (espion\journaux). Dossier protégé (module de Windows dans
+ * System32, navigateur lancé sans droits d'administrateur) : %LOCALAPPDATA%\PommeBrowser\espion-journaux.
+ */
+static void openLog(void)
+{
     if (logFile)
-        fputs("\xEF\xBB\xBF", logFile); /* UTF-8 */
+        return;
+    WCHAR path[MAX_PATH], dir[MAX_PATH];
+    if (GetModuleFileNameW(self, path, MAX_PATH))
+    {
+        WCHAR *slash = wcsrchr(path, L'\\');
+        if (slash)
+        {
+            *slash = 0;
+            _snwprintf(dir, MAX_PATH, L"%ls\\espion\\journaux", path);
+            if (openLogIn(dir))
+                return;
+        }
+    }
+    WCHAR local[MAX_PATH];
+    DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", local, MAX_PATH);
+    if (length == 0 || length >= MAX_PATH)
+        return;
+    _snwprintf(dir, MAX_PATH, L"%ls\\PommeBrowser", local);
+    CreateDirectoryW(dir, NULL);
+    _snwprintf(dir, MAX_PATH, L"%ls\\PommeBrowser\\espion-journaux", local);
+    openLogIn(dir);
 }
 
 static void spy(const char *format, ...)
