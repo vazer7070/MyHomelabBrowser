@@ -6,7 +6,9 @@ using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using MyHomelabBrowser.classes;
@@ -27,34 +29,72 @@ namespace PommeBrowser.Legacy
         static nint _job;
 
         readonly Process _process;
+        // Écritures sur l'entrée de l'hôte (réponses aux scripts, fermeture) : une à la fois.
+        readonly SemaphoreSlim _input = new(1, 1);
+        Task _reading = Task.CompletedTask;
+        volatile bool _ready;
         nint _window;
         bool _closed;
         bool _exited;
 
-        FlashHostProcess(Process process)
+        FlashHostProcess(Process process, string module)
         {
             _process = process;
+            Module = module;
         }
 
-        /// <summary>Hôte livré avec PommeBrowser (dossier flash de l'application).</summary>
-        public static string ExecutablePath => Path.Combine(AppContext.BaseDirectory, "flash", "PommeFlashHost.exe");
+        /// <summary>Module Flash chargé par cet hôte.</summary>
+        public string Module { get; }
 
-        public static bool IsAvailable => File.Exists(ExecutablePath);
+        /// <summary>
+        /// L'hôte s'est arrêté seul avant d'afficher le contenu : module impossible à charger,
+        /// contenu refusé, plantage au démarrage. Un autre module peut prendre le relais.
+        /// </summary>
+        public bool FailedToStart { get; private set; }
+
+        /// <summary>
+        /// Hôte livré avec PommeBrowser pour ce module : un processus ne charge que les modules de
+        /// son architecture, lue dans le fichier (flash\PommeFlashHost.exe en 64 bits,
+        /// flash\x86\PommeFlashHost.exe en 32 bits).
+        /// </summary>
+        public static string ExecutablePath(string module) => ExecutablePath(FlashModuleSearch.Is32Bit(module));
+
+        static string ExecutablePath(bool is32Bit)
+            => is32Bit
+                ? Path.Combine(AppContext.BaseDirectory, "flash", "x86", "PommeFlashHost.exe")
+                : Path.Combine(AppContext.BaseDirectory, "flash", "PommeFlashHost.exe");
+
+        /// <summary>Un hôte est livré dans cette compilation (au moins en 64 bits).</summary>
+        public static bool IsAvailable => File.Exists(Path.Combine(AppContext.BaseDirectory, "flash", "PommeFlashHost.exe"));
+
+        /// <summary>L'hôte de l'architecture de ce module est livré.</summary>
+        public static bool IsAvailableFor(string module) => File.Exists(ExecutablePath(module));
 
         public event Action? Exited;
 
         /// <summary>Le contenu demande une page (cible _blank, _self…).</summary>
         public event Action<Uri, string>? NavigateRequested;
 
+        /// <summary>
+        /// Script à exécuter dans la page (ExternalInterface.call, adresse javascript:). Avec un
+        /// numéro, l'hôte attend la réponse (<see cref="ReplyScript"/>) ; sans, aucune.
+        /// </summary>
+        public event Action<int?, string>? ScriptRequested;
+
         public static FlashHostProcess Start(FlashContent content, string module, bool isPrivate)
         {
+            bool is32Bit = FlashModuleSearch.Is32Bit(module);
+            string executable = ExecutablePath(is32Bit);
             var start = new ProcessStartInfo
             {
-                FileName = ExecutablePath,
-                WorkingDirectory = Path.GetDirectoryName(ExecutablePath)!,
+                FileName = executable,
+                WorkingDirectory = Path.GetDirectoryName(executable)!,
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                StandardInputEncoding = new UTF8Encoding(false),
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
@@ -63,15 +103,16 @@ namespace PommeBrowser.Legacy
 
             Process process = Process.Start(start) ?? throw new InvalidOperationException("PommeFlashHost ne démarre pas.");
             AssignToJob(process);
-            process.EnableRaisingEvents = true;
 
-            var host = new FlashHostProcess(process);
+            var host = new FlashHostProcess(process, module);
             lock (Running)
                 Running.Add(host);
-            process.Exited += (_, _) => Dispatcher.UIThread.Post(host.OnExited);
-            _ = Task.Run(host.ReadEventsAsync);
+            host._reading = Task.Run(host.ReadEventsAsync);
             _ = Task.Run(host.DrainErrorsAsync);
-            RuntimeLogBuffer.Append($"[Flash] Moteur intégré lancé (PID {process.Id}) : {content.Swf.Host}");
+            // Abonnement avant la surveillance : un hôte déjà arrêté (module refusé) est signalé aussitôt.
+            process.Exited += (_, _) => _ = host.OnProcessExitedAsync();
+            process.EnableRaisingEvents = true;
+            RuntimeLogBuffer.Append($"[Flash] Moteur intégré lancé (PID {process.Id}, {(is32Bit ? 32 : 64)} bits) : {content.Swf.GetLeftPart(UriPartial.Path)} avec {Path.GetFileName(module)}");
             return host;
         }
 
@@ -146,6 +187,7 @@ namespace PommeBrowser.Legacy
                 {
                     case "ready" when root.TryGetProperty("window", out JsonElement window) && window.TryGetInt64(out long handle):
                         _window = (nint)handle;
+                        _ready = true;
                         break;
                     case "navigate" when root.TryGetProperty("url", out JsonElement url) &&
                                          Uri.TryCreate(url.GetString(), UriKind.Absolute, out Uri? target) &&
@@ -156,14 +198,71 @@ namespace PommeBrowser.Legacy
                     case "log":
                         RuntimeLogBuffer.Append("[Flash] " + (root.TryGetProperty("message", out JsonElement message) ? message.GetString() : line));
                         break;
+                    case "eval" when root.TryGetProperty("id", out JsonElement number) && number.TryGetInt32(out int id):
+                        string evaluated = Text(root, "code");
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (ScriptRequested is { } handler)
+                                handler(id, evaluated);
+                            else
+                                ReplyScript(id, false, null);
+                        });
+                        break;
                     case "script":
-                        // Échanges avec les scripts de la page : étape 4 du moteur.
-                        RuntimeLogBuffer.Append("[Flash] Script de la page non transmis (pas encore pris en charge).");
+                        // Adresse javascript: : exécutée dans la page si elle vise la page elle-même.
+                        string code = Text(root, "code");
+                        string? targetWindow = root.TryGetProperty("target", out JsonElement named) ? named.GetString() : null;
+                        if (string.IsNullOrEmpty(targetWindow) || targetWindow is "_self" or "_top" or "_parent")
+                            Dispatcher.UIThread.Post(() => ScriptRequested?.Invoke(null, code));
+                        else
+                            RuntimeLogBuffer.Append($"[Flash] Adresse javascript: pour la fenêtre « {targetWindow} » ignorée.");
                         break;
                 }
             }
             catch (JsonException)
             {
+            }
+        }
+
+        static string Text(JsonElement root, string name)
+            => root.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty;
+
+        /// <summary>Réponse à un script de la page : « result &lt;id&gt; {"ok":…,"value":…} ».</summary>
+        public void ReplyScript(int id, bool ok, string? value)
+        {
+            using var buffer = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(buffer))
+            {
+                writer.WriteStartObject();
+                writer.WriteBoolean("ok", ok);
+                if (value == null)
+                    writer.WriteNull("value");
+                else
+                    writer.WriteString("value", value);
+                writer.WriteEndObject();
+            }
+            _ = WriteAsync("result " + id.ToString(CultureInfo.InvariantCulture) + " " + Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length));
+        }
+
+        /// <summary>Une ligne pour l'hôte ; faux s'il ne lit plus son entrée.</summary>
+        async Task<bool> WriteAsync(string line)
+        {
+            await _input.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (_process.HasExited)
+                    return false;
+                await _process.StandardInput.WriteLineAsync(line).ConfigureAwait(false);
+                await _process.StandardInput.FlushAsync().ConfigureAwait(false);
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException or InvalidOperationException or ObjectDisposedException)
+            {
+                return false;
+            }
+            finally
+            {
+                _input.Release();
             }
         }
 
@@ -194,9 +293,8 @@ namespace PommeBrowser.Legacy
             _closed = true;
             try
             {
-                await _process.StandardInput.WriteLineAsync("close").ConfigureAwait(true);
-                await _process.StandardInput.FlushAsync().ConfigureAwait(true);
-                await Task.WhenAny(_process.WaitForExitAsync(), Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(true);
+                if (await WriteAsync("close").ConfigureAwait(true))
+                    await Task.WhenAny(_process.WaitForExitAsync(), Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(true);
             }
             catch (Exception ex) when (ex is IOException or InvalidOperationException or ObjectDisposedException)
             {
@@ -212,6 +310,13 @@ namespace PommeBrowser.Legacy
             OnExited();
         }
 
+        /// <summary>Fin du processus : ses dernières lignes (ready, erreur) sont lues avant de conclure.</summary>
+        async Task OnProcessExitedAsync()
+        {
+            await Task.WhenAny(_reading, Task.Delay(TimeSpan.FromSeconds(1))).ConfigureAwait(false);
+            Dispatcher.UIThread.Post(OnExited);
+        }
+
         void OnExited()
         {
             if (_exited)
@@ -219,10 +324,11 @@ namespace PommeBrowser.Legacy
             _exited = true;
             lock (Running)
                 Running.Remove(this);
+            FailedToStart = !_closed && !_ready;
             try
             {
                 if (_process.HasExited)
-                    RuntimeLogBuffer.Append($"[Flash] Moteur intégré arrêté (code {_process.ExitCode}).");
+                    RuntimeLogBuffer.Append($"[Flash] Moteur intégré arrêté (code {_process.ExitCode}){(FailedToStart ? " avant d'afficher le contenu" : string.Empty)} : {Path.GetFileName(Module)}.");
             }
             catch (InvalidOperationException)
             {

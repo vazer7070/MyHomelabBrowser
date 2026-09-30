@@ -130,6 +130,7 @@ namespace PommeBrowser.Views
                     return;
                 Set(ref _isSelected, value);
                 _basilisk?.SetBackground(!value);
+                _overlayHost?.SetBackground(!value);
             }
         }
 
@@ -533,6 +534,7 @@ namespace PommeBrowser.Views
                     _upgradedHosts.Clear();
                     _rufflePlaying = false;
                     _flashContent = null;
+                    CloseFlashOverlay();
                     Window.OnTabCommitted(this);
                     Security = ComputeSecurity(url);
                     if (_engine != null)
@@ -689,6 +691,7 @@ namespace PommeBrowser.Views
         /// <summary>Affiche une page de PommeBrowser à la place de la page web.</summary>
         public void ShowPage(TabPage kind, Control page)
         {
+            CloseFlashOverlay();
             RemovePage();
             _page = page;
             _host.Children.Add(page);
@@ -768,6 +771,7 @@ namespace PommeBrowser.Views
                 return;
             _pendingUrl = _engine.Uri ?? _pendingUrl;
             _pendingTitle = _engine.Title ?? _pendingTitle;
+            CloseFlashOverlay();
             _engine.Dispose();
             _engine = null;
             _host.Children.Remove(_web);
@@ -779,6 +783,7 @@ namespace PommeBrowser.Views
         public void Close()
         {
             StopBasilisk();
+            CloseFlashOverlay();
             RemovePage();
             _engine?.Dispose();
             _engine = null;

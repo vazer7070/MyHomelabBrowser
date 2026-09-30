@@ -37,6 +37,8 @@ namespace PommeBrowser.Views.Pages
         readonly ContentControl _content = new();
         readonly ScrollViewer _scroller;
         bool _building;
+        // Modules utilisés par le moteur Flash intégré (mis à jour après une installation).
+        TextBlock? _integratedModules;
 
         public SettingsPage(MainWindow window, string? section)
         {
@@ -539,12 +541,27 @@ namespace PommeBrowser.Views.Pages
             var module = Hint(FlashModuleStatus());
             var path = new TextBlock { Text = string.IsNullOrWhiteSpace(Settings.BasiliskPath) ? Tr("Recherche automatique") : Settings.BasiliskPath, TextWrapping = TextWrapping.Wrap };
             Button search = null!;
+            Button remove32 = null!;
             // Module installé : statut à jour, et le bouton de recherche n'est plus mis en avant.
             void Installed()
             {
                 module.Text = FlashModuleStatus();
-                search.Classes.Remove("primary");
+                remove32.IsVisible = LegacyEngine.InstalledModule32 != null;
+                if (LegacyEngine.InstalledModule != null || LegacyEngine.InstalledModule32 != null)
+                    search.Classes.Remove("primary");
+                if (_integratedModules != null)
+                    _integratedModules.Text = IntegratedModulesStatus();
             }
+            remove32 = Action(Tr("Retirer le module 32 bits"), async () =>
+            {
+                if (LegacyEngine.RemoveModule32() is { } error)
+                {
+                    await Dialogs.Dialogs.AlertAsync(_window, Tr("Module Flash"), error);
+                    return;
+                }
+                Installed();
+            });
+            remove32.IsVisible = LegacyEngine.InstalledModule32 != null;
             search = Action(Tr("Rechercher le module Flash"), async () => await SearchFlashModuleAsync(search, Installed), primary: LegacyEngine.InstalledModule == null);
             panel.Children.Add(Card(Tr("Moteur de secours Legacy (Basilisk)"),
                 LegacyView.IsSupported
@@ -576,8 +593,12 @@ namespace PommeBrowser.Views.Pages
                     })),
                 module,
                 Hint(Tr("Adobe ne distribue plus Flash Player : PommeBrowser ne peut pas le fournir. « Rechercher le module Flash » trouve votre copie sur l'ordinateur, par exemple dans un Basilisk portable ; sinon, choisissez le fichier ({0}). Les dernières versions bloquent les contenus depuis le 12 janvier 2021 : prenez une version plus ancienne.", LegacyEngine.ExpectedModuleName)),
+                OperatingSystem.IsWindows()
+                    ? Hint(Tr("Le moteur intégré lit les modules 32 et 64 bits et choisit seul : « Rechercher le module Flash » installe le meilleur de chaque, et le Flash Player installé dans Windows sert aussi tel quel. Si un module ne lit pas un contenu, l'autre prend le relais. Basilisk n'utilise que le module 64 bits."))
+                    : new Panel { IsVisible = false },
                 Buttons(
                     search,
+                    remove32,
                     Action(Tr("Choisir le module Flash…"), async () =>
                     {
                         IReadOnlyList<IStorageFile> files = await _window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
@@ -648,11 +669,36 @@ namespace PommeBrowser.Views.Pages
                 Settings.FlashIntegratedEngine = value;
                 Save();
             }));
-            if (!FlashHostProcess.IsAvailable)
-                panel.Children.Add(Hint(Tr("Le moteur intégré n'est pas présent dans cette compilation.")));
-            else if (LegacyEngine.InstalledModule == null)
-                panel.Children.Add(Hint(Tr("Il utilise votre module Flash : ajoutez-le ci-dessous.")));
+            _integratedModules = Hint(IntegratedModulesStatus());
+            panel.Children.Add(_integratedModules);
             return panel;
+        }
+
+        /// <summary>Modules que le moteur intégré essaiera, dans l'ordre, ou ce qui l'empêche de fonctionner.</summary>
+        static string IntegratedModulesStatus()
+        {
+            if (!OperatingSystem.IsWindows())
+                return string.Empty;
+            if (!FlashHostProcess.IsAvailable)
+                return Tr("Le moteur intégré n'est pas présent dans cette compilation.");
+            IReadOnlyList<string> modules = LegacyEngine.IntegratedModules;
+            if (modules.Count == 0)
+                return Tr("Il utilise votre module Flash : ajoutez-le ci-dessous.");
+            List<string> usable = modules.Where(FlashHostProcess.IsAvailableFor).ToList();
+            if (usable.Count == 0)
+                return Tr("Le moteur intégré 32 bits n'est pas présent dans cette compilation : ajoutez un module Flash 64 bits.");
+            return usable.Count == 1
+                ? Tr("Module utilisé : {0}", DescribeIntegratedModule(usable[0]))
+                : Tr("Modules utilisés : {0}, puis {1} si le premier ne lit pas un contenu.", DescribeIntegratedModule(usable[0]), DescribeIntegratedModule(usable[1]));
+        }
+
+        static string DescribeIntegratedModule(string path)
+        {
+            int bits = FlashModuleSearch.Is32Bit(path) ? 32 : 64;
+            bool installed = path.StartsWith(LegacyEngine.PluginDirectory, StringComparison.OrdinalIgnoreCase);
+            return installed
+                ? Tr("{0} ({1} bits)", System.IO.Path.GetFileName(path), bits)
+                : Tr("{0} ({1} bits, Flash Player de Windows)", System.IO.Path.GetFileName(path), bits);
         }
 
         string BasiliskStatus()
@@ -670,7 +716,7 @@ namespace PommeBrowser.Views.Pages
             return name != null ? Tr("{0} {1} détecté : {2}", name, version ?? string.Empty, executable) : Tr("Basilisk détecté : {0}", executable);
         }
 
-        /// <summary>Recherche du module Flash sur l'ordinateur, puis choix de celui à installer.</summary>
+        /// <summary>Recherche du module Flash sur l'ordinateur, puis installation du meilleur de chaque architecture.</summary>
         async Task SearchFlashModuleAsync(Button button, Action installed)
         {
             object? label = button.Content;
@@ -703,25 +749,47 @@ namespace PommeBrowser.Views.Pages
             await OfferFlashModulesAsync(found, installed, folder);
         }
 
-        /// <summary>Modules trouvés : l'utilisateur choisit celui à installer, ou un dossier où chercher.</summary>
+        /// <summary>
+        /// Modules trouvés : le meilleur de chaque architecture (64 bits, et 32 bits sous Windows)
+        /// est installé d'office ; l'utilisateur peut en choisir un autre. Rien trouvé : un dossier où chercher.
+        /// </summary>
         async Task OfferFlashModulesAsync(IReadOnlyList<FlashModuleSearch.Module> found, Action installed, string? folder)
         {
             if (found.Count == 0)
             {
                 int choice = await Dialogs.Dialogs.ChoiceAsync(_window, Tr("Module Flash introuvable"),
                     folder == null
-                        ? Tr("Aucun module Flash 64 bits ({0}) n'a été trouvé dans les dossiers habituels. Indiquez le dossier où il se trouve, par exemple celui d'un Basilisk ou d'un Pale Moon portable : il y sera cherché, sous-dossiers compris.", LegacyEngine.ExpectedModuleName)
-                        : Tr("Aucun module Flash 64 bits ({0}) dans {1}, sous-dossiers compris.", LegacyEngine.ExpectedModuleName, folder),
+                        ? Tr("Aucun module Flash ({0}) n'a été trouvé dans les dossiers habituels. Indiquez le dossier où il se trouve, par exemple celui d'un Basilisk ou d'un Pale Moon portable : il y sera cherché, sous-dossiers compris.", LegacyEngine.ExpectedModuleName)
+                        : Tr("Aucun module Flash ({0}) dans {1}, sous-dossiers compris.", LegacyEngine.ExpectedModuleName, folder),
                     (Tr("Annuler"), false, false), (Tr("Choisir un dossier…"), true, false));
                 if (choice == 1)
                     await SearchFlashFolderAsync(installed);
                 return;
             }
 
+            (IReadOnlyList<FlashModuleSearch.Module> added, IReadOnlyList<string> errors) = LegacyEngine.InstallBest(found);
+            installed();
+            if (errors.Count > 0)
+                await Dialogs.Dialogs.AlertAsync(_window, Tr("Module Flash"), string.Join("\n", errors));
+            string names = string.Join(", ", added.Select(m => Tr("{0} ({1} bits)", System.IO.Path.GetFileName(m.Path), m.Is32Bit ? 32 : 64)));
+            if (added.Count > 0 || errors.Count == 0)
+            {
+                _window.ShowToast(added.Count switch
+                {
+                    0 => Tr("Les modules Flash installés restent les meilleurs trouvés."),
+                    1 => Tr("Module Flash installé : {0}.", names),
+                    _ => Tr("Modules Flash installés : {0}.", names)
+                }, Tr("Voir les modules trouvés"), () => _ = ChooseFlashModuleAsync(found, installed), timeout: 10);
+            }
+        }
+
+        /// <summary>Liste des modules trouvés : l'utilisateur choisit celui à installer, ou un dossier où chercher.</summary>
+        async Task ChooseFlashModuleAsync(IReadOnlyList<FlashModuleSearch.Module> found, Action installed)
+        {
             string? chosen = null;
             bool browse = false;
             var dialog = new ListDialog(Tr("Module Flash trouvé"),
-                Tr("Choisissez le module à utiliser avec Basilisk. Il est copié dans les données de PommeBrowser : son dossier d'origine n'est plus nécessaire ensuite."),
+                Tr("Choisissez le module à installer. Il est copié dans les données de PommeBrowser : son dossier d'origine n'est plus nécessaire ensuite. Un module 32 bits ne sert qu'au moteur intégré."),
                 string.Empty,
                 list => found.Select(m => list.Row(System.IO.Path.GetFileName(m.Path), FlashModuleDetail(m), Tr("Installer"), () =>
                 {
@@ -748,23 +816,31 @@ namespace PommeBrowser.Views.Pages
                 return;
             }
             installed();
-            _window.ShowToast(Tr("Module Flash installé : il sera utilisé à la prochaine ouverture dans Basilisk."));
+            _window.ShowToast(OperatingSystem.IsWindows() && FlashModuleSearch.Is32Bit(path)
+                ? Tr("Module Flash 32 bits installé : le moteur intégré l'utilisera.")
+                : Tr("Module Flash installé : il sera utilisé à la prochaine ouverture dans Basilisk."));
         }
 
         /// <summary>Version et dossier du module ; avertissement pour les versions qui bloquent les contenus.</summary>
         static string FlashModuleDetail(FlashModuleSearch.Module module)
         {
             string folder = System.IO.Path.GetDirectoryName(module.Path) ?? module.Path;
-            if (module.Version is not { } version)
-                return folder;
-            return FlashModuleSearch.MayBlockContent(module)
-                ? Tr("Version {0}, dans {1}. Cette version peut refuser les contenus Flash (blocage du 12 janvier 2021), sauf si elle a été modifiée pour l'éviter.", version, folder)
-                : Tr("Version {0}, dans {1}", version, folder);
+            string detail = module.Version is not { } version
+                ? folder
+                : FlashModuleSearch.MayBlockContent(module)
+                    ? Tr("Version {0}, dans {1}. Cette version peut refuser les contenus Flash (blocage du 12 janvier 2021), sauf si elle a été modifiée pour l'éviter.", version, folder)
+                    : Tr("Version {0}, dans {1}", version, folder);
+            return module.Is32Bit ? Tr("32 bits, pour le moteur intégré seulement. {0}", detail) : detail;
         }
 
         static string FlashModuleStatus()
-            => LegacyEngine.InstalledModule is { } module
+        {
+            string status = LegacyEngine.InstalledModule is { } module
                 ? Tr("Module Flash : {0}", System.IO.Path.GetFileName(module))
                 : Tr("Module Flash absent : Basilisk ne pourra pas lire les contenus Flash.");
+            return LegacyEngine.InstalledModule32 is { } module32
+                ? status + "\n" + Tr("Module 32 bits (moteur intégré) : {0}", System.IO.Path.GetFileName(module32))
+                : status;
+        }
     }
 }

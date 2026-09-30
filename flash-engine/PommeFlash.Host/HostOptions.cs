@@ -90,8 +90,11 @@ namespace PommeFlash.Host
         }
 
         /// <summary>
-        /// Attributs puis paramètres de l'élément, comme un navigateur les passe à NPP_New. Le mode
-        /// fenêtré est imposé (wmode) : le module dessine lui-même dans sa fenêtre.
+        /// Attributs puis paramètres de l'élément, comme un navigateur les passe à NPP_New. Le module
+        /// dessine toujours dans sa propre fenêtre : les modes « direct » et « gpu » de la page sont
+        /// gardés (fenêtrés sous Windows, ils donnent accès à Stage3D, dont beaucoup de jeux ont
+        /// besoin) ; « opaque » et « transparent », qui demandent le dessin sans fenêtre, deviennent
+        /// « window ».
         /// </summary>
         public List<KeyValuePair<string, string>> PluginArguments()
         {
@@ -122,11 +125,20 @@ namespace PommeFlash.Host
                 parameters.RemoveAll(p => string.Equals(p.Key, param.Key, StringComparison.OrdinalIgnoreCase));
                 parameters.Add(param);
             }
-            parameters.RemoveAll(p => string.Equals(p.Key, "wmode", StringComparison.OrdinalIgnoreCase));
-            parameters.Add(new("wmode", "window"));
+            parameters.Add(new("wmode", RenderMode(parameters)));
 
             list.AddRange(parameters);
             return list;
+        }
+
+        /// <summary>Mode de rendu passé au module (voir <see cref="PluginArguments"/>) ; retiré de la liste.</summary>
+        static string RenderMode(List<KeyValuePair<string, string>> parameters)
+        {
+            string? requested = parameters.LastOrDefault(p => string.Equals(p.Key, "wmode", StringComparison.OrdinalIgnoreCase)).Value?.Trim();
+            parameters.RemoveAll(p => string.Equals(p.Key, "wmode", StringComparison.OrdinalIgnoreCase));
+            return requested != null && (requested.Equals("direct", StringComparison.OrdinalIgnoreCase) || requested.Equals("gpu", StringComparison.OrdinalIgnoreCase))
+                ? requested.ToLowerInvariant()
+                : "window";
         }
     }
 }

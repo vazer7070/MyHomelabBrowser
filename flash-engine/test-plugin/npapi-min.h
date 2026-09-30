@@ -8,6 +8,19 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+/*
+ * Points d'entrée NP_* : __stdcall (WINAPI) en 32 bits, exportés sans décoration, comme ceux de
+ * Flash : le navigateur les cherche par leur nom. MinGW 32 bits : lier avec -Wl,--kill-at.
+ */
+#if defined(_M_IX86) && !defined(__MINGW32__)
+#define NP_EXPORT
+#pragma comment(linker, "/EXPORT:NP_GetEntryPoints=_NP_GetEntryPoints@4")
+#pragma comment(linker, "/EXPORT:NP_Initialize=_NP_Initialize@4")
+#pragma comment(linker, "/EXPORT:NP_Shutdown=_NP_Shutdown@0")
+#else
+#define NP_EXPORT __declspec(dllexport)
+#endif
+
 typedef unsigned char NPBool;
 typedef int16_t NPError;
 typedef int16_t NPReason;

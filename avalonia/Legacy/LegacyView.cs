@@ -233,6 +233,24 @@ namespace PommeBrowser.Legacy
                 _win32.Destroy();
         }
 
+        /// <summary>
+        /// Fenêtre logée à une position donnée dans la vue (pixels de l'écran), plus grande qu'elle
+        /// s'il le faut : la vue n'en montre que la partie qui la recouvre. Null : elle remplit la vue.
+        /// Windows seulement (moteur Flash intégré dans la page).
+        /// </summary>
+        public void PlaceClient((int X, int Y, int Width, int Height)? placement)
+        {
+            if (_win32 != null && OperatingSystem.IsWindows())
+                _win32.SetClientPlacement(placement);
+        }
+
+        /// <summary>La vue passe devant les autres vues natives de la fenêtre (la page web qu'elle recouvre).</summary>
+        public void BringToFront()
+        {
+            if (_win32 != null && OperatingSystem.IsWindows())
+                _win32.BringToFront();
+        }
+
         /// <summary>Onglet fermé ou page quittée : plus de recherche de fenêtre.</summary>
         public void Detach()
         {

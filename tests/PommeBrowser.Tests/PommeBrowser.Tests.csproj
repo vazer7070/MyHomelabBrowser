@@ -58,6 +58,7 @@
     <Compile Include="..\..\classes\Flash\LegacyProfileManager.cs" Link="App\Flash\LegacyProfileManager.cs" />
     <Compile Include="..\..\classes\Flash\LegacyProfileLease.cs" Link="App\Flash\LegacyProfileLease.cs" />
     <Compile Include="..\..\classes\Flash\LegacyProcess.cs" Link="App\Flash\LegacyProcess.cs" />
+    <Compile Include="..\..\classes\Flash\RufflePluginScript.cs" Link="App\Flash\RufflePluginScript.cs" />
     <Compile Include="..\..\classes\Profiles\ProfileNameRules.cs" Link="App\Profiles\ProfileNameRules.cs" />
     <Compile Include="..\..\classes\Profiles\WebViewProfileData.cs" Link="App\Profiles\WebViewProfileData.cs" />
     <Compile Include="..\..\classes\AdBlock\Models\AdBlockDomain.cs" Link="App\AdBlock\AdBlockDomain.cs" />
@@ -91,6 +92,7 @@
     <Compile Include="..\..\avalonia\Engine\UserScripts.cs" Link="Avalonia\UserScripts.cs" />
     <Compile Include="..\..\avalonia\Legacy\FlashModuleSearch.cs" Link="Avalonia\FlashModuleSearch.cs" />
     <Compile Include="..\..\avalonia\Engine\FlashContent.cs" Link="Avalonia\FlashContent.cs" />
+    <Compile Include="..\..\avalonia\Engine\RuffleContent.cs" Link="Avalonia\RuffleContent.cs" />
   </ItemGroup>
 
   <ItemGroup Label="Édition Linux (logique sans interface)">

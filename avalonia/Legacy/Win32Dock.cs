@@ -28,6 +28,7 @@ namespace PommeBrowser.Legacy
 
         nint _client;
         nint _focusTarget;
+        (int X, int Y, int Width, int Height)? _placement;
 
         public nint Host { get; private set; }
 
@@ -73,8 +74,46 @@ namespace PommeBrowser.Legacy
 
         void FitClient()
         {
-            if (_client != 0 && GetClientRect(Host, out Rect rect))
+            if (_client == 0)
+                return;
+            if (_placement is { } placement)
+            {
+                // Contenu dont seule une partie est visible : l'accueil le coupe. Déplacement sans
+                // attendre l'autre processus (appelé à chaque défilement de la page).
+                SetWindowPos(_client, 0, placement.X, placement.Y, Math.Max(1, placement.Width), Math.Max(1, placement.Height),
+                    SwpNoZOrder | SwpNoActivate | SwpAsyncWindowPos);
+            }
+            else if (GetClientRect(Host, out Rect rect))
+            {
                 MoveWindow(_client, 0, 0, Math.Max(1, rect.Right - rect.Left), Math.Max(1, rect.Bottom - rect.Top), true);
+            }
+        }
+
+        /// <summary>
+        /// Position et taille de la fenêtre logée dans l'accueil (pixels), ou null pour qu'elle le
+        /// remplisse. Gardées si l'accueil est recréé.
+        /// </summary>
+        public void SetClientPlacement((int X, int Y, int Width, int Height)? placement)
+        {
+            if (_placement == placement)
+                return;
+            _placement = placement;
+            FitClient();
+        }
+
+        /// <summary>
+        /// L'accueil passe devant les autres vues natives de la fenêtre (la page web), qu'il
+        /// recouvre : sa fenêtre la plus haute sous celle de PommeBrowser remonte en tête.
+        /// </summary>
+        public void BringToFront()
+        {
+            if (Host == 0)
+                return;
+            nint root = GetAncestor(Host, GaRoot);
+            nint window = Host;
+            while (GetAncestor(window, GaParent) is var parent && parent != 0 && parent != root)
+                window = parent;
+            SetWindowPos(window, HwndTop, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
         }
 
         /// <summary>La fenêtre de Basilisk redevient une fenêtre à part, cachée (sinon elle serait détruite avec l'accueil).</summary>
@@ -301,6 +340,8 @@ namespace PommeBrowser.Legacy
         const uint SwpNoZOrder = 0x0004;
         const uint SwpNoActivate = 0x0010;
         const uint SwpFrameChanged = 0x0020;
+        const uint SwpAsyncWindowPos = 0x4000;
+        const nint HwndTop = 0;
         const int SwHide = 0;
         const int SwShow = 5;
         const uint WmSize = 0x0005;
@@ -309,6 +350,7 @@ namespace PommeBrowser.Legacy
         const int WhKeyboardLl = 13;
         const uint LlkhfAltDown = 0x20;
         const uint EventObjectFocus = 0x8005;
+        const uint GaParent = 1;
         const uint GaRoot = 2;
         const uint WinEventOutOfContext = 0x0000;
         const uint WinEventSkipOwnProcess = 0x0002;

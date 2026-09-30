@@ -36,7 +36,14 @@ namespace PommeFlash.Host
             }
 
             string version = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "?";
-            HostChannel.Log($"PommeFlashHost {version}, module {Path.GetFileName(options.PluginPath)}");
+            HostChannel.Log($"PommeFlashHost {version}, module {Path.GetFileName(options.PluginPath)} ({ModuleVersion(options.PluginPath)})");
+            HostChannel.Log($"Contenu {options.Swf.GetLeftPart(UriPartial.Path)}{(options.Swf.Query.Length > 1 ? " (avec paramètres d'adresse)" : string.Empty)}, " +
+                            $"page {options.Page.GetLeftPart(UriPartial.Path)}, {options.Width}×{options.Height}, id {options.ElementId ?? "aucun"}");
+            // Noms seuls : les valeurs peuvent contenir une clé de session.
+            HostChannel.Log("flashvars : " + (options.FlashVars is { Length: > 0 } flashVars
+                ? $"{flashVars.Length} caractères, {string.Join(", ", Names(flashVars))}"
+                : "aucun") + " ; paramètres : " + string.Join(", ", options.Params.Select(p => p.Key + "=" + HostChannel.Excerpt(p.Value, 60))) +
+                " ; donnés au module : wmode=" + options.PluginArguments().Last(p => p.Key == "wmode").Value);
             PluginInstance.SetUserAgent(options.UserAgent);
 
             try
@@ -49,6 +56,11 @@ namespace PommeFlash.Host
                 HostChannel.Error(ex.Message);
                 return 4;
             }
+
+            // Commandes lues dès maintenant : le module peut demander un script à la page dès sa création.
+            HostChannel.StartReading(
+                command => UiThread.Post(() => OnCommand(command)),
+                () => UiThread.Post(Close));
 
             try
             {
@@ -66,9 +78,6 @@ namespace PommeFlash.Host
             }
 
             HostChannel.Send("ready", ("window", (long)HostWindow.Frame));
-            HostChannel.StartReading(
-                command => UiThread.Post(() => OnCommand(command)),
-                () => UiThread.Post(Close));
 
             int code = HostWindow.Run();
             try
@@ -93,6 +102,27 @@ namespace PommeFlash.Host
                 default:
                     HostChannel.Log("Commande inconnue : " + command);
                     break;
+            }
+        }
+
+        /// <summary>Noms des flashvars (« a=1&amp;b=2 » : a, b), 40 au plus.</summary>
+        static IEnumerable<string> Names(string flashVars)
+            => flashVars.Split('&', StringSplitOptions.RemoveEmptyEntries)
+                .Select(pair => Uri.UnescapeDataString(pair.Split('=', 2)[0].Replace('+', ' ')))
+                .Take(40);
+
+        /// <summary>Version du module (ressource du fichier), pour le journal.</summary>
+        static string ModuleVersion(string path)
+        {
+            try
+            {
+                System.Diagnostics.FileVersionInfo info = System.Diagnostics.FileVersionInfo.GetVersionInfo(path);
+                string version = info.FileVersion?.Replace(',', '.').Replace(" ", string.Empty) ?? "version inconnue";
+                return string.IsNullOrEmpty(info.ProductName) ? version : info.ProductName + " " + version;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return "version illisible";
             }
         }
 

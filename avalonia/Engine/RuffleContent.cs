@@ -145,6 +145,8 @@ namespace PommeBrowser.Engine
                 }
                 if (!best) return null;
                 const el = best.el;
+                // Repère gardé par Ruffle quand il remplace l'élément : le moteur intégré le retrouve.
+                el.setAttribute('data-pomme-flash', '');
                 const params = {};
                 if (el.localName === 'object') {
                   for (const p of el.querySelectorAll(':scope > param')) {
@@ -182,6 +184,69 @@ namespace PommeBrowser.Engine
             })();
             """.Replace("__BASE__", baseUrl, StringComparison.Ordinal).Replace("__POST__", post, StringComparison.Ordinal)
                .Replace("__CONTENT__", FlashContent.MessagePrefix, StringComparison.Ordinal);
+
+        /// <summary>Préfixe des messages de position du contenu lu par le moteur intégré.</summary>
+        public const string RectPrefix = "rect:";
+
+        /// <summary>
+        /// Moteur Flash intégré dans la page : le contenu repéré (data-pomme-flash, posé par le script
+        /// de détection) est remplacé par un emplacement vide de même taille, ce qui arrête Ruffle, et
+        /// sa position dans la fenêtre est envoyée à PommeBrowser à chaque changement (défilement,
+        /// taille, mise en page) : « rect: » suivi de x, y, largeur, hauteur (pixels CSS), du rapport
+        /// pixels CSS / pixels de l'écran et de sa visibilité ; « rect:null » s'il est introuvable.
+        /// Relancé, il reprend le même emplacement.
+        /// </summary>
+        public static string FlashTrackerScript(string post) => """
+            (() => {
+              const post = (status) => { try { __POST__; } catch (e) { } };
+              if (window.__pommeFlashSend) { window.__pommeFlashSend(true); return; }
+              const target = document.querySelector('[data-pomme-flash]');
+              if (!target) { post('__RECT__null'); return; }
+              let hole = target;
+              if (!target.hasAttribute('data-pomme-flash-hole')) {
+                const box = target.getBoundingClientRect();
+                const style = getComputedStyle(target);
+                const length = (name, measured) => {
+                  const value = (target.getAttribute(name) || '').trim();
+                  if (/^\d+(px)?$/i.test(value)) return parseInt(value, 10) + 'px';
+                  if (/^\d+(\.\d+)?%$/.test(value)) return value;
+                  return Math.round(measured) + 'px';
+                };
+                hole = document.createElement('div');
+                for (const name of ['id', 'class', 'style']) {
+                  if (target.hasAttribute(name)) hole.setAttribute(name, target.getAttribute(name));
+                }
+                hole.setAttribute('data-pomme-flash', '');
+                hole.setAttribute('data-pomme-flash-hole', '');
+                hole.style.width = length('width', box.width);
+                hole.style.height = length('height', box.height);
+                hole.style.display = style.display === 'inline' ? 'inline-block' : style.display;
+                hole.style.background = '#000';
+                target.replaceWith(hole);
+              }
+              let last = '';
+              const send = (force) => {
+                const box = hole.getBoundingClientRect();
+                const visible = hole.isConnected && box.width > 0 && box.height > 0 && getComputedStyle(hole).visibility !== 'hidden';
+                const message = JSON.stringify({ x: box.left, y: box.top, w: box.width, h: box.height, dpr: window.devicePixelRatio || 1, visible });
+                if (force || message !== last) { last = message; post('__RECT__' + message); }
+              };
+              let queued = false;
+              const schedule = () => {
+                if (queued) return;
+                queued = true;
+                requestAnimationFrame(() => { queued = false; send(false); });
+              };
+              window.__pommeFlashSend = send;
+              addEventListener('scroll', schedule, { capture: true, passive: true });
+              addEventListener('resize', schedule);
+              new ResizeObserver(schedule).observe(hole);
+              new MutationObserver(schedule).observe(document.documentElement, { attributes: true, childList: true, subtree: true });
+              // Animations et transformations CSS ne se signalent pas : vérification régulière.
+              setInterval(() => send(false), 400);
+              send(true);
+            })();
+            """.Replace("__POST__", post, StringComparison.Ordinal).Replace("__RECT__", RectPrefix, StringComparison.Ordinal);
 
         /// <summary>Fichier demandé par la page (nom seul) : contenu et type, ou null s'il n'existe pas.</summary>
         public static (byte[] Data, string ContentType)? Read(string name, string baseUrl)

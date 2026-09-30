@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Reflection.PortableExecutable;
 using System.Text.Json;
 
 namespace PommeFlash.Tests;
@@ -11,16 +12,29 @@ sealed class HostRun : IAsyncDisposable
     readonly ConcurrentQueue<JsonElement> _events = new();
     readonly Task _reader;
     readonly SemaphoreSlim _arrived = new(0);
+    readonly SemaphoreSlim _input = new(1, 1);
+    readonly Func<string, (bool Ok, string? Value)>? _scripts;
 
-    HostRun(Process process)
+    HostRun(Process process, Func<string, (bool Ok, string? Value)>? scripts)
     {
         _process = process;
+        _scripts = scripts;
         _reader = Task.Run(ReadAsync);
     }
 
     public static string? HostPath => Environment.GetEnvironmentVariable("POMMEFLASH_HOST");
     public static string? PluginPath => Environment.GetEnvironmentVariable("POMMEFLASH_TEST_PLUGIN");
     static string? Launcher => Environment.GetEnvironmentVariable("POMMEFLASH_LAUNCHER") is { Length: > 0 } launcher ? launcher : null;
+
+    /// <summary>Hôte 32 bits (win-x86), pour un module NPSWF32 : la table NPNetscapeFuncs y fait 236 octets.</summary>
+    public static bool Is32BitHost
+    {
+        get
+        {
+            using var reader = new PEReader(File.OpenRead(HostPath!));
+            return reader.PEHeaders.CoffHeader.Machine == Machine.I386;
+        }
+    }
 
     /// <summary>Chemin vu par l'hôte (sous Wine, le disque Z: est la racine du système).</summary>
     public static string HostVisiblePath(string path) => Launcher != null && path.StartsWith('/') ? "Z:" + path : path;
@@ -33,7 +47,11 @@ sealed class HostRun : IAsyncDisposable
             Assert.Skip("Hors de Windows, l'hôte se lance avec Wine (POMMEFLASH_LAUNCHER=wine).");
     }
 
-    public static HostRun Start(IEnumerable<string> arguments)
+    /// <summary>
+    /// Hôte lancé ; <paramref name="scripts"/> répond aux scripts de la page qu'il demande
+    /// (événements « eval »), à la place de PommeBrowser.
+    /// </summary>
+    public static HostRun Start(IEnumerable<string> arguments, Func<string, (bool Ok, string? Value)>? scripts = null)
     {
         var start = new ProcessStartInfo
         {
@@ -49,7 +67,7 @@ sealed class HostRun : IAsyncDisposable
         foreach (string argument in arguments)
             start.ArgumentList.Add(argument);
         start.Environment["WINEDEBUG"] = "-all";
-        return new HostRun(Process.Start(start) ?? throw new InvalidOperationException("Hôte non lancé."));
+        return new HostRun(Process.Start(start) ?? throw new InvalidOperationException("Hôte non lancé."), scripts);
     }
 
     async Task ReadAsync()
@@ -59,7 +77,14 @@ sealed class HostRun : IAsyncDisposable
             if (!line.StartsWith('{'))
                 continue;
             using JsonDocument document = JsonDocument.Parse(line);
-            _events.Enqueue(document.RootElement.Clone());
+            JsonElement received = document.RootElement.Clone();
+            _events.Enqueue(received);
+            if (_scripts != null && received.GetProperty("event").GetString() == "eval")
+            {
+                (bool ok, string? value) = _scripts(received.GetProperty("code").GetString()!);
+                string reply = JsonSerializer.Serialize(new { ok, value });
+                await SendAsync($"result {received.GetProperty("id").GetInt32()} {reply}");
+            }
             _arrived.Release();
         }
         _arrived.Release();
@@ -95,8 +120,16 @@ sealed class HostRun : IAsyncDisposable
 
     public async Task SendAsync(string command)
     {
-        await _process.StandardInput.WriteLineAsync(command);
-        await _process.StandardInput.FlushAsync();
+        await _input.WaitAsync();
+        try
+        {
+            await _process.StandardInput.WriteLineAsync(command);
+            await _process.StandardInput.FlushAsync();
+        }
+        finally
+        {
+            _input.Release();
+        }
     }
 
     public async Task<int> WaitForExitAsync(TimeSpan timeout)

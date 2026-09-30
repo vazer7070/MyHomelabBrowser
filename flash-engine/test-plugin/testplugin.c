@@ -4,14 +4,14 @@
  * sous la forme « TEST clé=valeur », que les tests vérifient.
  *
  * Compilation : x86_64-w64-mingw32-gcc -shared -O2 -o npPommeTest.dll testplugin.c
- *           ou  cl /LD /O2 testplugin.c /Fe:npPommeTest.dll user32.lib
+ *               (32 bits : i686-w64-mingw32-gcc … -Wl,--kill-at)
+ *           ou  clang [--target=i686-pc-windows-msvc] -shared -O2 -o npPommeTest.dll testplugin.c -luser32
  */
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
 #include "npapi-min.h"
 
-#define EXPORT __declspec(dllexport)
 
 static NPNetscapeFuncs *browser;
 static uint16_t browserSize, browserVersion;
@@ -198,9 +198,31 @@ static void timerCallback(NPP npp, uint32_t id)
     }
 }
 
+/* Script de la page, comme ExternalInterface.call : exécuté par PommeBrowser, qui répond. */
+static void evaluateScript(const char *script, const char *key)
+{
+    NPObject *window = NULL;
+    if (browser->getvalue(instanceNpp, NPNVWindowNPObject, &window) != NPERR_NO_ERROR || !window)
+        return;
+    NPString code = { script, (uint32_t)strlen(script) };
+    NPVariant result;
+    if (browser->evaluate(instanceNpp, window, &code, &result))
+    {
+        reportString(key, &result);
+        browser->releasevariantvalue(&result);
+    }
+    else
+    {
+        report("%s=failed", key);
+    }
+    browser->releaseobject(window);
+}
+
 /* Contenu principal reçu : le reste du scénario. */
 static void continueScenario(void)
 {
+    evaluateScript("try { __flash__toXML(pommeAdd(2,3)) ; } catch (e) { \"<undefined/>\"; }", "script");
+    evaluateScript("pommeRefuse()", "script-refused");
     browser->geturlnotify(instanceNpp, "data.txt", NULL, (void *)0x1234);
     browser->geturlnotify(instanceNpp, "missing.txt", NULL, (void *)0x5678);
     const char *post = "Content-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello";
@@ -356,7 +378,7 @@ static NPError NPP_SetValue(NPP npp, NPNVariable variable, void *value)
     return NPERR_GENERIC_ERROR;
 }
 
-EXPORT NPError NP_GetEntryPoints(NPPluginFuncs *funcs)
+NP_EXPORT NPError WINAPI NP_GetEntryPoints(NPPluginFuncs *funcs)
 {
     if (!funcs || funcs->size < sizeof(NPPluginFuncs))
         return 3; /* NPERR_INVALID_FUNCTABLE_ERROR */
@@ -374,7 +396,7 @@ EXPORT NPError NP_GetEntryPoints(NPPluginFuncs *funcs)
     return NPERR_NO_ERROR;
 }
 
-EXPORT NPError NP_Initialize(NPNetscapeFuncs *funcs)
+NP_EXPORT NPError WINAPI NP_Initialize(NPNetscapeFuncs *funcs)
 {
     if (!funcs)
         return 3;
@@ -384,7 +406,7 @@ EXPORT NPError NP_Initialize(NPNetscapeFuncs *funcs)
     return NPERR_NO_ERROR;
 }
 
-EXPORT NPError NP_Shutdown(void)
+NP_EXPORT NPError WINAPI NP_Shutdown(void)
 {
     return NPERR_NO_ERROR;
 }
