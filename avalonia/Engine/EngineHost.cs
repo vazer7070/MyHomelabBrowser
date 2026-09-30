@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using PommeBrowser.Engine.Gtk;
+using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace PommeBrowser.Engine
 {
@@ -135,11 +136,14 @@ namespace PommeBrowser.Engine
                     case WindowsWebView2EnvironmentRequestedEventArgs webView2:
                         // Même environnement pour tous les onglets du profil (mêmes options) ; la
                         // navigation privée a son profil en mémoire, comme dans l'édition WPF.
+                        // Langue et arguments identiques à ceux de l'édition WPF, qui partage le
+                        // dossier WebView2 du profil : WebView2 refuse d'ouvrir un dossier déjà
+                        // utilisé avec d'autres options (les deux éditions ouvertes en même temps).
                         webView2.UserDataFolder = _settings.WebView2UserDataFolder;
                         webView2.IsInPrivateModeEnabled = isPrivate;
                         webView2.ProfileName = isPrivate && OperatingSystem.IsWindows() ? WebView2.WebView2Engine.PrivateProfileName : null;
-                        webView2.Language = _settings.Languages.Count > 0 ? _settings.Languages[0] : null;
-                        webView2.AdditionalBrowserArguments = string.IsNullOrWhiteSpace(_settings.BrowserArguments) ? null : _settings.BrowserArguments;
+                        webView2.Language = WebView2Language;
+                        webView2.AdditionalBrowserArguments = _settings.BrowserArguments ?? string.Empty;
                         webView2.EnableDevTools = true;
                         break;
 
@@ -151,6 +155,35 @@ namespace PommeBrowser.Engine
                         break;
                 }
             };
+        }
+
+        /// <summary>
+        /// Langue de WebView2 (menus, boîtes de dialogue, Accept-Language) : celle de l'édition WPF,
+        /// en-US en anglais et celle de Windows en français.
+        /// </summary>
+        static string? WebView2Language => MyHomelabBrowser.classes.Localization.Loc.Language == "en" ? "en-US" : null;
+
+        /// <summary>
+        /// Erreur venue de la vue web elle-même (création du moteur, de sa fenêtre…), par exemple
+        /// relancée par Avalonia après l'échec du démarrage de WebView2.
+        /// </summary>
+        public static bool IsWebViewFailure(Exception exception)
+            => exception.ToString().Contains("WebView", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Explication d'un échec du moteur, avec son code pour les rapports.</summary>
+        public static string DescribeFailure(Exception exception)
+        {
+            string message = exception.Message;
+            string reason = exception.HResult switch
+            {
+                // HRESULT_FROM_WIN32(ERROR_INVALID_STATE) : dossier ouvert ailleurs avec d'autres options.
+                unchecked((int)0x8007139F) => Tr("Le dossier de données WebView2 de ce profil est déjà utilisé avec d'autres réglages, probablement par l'édition classique de PommeBrowser encore ouverte. Fermez-la, puis réessayez."),
+                unchecked((int)0x80070005) => Tr("Accès refusé au dossier de données WebView2 de ce profil."),
+                _ when message.Contains("runtime not found", StringComparison.OrdinalIgnoreCase) || message.Contains("runtime is not installed", StringComparison.OrdinalIgnoreCase)
+                    => Tr("Le moteur Microsoft Edge WebView2 n'est pas installé sur cet ordinateur. Installez « Microsoft Edge WebView2 Runtime », puis réessayez."),
+                _ => Tr("Le moteur web de ce système n'a pas pu démarrer.")
+            };
+            return reason + "\n\n" + exception.GetType().Name + " (0x" + exception.HResult.ToString("X8") + ") : " + message;
         }
 
         /// <summary>Adaptateur de l'onglet, une fois la vue native créée (événement AdapterCreated).</summary>

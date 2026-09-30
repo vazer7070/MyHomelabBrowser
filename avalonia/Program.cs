@@ -29,6 +29,7 @@ namespace PommeBrowser
             args = Relauncher.WaitForPrevious(args);
             RuntimeLogBuffer.Init();
             AppPaths.Initialize();
+            ErrorLog.InstallProcessHandlers();
 
             // Dernier profil ouvert. Les données d'un profil renommé ou supprimé pendant que
             // PommeBrowser tournait sont déplacées ou effacées maintenant, moteur arrêté.

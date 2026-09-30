@@ -88,18 +88,29 @@ namespace PommeBrowser.Engine.WebView2
             _host.LostFocus += OnHostFocusChanged;
         }
 
-        /// <summary>Onglet branché sur la vue créée par Avalonia (null si WebView2 refuse).</summary>
+        /// <summary>
+        /// Onglet branché sur la vue créée par Avalonia. Une erreur remonte à l'onglet, qui l'affiche
+        /// (voir BrowserTab.AttachEngine).
+        /// </summary>
         public static IEngineTab? Create(NativeWebView host, IWindowsWebView2PlatformHandle handle, bool isPrivate)
         {
+            // Chaque lecture du handle donne une référence COM à rendre : les objets du SDK
+            // (GetObjectForIUnknown) prennent la leur.
+            nint corePointer = handle.CoreWebView2;
+            nint controllerPointer = handle.CoreWebView2Controller;
             try
             {
-                CoreWebView2 core = CoreWebView2.CreateFromComICoreWebView2(handle.CoreWebView2);
-                return new WebView2EngineTab(host, core, WrapController(handle.CoreWebView2Controller), isPrivate);
+                if (corePointer == 0)
+                    throw new InvalidOperationException("WebView2 : vue sans CoreWebView2.");
+                CoreWebView2 core = CoreWebView2.CreateFromComICoreWebView2(corePointer);
+                return new WebView2EngineTab(host, core, WrapController(controllerPointer), isPrivate);
             }
-            catch (Exception ex) when (ex is InvalidOperationException or COMException or InvalidComObjectException or ArgumentException)
+            finally
             {
-                RuntimeLogBuffer.Append("[WebView2] " + ex.Message);
-                return null;
+                if (corePointer != 0)
+                    Marshal.Release(corePointer);
+                if (controllerPointer != 0)
+                    Marshal.Release(controllerPointer);
             }
         }
 

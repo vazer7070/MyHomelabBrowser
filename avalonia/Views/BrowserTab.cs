@@ -231,12 +231,22 @@ namespace PommeBrowser.Views
             if (_web != null)
                 return;
 
-            _web = new NativeWebView();
-            EngineHost.Prepare(_web, IsPrivate);
-            _web.AdapterCreated += (_, _) => AttachEngine();
-            _web.AdapterDestroyed += (_, _) => DetachEngine();
-            _host.Children.Insert(0, _web);
-            _web.IsVisible = Page == TabPage.Web;
+            var web = new NativeWebView();
+            _web = web;
+            EngineHost.Prepare(web, IsPrivate);
+            // Événements d'une vue abandonnée après un échec (voir EngineFailed) : ignorés.
+            web.AdapterCreated += (_, _) =>
+            {
+                if (_web == web)
+                    AttachEngine();
+            };
+            web.AdapterDestroyed += (_, _) =>
+            {
+                if (_web == web)
+                    DetachEngine();
+            };
+            _host.Children.Insert(0, web);
+            web.IsVisible = Page == TabPage.Web;
         }
 
         void AttachEngine()
@@ -244,23 +254,75 @@ namespace PommeBrowser.Views
             if (_web == null || _engine != null)
                 return;
 
-            IEngineTab? engine = EngineHost.Attach(_web, IsPrivate);
-            if (engine == null)
+            // Toute erreur du moteur reste dans l'onglet : jamais d'arrêt de PommeBrowser.
+            IEngineTab? engine = null;
+            string? target = _pendingUrl;
+            try
             {
-                ShowError(_pendingUrl, Tr("Moteur web indisponible"), Tr("Le moteur web de ce système n'a pas pu être chargé."));
+                engine = EngineHost.Attach(_web, IsPrivate);
+                if (engine == null)
+                {
+                    EngineFailed(null);
+                    return;
+                }
+
+                _engine = engine;
+                ConnectEngine(engine);
+                AttachScripts(engine);
+
+                if (_pendingUrl is { } url)
+                {
+                    _pendingUrl = null;
+                    NavigateWeb(url);
+                }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ErrorLog.Write("Moteur web", ex);
+                engine?.Dispose();
+                _engine = null;
+                _pendingUrl ??= target;
+                EngineFailed(ex);
                 return;
             }
-
-            _engine = engine;
-            ConnectEngine(engine);
-            AttachScripts(engine);
-
-            if (_pendingUrl is { } url)
-            {
-                _pendingUrl = null;
-                NavigateWeb(url);
-            }
             RaiseChanged();
+        }
+
+        /// <summary>
+        /// Le moteur de la vue n'a pas pu démarrer (erreur relancée par Avalonia, voir
+        /// BrowserApp.OnUnhandledException) : l'onglet qui l'attendait affiche l'erreur.
+        /// </summary>
+        internal bool OnEngineStartupFailed(Exception exception)
+        {
+            if (_web == null || _engine != null)
+                return false;
+            EngineFailed(exception);
+            return true;
+        }
+
+        /// <summary>
+        /// Page d'erreur à la place de la vue web, retirée : « Réessayer » en crée une nouvelle,
+        /// et donc un nouveau démarrage du moteur.
+        /// </summary>
+        void EngineFailed(Exception? exception)
+        {
+            string? url = _pendingUrl ?? _engine?.Uri;
+            if (_web is { } failed)
+            {
+                // Retirée après l'événement en cours : elle peut être celle qui l'envoie.
+                _web = null;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => _host.Children.Remove(failed));
+            }
+            _pendingUrl = url;
+            ShowError(url, Tr("Moteur web indisponible"),
+                exception != null ? EngineHost.DescribeFailure(exception) : Tr("Le moteur web de ce système n'a pas pu être chargé."),
+                (Tr("Réessayer"), true, () =>
+                {
+                    if (url != null)
+                        Navigate(url);
+                    else
+                        ShowHome();
+                }));
         }
 
         void DetachEngine()
@@ -325,11 +387,17 @@ namespace PommeBrowser.Views
             }
             TryUpgrade(ref url);
             ShowWeb();
-            EnsureWeb();
-            if (_engine == null)
-                _pendingUrl = url;
-            else
+            if (_engine != null)
+            {
                 NavigateWeb(url);
+            }
+            else
+            {
+                // Adresse gardée avant la création de la vue : le moteur la charge dès qu'il est
+                // prêt (parfois tout de suite), sinon la page d'erreur du moteur la reprend.
+                _pendingUrl = url;
+                EnsureWeb();
+            }
             RaiseChanged();
         }
 
