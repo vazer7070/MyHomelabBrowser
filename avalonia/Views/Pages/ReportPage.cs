@@ -52,7 +52,7 @@ namespace PommeBrowser.Views.Pages
 
             _module = new ComboBox { ItemsSource = SupportReport.Modules.Select(m => m.Label).ToList(), SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
             _category = new ComboBox { ItemsSource = SupportReport.Categories.Select(c => c.Label).ToList(), SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
-            _logs = new CheckBox { Content = Tr("Joindre le journal de la session"), IsChecked = App.Settings.ReportIncludeLogs };
+            _logs = new CheckBox { Content = Tr("Joindre les journaux (session et erreurs)"), IsChecked = App.Settings.ReportIncludeLogs };
             _system = new CheckBox { Content = Tr("Joindre les informations système"), IsChecked = App.Settings.ReportIncludePcInfo };
             _page = new CheckBox { Content = Tr("Joindre la page affichée (adresse sans ses paramètres, et titre)"), IsChecked = false, IsEnabled = _pageUrl != null };
             _error.Bind(TextBlock.ForegroundProperty, this.GetResourceObservable("DangerBrush"));
@@ -129,9 +129,7 @@ namespace PommeBrowser.Views.Pages
                 {
                     FileName = $"pommebrowser-log-{id}-{DateTime.Now:yyyyMMdd-HHmmss}.txt",
                     ContentType = "text/plain; charset=utf-8",
-                    Content = Encoding.UTF8.GetBytes(RuntimeLogBuffer.GetSnapshot() is { Length: > 0 } snapshot
-                        ? snapshot
-                        : $"PommeBrowser {version} ({AppInfo.Platform})\n{DateTime.Now:yyyy-MM-dd HH:mm:ss}\n")
+                    Content = Encoding.UTF8.GetBytes(LogsForReport(version))
                 }
                 : null;
 
@@ -160,6 +158,34 @@ namespace PommeBrowser.Views.Pages
             await ShowResultAsync(result);
             _title.Text = string.Empty;
             _description.Text = string.Empty;
+        }
+
+        /// <summary>
+        /// Journal de la session, puis fin du journal des erreurs (errors.log), qui garde aussi les
+        /// erreurs des lancements précédents. Le tout reste sous la limite du serveur (1 Mo).
+        /// </summary>
+        static string LogsForReport(string version)
+        {
+            var text = new StringBuilder();
+            text.Append("PommeBrowser ").Append(version).Append(" (").Append(AppInfo.Platform).Append(")\n")
+                .Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")).Append("\n\n");
+            string errors = ErrorLog.ReadTail(256 * 1024) ?? "(vide)\n";
+            text.Append("=== Journal de la session ===\n");
+            text.Append(LastBytes(RuntimeLogBuffer.GetSnapshot() ?? string.Empty, 900 * 1024 - Encoding.UTF8.GetByteCount(errors))).Append("\n\n");
+            text.Append("=== Journal des erreurs (errors.log, fin) ===\n");
+            text.Append(errors);
+            return text.ToString();
+        }
+
+        /// <summary>Fin du texte tenant en <paramref name="maxBytes"/> octets UTF-8, à partir d'un début de ligne.</summary>
+        static string LastBytes(string text, int maxBytes)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(text);
+            if (bytes.Length <= maxBytes)
+                return text;
+            string tail = Encoding.UTF8.GetString(bytes, bytes.Length - maxBytes, maxBytes);
+            int newline = tail.IndexOf('\n');
+            return newline >= 0 ? tail[(newline + 1)..] : tail;
         }
 
         void ShowError(string message)
@@ -191,7 +217,7 @@ namespace PommeBrowser.Views.Pages
         {
             var extra = new StringBuilder();
             if (logs)
-                extra.AppendLine(Tr("- Logs récents : joints au message"));
+                extra.AppendLine(Tr("- Journaux (session et erreurs) : joints au message"));
 
             if (system)
             {

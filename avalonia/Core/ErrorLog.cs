@@ -30,6 +30,36 @@ namespace PommeBrowser.Core
             };
         }
 
+        /// <summary>
+        /// Fin du journal (au plus <paramref name="maxBytes"/> octets, à partir d'un début de ligne),
+        /// pour les rapports ; null s'il est vide ou illisible.
+        /// </summary>
+        public static string? ReadTail(int maxBytes)
+        {
+            try
+            {
+                lock (Gate)
+                {
+                    string path = FilePath;
+                    if (!File.Exists(path))
+                        return null;
+                    using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    long start = Math.Max(0, stream.Length - maxBytes);
+                    stream.Position = start;
+                    using var reader = new StreamReader(stream, Encoding.UTF8);
+                    string text = reader.ReadToEnd();
+                    // Début coupé au milieu d'une ligne (ou d'un caractère) : on repart de la ligne suivante.
+                    if (start > 0 && text.IndexOf('\n') is var newline and >= 0)
+                        text = text[(newline + 1)..];
+                    return text.Length > 0 ? text : null;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+
         /// <summary>Consigne une erreur : type, code, message, pile d'appels et erreurs internes.</summary>
         public static void Write(string context, Exception? exception)
         {
