@@ -19,8 +19,13 @@ namespace PommeBrowser.Views
         void InitializeFavoritesBar()
         {
             App.Favorites.Changed += RefreshFavoritesBar;
-            FaviconStore.FaviconUpdated += _ => RefreshFavoritesBar();
-            Closed += (_, _) => App.Favorites.Changed -= RefreshFavoritesBar;
+            Action<string> faviconUpdated = _ => RefreshFavoritesBar();
+            FaviconStore.FaviconUpdated += faviconUpdated;
+            Closed += (_, _) =>
+            {
+                App.Favorites.Changed -= RefreshFavoritesBar;
+                FaviconStore.FaviconUpdated -= faviconUpdated;
+            };
             RefreshFavoritesBar();
         }
 

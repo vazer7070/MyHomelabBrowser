@@ -55,9 +55,17 @@ namespace PommeBrowser.Core
             if (EngineHost.Kind == EngineKind.WebView2)
             {
                 EngineHost.RequestFilter = _module;
-                _module.RulesChanged += () => Avalonia.Threading.Dispatcher.UIThread.Post(UpdateStatus);
+                _module.RulesChanged += OnRulesChanged;
             }
         }
+
+        void OnRulesChanged() => Avalonia.Threading.Dispatcher.UIThread.Post(UpdateStatus);
+
+        /// <summary>
+        /// Profil quitté sans relance : ce service n'écoute plus le module commun, qui reste ouvert
+        /// pour le profil suivant (ses réglages et ses règles sont rechargés, voir BrowserApp).
+        /// </summary>
+        public void Detach() => _module.RulesChanged -= OnRulesChanged;
 
         /// <summary>Filtre remplacé, réglages ou état modifiés (fil de l'interface).</summary>
         public event Action? Changed;

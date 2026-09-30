@@ -787,7 +787,6 @@ namespace PommeBrowser.Linux.Ui
             tools.Append(Tr("Ouvrir dans Basilisk"), "win.open-in-basilisk");
             tools.Append(Tr("Rechercher dans la page…"), "win.find");
             tools.Append(Tr("Imprimer…"), "win.print");
-            tools.Append(Tr("Outils de développement"), "win.inspector");
             menu.AppendSection(null, tools);
 
             var app = Gio.Menu.New();

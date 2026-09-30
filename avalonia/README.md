@@ -70,6 +70,7 @@ Elle porte le même nom que celle de l'édition GTK. Gardez-la dans un dossier m
 
 **Profils et mots de passe**
 - Profils protégés par mot de passe, avec leurs propres réglages, favoris, historique, cookies et coffre.
+- Changement de profil sans redémarrer sous Windows et macOS : les fenêtres du profil quitté se ferment et celles du nouveau profil s'ouvrent au même endroit, avec ses onglets. Sous Linux, WebKitGTK fixe ses dossiers de données au démarrage : PommeBrowser redémarre. Renommer ou supprimer un profil redémarre partout (ses dossiers ne se déplacent qu'au démarrage).
 - Coffre chiffré, au même format que les autres éditions :
   - PommeBrowser propose d'enregistrer les identifiants et remplit les formulaires ;
   - codes de double authentification (TOTP) ;
@@ -137,7 +138,7 @@ avalonia/packaging/macos/build-app.sh all         # PommeBrowser.app arm64 et x6
 .\build-pack-velopack.ps1 -Edition avalonia       # Windows : Velopack + version GitHub
 ```
 
-La CI GitHub (`.github/workflows/build.yml`) construit les trois paquets à chaque modification. Elle essaie aussi de lancer l'AppImage.
+La CI GitHub (`.github/workflows/build.yml`) construit les paquets Windows et Linux à chaque modification, et essaie de lancer l'AppImage. L'app macOS, dix fois plus coûteuse en minutes, n'est construite que sur `master`, à la demande (**Actions › Compilation et tests › Run workflow**) ou pour une PR portant l'étiquette `macos` ; son code est quand même compilé à chaque fois avec le reste de l'édition Avalonia.
 
 - **Ruffle** et les outils AppImage sont téléchargés dans une version fixée et vérifiés par SHA-256.
 - **Pomme Legacy** (moteur Flash d'origine) : compilé par sa propre CI, puis pris dans la version GitHub `legacy-engine-<version>` (voir [`legacy-engine/README.md`](../legacy-engine/README.md)).

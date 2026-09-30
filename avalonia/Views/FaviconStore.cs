@@ -33,6 +33,9 @@ namespace PommeBrowser.Views
         public static string HostFromUrl(string? url)
             => Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) ? NormalizeHost(uri.Host) : string.Empty;
 
+        /// <summary>Changement de profil : les icônes gardées en mémoire sont celles du profil quitté.</summary>
+        public static void ForgetMemory() => Memory.Clear();
+
         public static Bitmap? TryGet(string? url)
         {
             string host = HostFromUrl(url);

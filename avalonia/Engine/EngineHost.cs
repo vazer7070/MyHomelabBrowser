@@ -114,6 +114,18 @@ namespace PommeBrowser.Engine
                 Apple.AppleEngine.ApplySettings();
         }
 
+        /// <summary>
+        /// Profil quitté sans relancer PommeBrowser : ce que le moteur garde pour la session (certificats
+        /// acceptés) est oublié. Les nouvelles vues ouvrent les données du nouveau profil (voir Configure).
+        /// </summary>
+        public static void ForgetSession()
+        {
+            if (Kind == EngineKind.WebView2 && OperatingSystem.IsWindows())
+                WebView2.WebView2Engine.ForgetAllowedCertificates();
+            else if (Kind == EngineKind.WebKitApple && OperatingSystem.IsMacOS())
+                Apple.AppleEngine.ForgetAllowedCertificates();
+        }
+
         /// <summary>À appeler avant l'insertion de la vue dans la fenêtre : données du profil ou navigation privée.</summary>
         public static void Prepare(NativeWebView view, bool isPrivate)
         {

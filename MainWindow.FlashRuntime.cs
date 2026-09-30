@@ -19,6 +19,8 @@ namespace MyHomelabBrowser
             content.FlashNetworkHookAttached = true;
             RuffleAssetService.Configure(content.Web.CoreWebView2);
             _ = InstallFlashDocumentProbeAsync(content.Web.CoreWebView2);
+            if (_settings.Settings.EnableFlashSupport)
+                _ = InstallRufflePluginAsync(content.Web.CoreWebView2);
 
             try
             {
@@ -48,6 +50,23 @@ namespace MyHomelabBrowser
             catch (Exception ex)
             {
                 FlashDebugConsole.Log("Flash document probe: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Flash annoncé à la page avant ses scripts (voir RufflePluginScript) : les sites qui
+        /// vérifient sa présence (détection d'Adobe, SWFObject…) ajoutent alors leur contenu.
+        /// </summary>
+        private static async Task InstallRufflePluginAsync(CoreWebView2 core)
+        {
+            try
+            {
+                await core.AddScriptToExecuteOnDocumentCreatedAsync(RufflePluginScript.Source)
+                    .ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                FlashDebugConsole.Log("Ruffle plugin: " + ex.Message);
             }
         }
 
