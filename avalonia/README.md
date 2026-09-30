@@ -138,7 +138,7 @@ avalonia/packaging/macos/build-app.sh all         # PommeBrowser.app arm64 et x6
 .\build-pack-velopack.ps1 -Edition avalonia       # Windows : Velopack + version GitHub
 ```
 
-La CI GitHub (`.github/workflows/build.yml`) construit les paquets Windows et Linux à chaque modification, et essaie de lancer l'AppImage. L'app macOS, dix fois plus coûteuse en minutes, n'est construite que sur `master`, à la demande (**Actions › Compilation et tests › Run workflow**) ou pour une PR portant l'étiquette `macos` ; son code est quand même compilé à chaque fois avec le reste de l'édition Avalonia.
+La CI GitHub (`.github/workflows/build.yml`) lance les tests et construit les paquets Windows, macOS et Linux à chaque modification. Elle essaie aussi de lancer l'AppImage.
 
 - **Ruffle** et les outils AppImage sont téléchargés dans une version fixée et vérifiés par SHA-256.
 - **Pomme Legacy** (moteur Flash d'origine) : compilé par sa propre CI, puis pris dans la version GitHub `legacy-engine-<version>` (voir [`legacy-engine/README.md`](../legacy-engine/README.md)).
