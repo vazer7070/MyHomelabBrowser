@@ -165,6 +165,7 @@ namespace PommeFlash.Host
             if (url.TrimStart().StartsWith("javascript:", StringComparison.OrdinalIgnoreCase))
             {
                 string code = Uri.UnescapeDataString(url.TrimStart()["javascript:".Length..]);
+                HostChannel.Trace("js:" + code, "Adresse javascript: demandée (" + (target ?? "sans cible") + ") : " + HostChannel.Excerpt(code));
                 HostChannel.Send("script", ("code", code), ("target", target));
                 if (notify)
                     NotifyLater(url, Np.ReasonDone, notifyData);
@@ -190,6 +191,8 @@ namespace PommeFlash.Host
                 return Np.NoError;
             }
 
+            HostChannel.Trace("url:" + (post != null ? "POST " : "GET ") + uri.GetLeftPart(UriPartial.Path),
+                "Chargement demandé : " + (post != null ? "POST " : "GET ") + uri.GetLeftPart(UriPartial.Path));
             var stream = new PluginStream(this, url, uri, post, notify, notifyData);
             _streams.Add(stream);
             stream.Start();
@@ -271,6 +274,7 @@ namespace PommeFlash.Host
                     *(nint*)value = NpMemory.Utf8(Origin(instance._options.Page));
                     return Np.NoError;
                 default:
+                    HostChannel.Trace("value:" + (int)variable, $"NPN_GetValue({variable}) : valeur non fournie.");
                     return Np.GenericError;
             }
         }
@@ -343,6 +347,7 @@ namespace PommeFlash.Host
                 return true;
             }
 
+            HostChannel.Trace("eval:" + code, "Script de la page demandé (NPN_Evaluate) : " + HostChannel.Excerpt(code));
             HostChannel.Send("script", ("code", code), ("target", null));
             value = null;
             return true;

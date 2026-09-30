@@ -101,6 +101,9 @@ namespace PommeFlash.Host
                 return;
             }
 
+            HostChannel.Trace("response:" + _uri.GetLeftPart(UriPartial.Path),
+                $"HTTP {(int)response.StatusCode} {response.Content.Headers.ContentType?.MediaType ?? "sans type"}" +
+                $" ({response.Content.Headers.ContentLength?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"} octets) : {_uri.GetLeftPart(UriPartial.Path)}");
             var headers = new StringBuilder();
             headers.Append("HTTP/").Append(response.Version.ToString(2)).Append(' ')
                 .Append((int)response.StatusCode).Append(' ').Append(response.ReasonPhrase).Append('\n');

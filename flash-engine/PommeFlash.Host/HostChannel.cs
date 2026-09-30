@@ -66,6 +66,34 @@ namespace PommeFlash.Host
 
         public static void Error(string message) => Send("log", ("level", "error"), ("message", message));
 
+        const int MaxTraces = 300;
+        static readonly HashSet<string> Traced = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Trace de diagnostic : ce que le module demande (fichiers, scripts, objets de la page).
+        /// Une fois par clé, et 300 au plus par lancement : le journal de PommeBrowser reste lisible.
+        /// </summary>
+        public static void Trace(string key, string message)
+        {
+            lock (Traced)
+            {
+                if (Traced.Count > MaxTraces || !Traced.Add(key))
+                    return;
+                if (Traced.Count > MaxTraces)
+                    message = "Traces suivantes non notées (" + MaxTraces + " au plus).";
+            }
+            Send("log", ("level", "trace"), ("message", message));
+        }
+
+        /// <summary>Texte raccourci pour le journal.</summary>
+        public static string Excerpt(string? text, int length = 300)
+        {
+            if (string.IsNullOrEmpty(text))
+                return string.Empty;
+            string line = text.ReplaceLineEndings(" ");
+            return line.Length <= length ? line : line[..length] + "…";
+        }
+
         /// <summary>Lit les commandes sur un fil à part ; <paramref name="ended"/> quand l'entrée se ferme.</summary>
         public static void StartReading(Action<string> command, Action ended)
         {

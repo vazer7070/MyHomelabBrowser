@@ -203,16 +203,31 @@ namespace PommeFlash.Host.Native
         {
         }
 
+        /// <summary>Membre de la page que le module demande et que l'hôte ne fournit pas (journal).</summary>
+        static byte Traced(nint obj, string kind, string name, byte found)
+        {
+            if (found == 0)
+            {
+                string type = Managed(obj)?.GetType().Name ?? "objet";
+                HostChannel.Trace(kind + ":" + type + "." + name, $"Page : {kind} {type}.{name} absent de l'hôte.");
+            }
+            return found;
+        }
+
         [UnmanagedCallersOnly]
         static byte HostHasMethod(nint obj, nint name)
-            => Guard(() => Managed(obj)?.HasMethod(NpIdentifiers.Describe(name)) == true);
+        {
+            string method = NpIdentifiers.Describe(name);
+            return Traced(obj, "méthode", method, Guard(() => Managed(obj)?.HasMethod(method) == true));
+        }
 
         [UnmanagedCallersOnly]
         static byte HostInvoke(nint obj, nint name, NPVariant* args, uint count, NPVariant* result)
         {
             object?[] values = Arguments(args, count);
             object? value = null;
-            byte ok = Guard(() => Managed(obj)?.Invoke(NpIdentifiers.Describe(name), values, out value) == true);
+            string method = NpIdentifiers.Describe(name);
+            byte ok = Traced(obj, "appel", method, Guard(() => Managed(obj)?.Invoke(method, values, out value) == true));
             if (ok != 0)
                 NpVariants.Write(result, value);
             return ok;
@@ -231,13 +246,17 @@ namespace PommeFlash.Host.Native
 
         [UnmanagedCallersOnly]
         static byte HostHasProperty(nint obj, nint name)
-            => Guard(() => Managed(obj)?.HasProperty(NpIdentifiers.Describe(name)) == true);
+        {
+            string property = NpIdentifiers.Describe(name);
+            return Traced(obj, "propriété", property, Guard(() => Managed(obj)?.HasProperty(property) == true));
+        }
 
         [UnmanagedCallersOnly]
         static byte HostGetProperty(nint obj, nint name, NPVariant* result)
         {
             object? value = null;
-            byte ok = Guard(() => Managed(obj)?.GetProperty(NpIdentifiers.Describe(name), out value) == true);
+            string property = NpIdentifiers.Describe(name);
+            byte ok = Traced(obj, "propriété", property, Guard(() => Managed(obj)?.GetProperty(property, out value) == true));
             NpVariants.Write(result, ok != 0 ? value : null);
             return ok;
         }

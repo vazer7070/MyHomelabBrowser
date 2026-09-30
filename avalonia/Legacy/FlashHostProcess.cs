@@ -30,6 +30,7 @@ namespace PommeBrowser.Legacy
         nint _window;
         bool _closed;
         bool _exited;
+        bool _scriptNoticed;
 
         FlashHostProcess(Process process)
         {
@@ -71,7 +72,7 @@ namespace PommeBrowser.Legacy
             process.Exited += (_, _) => Dispatcher.UIThread.Post(host.OnExited);
             _ = Task.Run(host.ReadEventsAsync);
             _ = Task.Run(host.DrainErrorsAsync);
-            RuntimeLogBuffer.Append($"[Flash] Moteur intégré lancé (PID {process.Id}) : {content.Swf.Host}");
+            RuntimeLogBuffer.Append($"[Flash] Moteur intégré lancé (PID {process.Id}) : {content.Swf.GetLeftPart(UriPartial.Path)} avec {Path.GetFileName(module)}");
             return host;
         }
 
@@ -157,8 +158,13 @@ namespace PommeBrowser.Legacy
                         RuntimeLogBuffer.Append("[Flash] " + (root.TryGetProperty("message", out JsonElement message) ? message.GetString() : line));
                         break;
                     case "script":
-                        // Échanges avec les scripts de la page : étape 4 du moteur.
-                        RuntimeLogBuffer.Append("[Flash] Script de la page non transmis (pas encore pris en charge).");
+                        // Échanges avec les scripts de la page : étape 4 du moteur. Le détail de chaque
+                        // script est dans les traces de l'hôte ; un seul avertissement ici.
+                        if (!_scriptNoticed)
+                        {
+                            _scriptNoticed = true;
+                            RuntimeLogBuffer.Append("[Flash] Scripts de la page non transmis (pas encore pris en charge).");
+                        }
                         break;
                 }
             }

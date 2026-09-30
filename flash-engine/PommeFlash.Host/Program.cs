@@ -36,7 +36,8 @@ namespace PommeFlash.Host
             }
 
             string version = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "?";
-            HostChannel.Log($"PommeFlashHost {version}, module {Path.GetFileName(options.PluginPath)}");
+            HostChannel.Log($"PommeFlashHost {version}, module {Path.GetFileName(options.PluginPath)} ({ModuleVersion(options.PluginPath)})");
+            HostChannel.Log($"Contenu {options.Swf.GetLeftPart(UriPartial.Path)}, page {options.Page.GetLeftPart(UriPartial.Path)}, {options.Width}×{options.Height}");
             PluginInstance.SetUserAgent(options.UserAgent);
 
             try
@@ -93,6 +94,21 @@ namespace PommeFlash.Host
                 default:
                     HostChannel.Log("Commande inconnue : " + command);
                     break;
+            }
+        }
+
+        /// <summary>Version du module (ressource du fichier), pour le journal.</summary>
+        static string ModuleVersion(string path)
+        {
+            try
+            {
+                System.Diagnostics.FileVersionInfo info = System.Diagnostics.FileVersionInfo.GetVersionInfo(path);
+                string version = info.FileVersion?.Replace(',', '.').Replace(" ", string.Empty) ?? "version inconnue";
+                return string.IsNullOrEmpty(info.ProductName) ? version : info.ProductName + " " + version;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return "version illisible";
             }
         }
 
