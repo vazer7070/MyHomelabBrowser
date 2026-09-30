@@ -523,6 +523,11 @@ namespace PommeBrowser.Views.Pages
                     Settings.EnableFlashSupport = value;
                     Save();
                 }),
+                Check(Tr("Ouvrir dans Basilisk les contenus que Ruffle ne sait pas lire"), Settings.FlashAutoFallback, value =>
+                {
+                    Settings.FlashAutoFallback = value;
+                    Save();
+                }),
                 Check(Tr("Mode debug Flash (journal détaillé)"), Settings.FlashDebugEnabled, value =>
                 {
                     Settings.FlashDebugEnabled = value;

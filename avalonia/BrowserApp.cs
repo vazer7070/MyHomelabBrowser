@@ -64,6 +64,9 @@ namespace PommeBrowser
         /// <summary>Hôtes dont le certificat a été accepté pendant cette session (non épinglé).</summary>
         public HashSet<string> SessionTrustedHosts { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>Hôtes ramenés sur Ruffle après une bascule automatique : plus de bascule pendant la session.</summary>
+        public HashSet<string> SessionRuffleHosts { get; } = new(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>Hôtes qui ne répondent pas en HTTPS (pas de nouvel essai pendant la session).</summary>
         public HashSet<string> HttpOnlyHosts { get; } = new(StringComparer.OrdinalIgnoreCase);
 

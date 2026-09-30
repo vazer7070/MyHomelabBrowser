@@ -157,11 +157,15 @@ namespace PommeBrowser.Views
             _legacyView = null;
         }
 
-        /// <summary>Retour à la page dans PommeBrowser (Ruffle) ; le site n'est plus ouvert d'office dans Basilisk.</summary>
+        /// <summary>
+        /// Retour à la page dans PommeBrowser (Ruffle) : le site n'est plus ouvert d'office dans
+        /// Basilisk, et n'y bascule plus de lui-même pendant la session.
+        /// </summary>
         void BackToRuffle(Uri uri)
         {
             if (FlashDomainRules.GetRule(uri) == FlashRuleMode.Legacy)
                 FlashDomainRules.RemoveRule(uri);
+            _app.SessionRuffleHosts.Add(uri.Host);
             StopBasilisk();
             _basilisk = null;
             _legacyUri = null;

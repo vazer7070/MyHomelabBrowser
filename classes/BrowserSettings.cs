@@ -79,6 +79,9 @@ namespace MyHomelabBrowser.classes
         // Ruffle intégré est le moteur principal. Basilisk reste un secours manuel.
         public bool PreferRuffle { get; set; } = true;
 
+        // Contenu que Ruffle ne sait pas lire : la page passe d'elle-même au moteur de secours.
+        public bool FlashAutoFallback { get; set; } = true;
+
         // Chemin vers basilisk.exe
         public string BasiliskPath { get; set; } = "";
 
@@ -119,6 +122,7 @@ namespace MyHomelabBrowser.classes
                 // 🔥 Flash
                 EnableFlashSupport = EnableFlashSupport,
                 PreferRuffle = PreferRuffle,
+                FlashAutoFallback = FlashAutoFallback,
                 BasiliskPath = BasiliskPath,
                 FlashDebugEnabled = FlashDebugEnabled,
 
