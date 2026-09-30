@@ -64,6 +64,7 @@
 		<Compile Include="../classes/Security/Totp.cs" Link="Shared/Security/Totp.cs" />
 		<Compile Include="../classes/Workspaces/WorkspaceStore.cs" Link="Shared/Workspaces/WorkspaceStore.cs" />
 		<Compile Include="../classes/Flash/FlashDebugConsole.cs" Link="Shared/Flash/FlashDebugConsole.cs" />
+		<Compile Include="../classes/Flash/RufflePluginScript.cs" Link="Shared/Flash/RufflePluginScript.cs" />
 		<Compile Include="../classes/Flash/FlashDomainRules.cs" Link="Shared/Flash/FlashDomainRules.cs" />
 		<Compile Include="../classes/Flash/LegacyProfileLease.cs" Link="Shared/Flash/LegacyProfileLease.cs" />
 		<Compile Include="../classes/Flash/LegacyProfileManager.cs" Link="Shared/Flash/LegacyProfileManager.cs" />

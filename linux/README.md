@@ -101,6 +101,7 @@ Pour les contenus Flash que Ruffle ne lit pas :
 **Flash**
 - Contenus lus avec Ruffle, intégré et vérifié par SHA-256 à la compilation.
 - Ruffle n'est chargé que sur les pages qui contiennent du Flash.
+- Comme l'extension Ruffle, PommeBrowser annonce un lecteur Flash aux pages : les sites qui vérifient la présence de Flash avant d'afficher leur contenu (SWFObject, détection d'Adobe) l'affichent, et Ruffle le lit.
 - Basilisk pour le reste : « Ouvrir dans Basilisk » (menu principal) ouvre la page dans une fenêtre Basilisk, avec le lecteur Flash d'origine. « Toujours » l'y ouvre d'office ensuite.
 - Profils Basilisk durcis, un par site (jetable en navigation privée), communs avec l'édition Windows. Basilisk se ferme avec son onglet, et avec PommeBrowser même en cas d'arrêt brutal.
 

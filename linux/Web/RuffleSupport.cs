@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using MyHomelabBrowser.classes;
+using MyHomelabBrowser.classes.Flash;
 using PommeBrowser.Linux.Core;
 
 namespace PommeBrowser.Linux.Web
@@ -92,6 +93,7 @@ namespace PommeBrowser.Linux.Web
             """;
 
         WebKit.UserScript? _probe;
+        WebKit.UserScript? _plugin;
 
         public static string AssetDirectory => Path.Combine(AppContext.BaseDirectory, "Assets", "Ruffle");
 
@@ -135,7 +137,16 @@ namespace PommeBrowser.Linux.Web
                 World,
                 null,
                 null);
+            // Flash annoncé dans le monde de la page, avant ses scripts : beaucoup de sites
+            // n'ajoutent leur contenu Flash qu'à cette condition (voir RufflePluginScript).
+            _plugin ??= WebKit.UserScript.New(
+                RufflePluginScript.Source,
+                WebKit.UserContentInjectedFrames.AllFrames,
+                WebKit.UserScriptInjectionTime.Start,
+                null,
+                null);
 
+            manager.AddScript(_plugin);
             manager.AddScript(_probe);
             manager.RegisterScriptMessageHandler(MessageHandler, World);
         }
@@ -145,6 +156,8 @@ namespace PommeBrowser.Linux.Web
             if (_probe == null)
                 return;
 
+            if (_plugin != null)
+                manager.RemoveScript(_plugin);
             manager.RemoveScript(_probe);
             manager.UnregisterScriptMessageHandler(MessageHandler, World);
         }
