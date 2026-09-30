@@ -28,8 +28,10 @@ PommeBrowser ──(ligne de commande, stdin/stdout JSON)──► PommeFlashHos
 - **Page** (`PageObjects.cs`) : `window`, `location`, `document`, `navigator` et l'élément,
   en lecture seule. Flash y lit l'adresse de la page pour ses règles de sécurité
   (`top.location + "__flashplugin_unique__"`) : l'hôte répond lui-même.
-- **Fenêtre** (`HostWindow.cs`) : mode fenêtré (`wmode=window`), le module dessine dans sa
-  fenêtre, que PommeBrowser loge dans l'onglet comme il le faisait pour Basilisk.
+- **Fenêtre** (`HostWindow.cs`) : mode fenêtré, le module dessine dans sa fenêtre, que
+  PommeBrowser loge dans l'onglet comme il le faisait pour Basilisk. Les modes `direct` et `gpu`
+  demandés par la page sont gardés (fenêtrés sous Windows, ils donnent accès à Stage3D, dont
+  beaucoup de jeux ont besoin) ; `opaque` et `transparent`, sans fenêtre, deviennent `window`.
 
 ## Échanges avec PommeBrowser
 

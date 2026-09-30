@@ -42,7 +42,8 @@ namespace PommeFlash.Host
             // Noms seuls : les valeurs peuvent contenir une clé de session.
             HostChannel.Log("flashvars : " + (options.FlashVars is { Length: > 0 } flashVars
                 ? $"{flashVars.Length} caractères, {string.Join(", ", Names(flashVars))}"
-                : "aucun") + " ; paramètres : " + string.Join(", ", options.Params.Select(p => p.Key)));
+                : "aucun") + " ; paramètres : " + string.Join(", ", options.Params.Select(p => p.Key + "=" + HostChannel.Excerpt(p.Value, 60))) +
+                " ; donnés au module : wmode=" + options.PluginArguments().Last(p => p.Key == "wmode").Value);
             PluginInstance.SetUserAgent(options.UserAgent);
 
             try

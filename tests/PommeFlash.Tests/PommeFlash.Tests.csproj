@@ -26,4 +26,8 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup Label="Logique de l'hôte sans code natif">
+    <Compile Include="..\..\flash-engine\PommeFlash.Host\HostOptions.cs" Link="Host\HostOptions.cs" />
+  </ItemGroup>
+
 </Project>
