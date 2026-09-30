@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Tests du moteur Flash intégré : le vrai hôte (PommeFlashHost.exe) est lancé avec un greffon
+    NPAPI de test (flash-engine/test-plugin), qui rapporte ce qu'il observe. Ils demandent :
+    POMMEFLASH_HOST (hôte publié pour win-x64), POMMEFLASH_TEST_PLUGIN (greffon compilé) et,
+    hors de Windows, POMMEFLASH_LAUNCHER=wine. Sans ces variables, ils sont ignorés.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>PommeFlash.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
