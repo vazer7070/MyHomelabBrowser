@@ -22,7 +22,7 @@ Adobe interdit de redistribuer Flash Player et ne le propose plus au télécharg
 
 Les dernières versions de Flash Player bloquent les contenus depuis le 12 janvier 2021 : il faut une version plus ancienne.
 
-Le module est rangé dans les données communes aux profils (`plugins/`), que Basilisk reçoit par `MOZ_PLUGIN_PATH` (Windows et Linux).
+Le module est rangé dans les données communes aux profils (`plugins/`), que Basilisk reçoit par `MOZ_PLUGIN_PATH` (Windows et Linux). Un module 32 bits (`NPSWF32_….dll`, architecture lue dans le fichier) est rangé à part (`plugins/x86`) : Basilisk ne le voit pas, seul le moteur Flash intégré de Windows l'utilise (voir `flash-engine/README.md`).
 
 Sous Linux, le moteur utilise les bibliothèques du système, comme le reste de l'AppImage. Pour Flash, il faut aussi GTK 2 (le module Flash en dépend) :
 

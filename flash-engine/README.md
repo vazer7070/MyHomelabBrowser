@@ -29,11 +29,17 @@ PommeBrowser ──(ligne de commande, stdin/stdout JSON)──► PommeFlashHos
 - **Page** (`PageObjects.cs`) : `window`, `location`, `document`, `navigator` et l'élément,
   en lecture seule. Flash y lit l'adresse de la page pour ses règles de sécurité
   (`top.location + "__flashplugin_unique__"`) : l'hôte répond lui-même.
-- **32 et 64 bits.** Un processus ne charge que les modules de son architecture : l'hôte est publié
-  en `win-x64` (`flash\PommeFlashHost.exe`) et en `win-x86` (`flash\x86\PommeFlashHost.exe`).
-  PommeBrowser lance celui du module : le module 32 bits (rangé dans `plugins\x86`, hors de la vue de
-  Basilisk, qui est en 64 bits) sert au moteur intégré quand il est installé, certains jeux ne
-  fonctionnant qu'avec lui. En 32 bits, les conventions d'appel comptent : fonctions NPAPI en
+- **32 et 64 bits, choisis seuls.** Un processus ne charge que les modules de son architecture :
+  l'hôte est publié en `win-x64` (`flash\PommeFlashHost.exe`) et en `win-x86`
+  (`flash\x86\PommeFlashHost.exe`). L'architecture d'un module est lue dans son en-tête PE, pas
+  dans son nom (`NPSWF32.dll` des anciennes versions compris), et PommeBrowser lance l'hôte qui va
+  avec. Le moteur intégré essaie un module par architecture : la copie installée (`plugins` en
+  64 bits, `plugins\x86` en 32 bits, hors de la vue de Basilisk), sinon le Flash Player installé
+  dans Windows (`System32` et `SysWOW64\Macromed\Flash`), utilisé en place. Ordre : une version
+  sans le blocage de 2021 d'abord, puis le 32 bits (certains jeux ne fonctionnent qu'avec lui).
+  Si l'hôte s'arrête avant d'afficher le contenu (module refusé, code 4 ou 5, plantage), l'autre
+  module prend le relais, dans la page comme dans l'onglet. « Rechercher le module Flash »
+  installe le meilleur module de chaque architecture trouvé. En 32 bits, les conventions d'appel comptent : fonctions NPAPI en
   `cdecl`, points d'entrée `NP_*` en `stdcall` (déclarées explicitement, sans effet en 64 bits) ;
   `NPVariant` fait 16 octets et la table `NPNetscapeFuncs` 236.
 - **Fenêtre** (`HostWindow.cs`) : mode fenêtré, le module dessine dans sa fenêtre, que

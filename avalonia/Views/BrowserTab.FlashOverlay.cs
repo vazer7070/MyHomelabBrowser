@@ -70,6 +70,13 @@ namespace PommeBrowser.Views
                     return;
                 CloseFlashOverlay();
                 RaiseChanged();
+                // Module qui ne lit pas le contenu : l'autre (32 ou 64 bits) prend sa place.
+                if (host.FailedToStart && CanPlaceInPage(content) && NextFlashModule(host.Module) is { } next)
+                {
+                    AnnounceFlashRetry(host.Module, next);
+                    OpenFlashInPage(content, next);
+                    return;
+                }
                 if (Page == TabPage.Web && IsSelected)
                     Window.ShowToast(Tr("Le lecteur Flash s'est arrêté : le contenu ne s'affiche plus."), Tr("Relancer"), () => RelaunchFlashInPage(content), timeout: 10, warning: true);
             };
@@ -109,7 +116,7 @@ namespace PommeBrowser.Views
         {
             if (!OperatingSystem.IsWindows() || HasFlashOverlay || !CanPlaceInPage(content))
                 return;
-            if (LegacyEngine.IntegratedModule is { } module)
+            if (NextFlashModule(null) is { } module)
                 OpenFlashInPage(content, module);
         }
 
@@ -135,10 +142,17 @@ namespace PommeBrowser.Views
                 return;
             if (json == "null")
             {
-                // Élément disparu ou dans un cadre : le contenu est lu à la place de la page.
-                CloseFlashOverlay();
+                // Élément disparu ou dans un cadre : le contenu est lu à la place de la page, avec le même module.
                 if (OperatingSystem.IsWindows())
-                    OpenInIntegratedFlash(content);
+                {
+                    string? module = (_overlayHost as FlashHostProcess)?.Module;
+                    CloseFlashOverlay();
+                    OpenInIntegratedFlash(content, module);
+                }
+                else
+                {
+                    CloseFlashOverlay();
+                }
                 return;
             }
             if (FlashRect.Parse(json) is { } rect)

@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Runtime.Versioning;
 using Avalonia.Controls;
 using MyHomelabBrowser.classes;
@@ -25,11 +27,35 @@ namespace PommeBrowser.Views
         FlashContent? _integrated;
 
         /// <summary>
-        /// Moteur intégré prêt pour le contenu de la page : Windows, réglage activé, module importé
-        /// (32 bits de préférence, voir LegacyEngine.IntegratedModule) et hôte de son architecture livré.
+        /// Moteur intégré prêt pour le contenu de la page : Windows, réglage activé, et un module
+        /// Flash (32 ou 64 bits, voir LegacyEngine.IntegratedModules) dont l'hôte est livré.
         /// </summary>
-        bool UsesIntegratedFlash => OperatingSystem.IsWindows() && _app.Settings.FlashIntegratedEngine &&
-                                    LegacyEngine.IntegratedModule is { } module && FlashHostProcess.IsAvailableFor(module) && _flashContent != null;
+        bool UsesIntegratedFlash => OperatingSystem.IsWindows() && _app.Settings.FlashIntegratedEngine && _flashContent != null &&
+                                    NextFlashModule(null) != null;
+
+        /// <summary>
+        /// Module du moteur intégré à essayer : le premier, ou celui qui suit <paramref name="failed"/>
+        /// (null s'il n'y en a plus). Seuls comptent les modules dont l'hôte de l'architecture est livré.
+        /// </summary>
+        [SupportedOSPlatform("windows")]
+        static string? NextFlashModule(string? failed)
+        {
+            List<string> modules = LegacyEngine.IntegratedModules.Where(FlashHostProcess.IsAvailableFor).ToList();
+            if (failed == null)
+                return modules.FirstOrDefault();
+            int index = modules.FindIndex(m => string.Equals(m, failed, StringComparison.OrdinalIgnoreCase));
+            return index >= 0 && index + 1 < modules.Count ? modules[index + 1] : null;
+        }
+
+        /// <summary>Le module essayé n'a pas lu le contenu : l'autre prend le relais (journal, et message si l'onglet est affiché).</summary>
+        [SupportedOSPlatform("windows")]
+        void AnnounceFlashRetry(string failed, string next)
+        {
+            RuntimeLogBuffer.Append($"[Flash] {System.IO.Path.GetFileName(failed)} n'a pas lu le contenu : essai avec {System.IO.Path.GetFileName(next)}.");
+            if (IsSelected)
+                Window.ShowToast(Tr("Le module Flash {0} bits n'a pas pu lire ce contenu : le module {1} bits prend le relais.",
+                    FlashModuleSearch.Is32Bit(failed) ? 32 : 64, FlashModuleSearch.Is32Bit(next) ? 32 : 64));
+        }
 
         /// <summary>Un moteur de secours peut lire le Flash de cette page.</summary>
         public bool HasFlashFallback => UsesIntegratedFlash || _app.BasiliskExecutable != null;
@@ -49,7 +75,7 @@ namespace PommeBrowser.Views
             if (OperatingSystem.IsWindows() && UsesIntegratedFlash)
             {
                 FlashContent content = _flashContent!;
-                if (CanPlaceInPage(content) && LegacyEngine.IntegratedModule is { } module)
+                if (CanPlaceInPage(content) && NextFlashModule(null) is { } module)
                     OpenFlashInPage(content, module);
                 else
                     OpenInIntegratedFlash(content);
@@ -62,12 +88,14 @@ namespace PommeBrowser.Views
 
         /// <summary>
         /// Le contenu principal de la page lu par le moteur intégré : PommeFlashHost charge le module
-        /// Flash de l'utilisateur, et sa fenêtre est logée dans l'onglet.
+        /// Flash de l'utilisateur (<paramref name="module"/>, sinon le premier à essayer), et sa
+        /// fenêtre est logée dans l'onglet. Si le module ne lit pas le contenu, le suivant est essayé.
         /// </summary>
         [SupportedOSPlatform("windows")]
-        void OpenInIntegratedFlash(FlashContent content)
+        void OpenInIntegratedFlash(FlashContent content, string? module = null)
         {
-            if (LegacyEngine.IntegratedModule is not { } module)
+            module ??= NextFlashModule(null);
+            if (module == null)
             {
                 Window.ShowToast(Tr("Module Flash absent : ajoutez votre copie de Flash Player dans les paramètres."), Tr("Paramètres"), () => Window.OpenSettings("flash"), warning: true);
                 return;
@@ -97,6 +125,12 @@ namespace PommeBrowser.Views
                 if (_basilisk != host)
                     return;
                 _basilisk = null;
+                if (host.FailedToStart && Page == TabPage.Legacy && _integrated == content && NextFlashModule(host.Module) is { } next)
+                {
+                    AnnounceFlashRetry(host.Module, next);
+                    OpenInIntegratedFlash(content, next);
+                    return;
+                }
                 if (Page == TabPage.Legacy)
                     ShowLegacyPage(running: false);
             };

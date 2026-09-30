@@ -65,40 +65,71 @@ namespace PommeBrowser.Legacy
         /// </summary>
         public static string PluginDirectory32 => Path.Combine(PluginDirectory, "x86");
 
-        /// <summary>Module Flash 32 bits installé (Windows), ou null.</summary>
-        public static string? InstalledModule32
+        /// <summary>Module Flash installé pour Basilisk et le moteur intégré (64 bits ; chemin), ou null.</summary>
+        public static string? InstalledModule => ModuleIn(PluginDirectory);
+
+        /// <summary>Module Flash 32 bits installé pour le moteur intégré (Windows), ou null.</summary>
+        public static string? InstalledModule32 => OperatingSystem.IsWindows() ? ModuleIn(PluginDirectory32) : null;
+
+        static string? ModuleIn(string directory)
         {
-            get
+            try
             {
-                if (!OperatingSystem.IsWindows())
-                    return null;
-                try
-                {
-                    return Directory.Exists(PluginDirectory32)
-                        ? Directory.EnumerateFiles(PluginDirectory32).Where(FlashModuleSearch.Is32BitModuleName).OrderBy(p => p, StringComparer.OrdinalIgnoreCase).LastOrDefault()
-                        : null;
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    return null;
-                }
+                return Directory.Exists(directory)
+                    ? Directory.EnumerateFiles(directory).Where(IsModuleName).OrderBy(p => p, StringComparer.OrdinalIgnoreCase).LastOrDefault()
+                    : null;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return null;
             }
         }
 
         /// <summary>
-        /// Module du moteur intégré : le module 32 bits s'il est installé (importé exprès, pour les
-        /// contenus qui ne fonctionnent qu'avec lui), sinon celui de Basilisk.
+        /// Modules du moteur intégré (Windows), dans l'ordre où les essayer : un par architecture,
+        /// la copie installée dans PommeBrowser, sinon le Flash Player installé dans Windows
+        /// (Macromed\Flash), utilisé en place. Une version sans le blocage de 2021 passe en premier,
+        /// puis le module 32 bits (celui des navigateurs d'époque) ; le suivant sert de secours
+        /// si le premier ne se charge pas.
         /// </summary>
-        public static string? IntegratedModule => InstalledModule32 ?? InstalledModule;
+        public static IReadOnlyList<string> IntegratedModules
+        {
+            get
+            {
+                if (!OperatingSystem.IsWindows())
+                    return Array.Empty<string>();
+                var candidates = new List<FlashModuleSearch.Module>();
+                foreach (string path in new[] { InstalledModule32, InstalledModule }.OfType<string>().Concat(SystemModules()))
+                {
+                    FlashModuleSearch.ModuleArchitecture architecture = FlashModuleSearch.ArchitectureOf(path, windows: true);
+                    bool is32Bit = architecture == FlashModuleSearch.ModuleArchitecture.X86;
+                    if (architecture != FlashModuleSearch.ModuleArchitecture.Unknown && !candidates.Any(c => c.Is32Bit == is32Bit))
+                        candidates.Add(new FlashModuleSearch.Module(path, FlashModuleSearch.VersionOf(path), is32Bit));
+                }
+                return FlashModuleSearch.IntegratedEngineOrder(candidates).Select(m => m.Path).ToList();
+            }
+        }
 
-        /// <summary>Retire le module 32 bits : le moteur intégré reprend le module 64 bits.</summary>
+        /// <summary>Flash Player installé dans Windows pour Firefox : 64 bits dans System32, 32 bits dans SysWOW64.</summary>
+        static IEnumerable<string> SystemModules()
+        {
+            foreach (string system in new[] { Environment.SystemDirectory, Environment.GetFolderPath(Environment.SpecialFolder.SystemX86) }.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrEmpty(system))
+                    continue;
+                if (ModuleIn(Path.Combine(system, "Macromed", "Flash")) is { } module)
+                    yield return module;
+            }
+        }
+
+        /// <summary>Retire le module 32 bits installé : le moteur intégré reprend l'autre module.</summary>
         public static string? RemoveModule32()
         {
             try
             {
                 if (Directory.Exists(PluginDirectory32))
                 {
-                    foreach (string module in Directory.EnumerateFiles(PluginDirectory32).Where(FlashModuleSearch.Is32BitModuleName).ToList())
+                    foreach (string module in Directory.EnumerateFiles(PluginDirectory32).Where(IsModuleName).ToList())
                         File.Delete(module);
                 }
                 return null;
@@ -109,25 +140,7 @@ namespace PommeBrowser.Legacy
             }
         }
 
-        /// <summary>Module Flash installé pour Basilisk (chemin), ou null.</summary>
-        public static string? InstalledModule
-        {
-            get
-            {
-                try
-                {
-                    return Directory.Exists(PluginDirectory)
-                        ? Directory.EnumerateFiles(PluginDirectory).Where(IsModuleName).OrderBy(p => p, StringComparer.OrdinalIgnoreCase).LastOrDefault()
-                        : null;
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    return null;
-                }
-            }
-        }
-
-        /// <summary>Module Flash NPAPI 64 bits de ce système (le moteur est en 64 bits).</summary>
+        /// <summary>Nom d'un module Flash NPAPI de ce système (NPSWF….dll, libflashplayer.so), toute architecture.</summary>
         public static bool IsModuleName(string path) => FlashModuleSearch.IsModuleName(path, OperatingSystem.IsWindows());
 
         /// <summary>
@@ -209,9 +222,9 @@ namespace PommeBrowser.Legacy
 
         /// <summary>
         /// Copie le module Flash choisi par l'utilisateur. Retourne un message d'erreur, ou null
-        /// si le module est installé. Un module précédent de la même architecture est remplacé :
-        /// le module 64 bits sert à Basilisk et au moteur intégré, le module 32 bits (Windows) au
-        /// moteur intégré seulement.
+        /// si le module est installé. L'architecture est lue dans le fichier : le module 64 bits
+        /// sert à Basilisk et au moteur intégré, le module 32 bits (Windows) au moteur intégré
+        /// seulement. Un module précédent de la même architecture est remplacé.
         /// </summary>
         public static string? InstallModule(string source)
         {
@@ -220,14 +233,18 @@ namespace PommeBrowser.Legacy
 
             bool windows = OperatingSystem.IsWindows();
             string name = Path.GetFileName(source);
-            if (!FlashModuleSearch.IsAnyModuleName(source, windows))
-                return Tr("Choisissez le module Flash Player pour navigateurs NPAPI : {0}.", ExpectedModuleName);
-            if (!FlashModuleSearch.IsModuleBinary(source, windows))
+            if (!IsModuleName(source))
+            {
+                // Flash de Chrome (PPAPI) ou d'Internet Explorer (ActiveX) : une autre interface.
+                return name.Contains("pepflash", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".ocx", StringComparison.OrdinalIgnoreCase)
+                    ? Tr("Ce Flash est celui de Chrome ou d'Internet Explorer. Il faut le module Flash Player pour navigateurs NPAPI (Firefox) : {0}.", ExpectedModuleName)
+                    : Tr("Choisissez le module Flash Player pour navigateurs NPAPI : {0}.", ExpectedModuleName);
+            }
+            FlashModuleSearch.ModuleArchitecture architecture = FlashModuleSearch.ArchitectureOf(source, windows);
+            if (architecture == FlashModuleSearch.ModuleArchitecture.Unknown)
                 return Tr("Ce fichier n'est pas un module Flash valide ({0}).", name);
 
-            bool is32Bit = windows && FlashModuleSearch.Is32BitModuleName(source);
-            string directory = is32Bit ? PluginDirectory32 : PluginDirectory;
-            Func<string, bool> sameKind = is32Bit ? FlashModuleSearch.Is32BitModuleName : IsModuleName;
+            string directory = architecture == FlashModuleSearch.ModuleArchitecture.X86 ? PluginDirectory32 : PluginDirectory;
             string target = Path.Combine(directory, name);
             // Module déjà installé choisi de nouveau : rien à copier.
             if (string.Equals(Path.GetFullPath(source), Path.GetFullPath(target), windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
@@ -235,7 +252,7 @@ namespace PommeBrowser.Legacy
             try
             {
                 Directory.CreateDirectory(directory);
-                foreach (string previous in Directory.EnumerateFiles(directory).Where(sameKind).ToList())
+                foreach (string previous in Directory.EnumerateFiles(directory).Where(IsModuleName).ToList())
                 {
                     if (!string.Equals(Path.GetFileName(previous), name, StringComparison.OrdinalIgnoreCase))
                         File.Delete(previous);
@@ -247,6 +264,36 @@ namespace PommeBrowser.Legacy
             {
                 return ex.Message;
             }
+        }
+
+        /// <summary>
+        /// Après une recherche : installe le meilleur module de chaque architecture, s'il vaut mieux
+        /// que celui déjà installé (voir <see cref="FlashModuleSearch.Best"/>). Retourne les modules
+        /// installés et les erreurs.
+        /// </summary>
+        public static (IReadOnlyList<FlashModuleSearch.Module> Installed, IReadOnlyList<string> Errors) InstallBest(IReadOnlyList<FlashModuleSearch.Module> found)
+        {
+            var pool = new List<FlashModuleSearch.Module>();
+            // Les modules en place d'abord : à égalité, ils restent.
+            foreach ((string? path, bool is32Bit) in new[] { (InstalledModule, false), (InstalledModule32, true) })
+            {
+                if (path != null)
+                    pool.Add(new FlashModuleSearch.Module(path, FlashModuleSearch.VersionOf(path), is32Bit));
+            }
+            pool.AddRange(found);
+
+            var installed = new List<FlashModuleSearch.Module>();
+            var errors = new List<string>();
+            foreach (FlashModuleSearch.Module best in FlashModuleSearch.Best(pool))
+            {
+                if (best.Path == InstalledModule || best.Path == InstalledModule32)
+                    continue;
+                if (InstallModule(best.Path) is { } error)
+                    errors.Add(Path.GetFileName(best.Path) + " : " + error);
+                else
+                    installed.Add(best);
+            }
+            return (installed, errors);
         }
     }
 }
