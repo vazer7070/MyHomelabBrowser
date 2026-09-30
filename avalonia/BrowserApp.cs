@@ -105,6 +105,7 @@ namespace PommeBrowser
         public void Start(IClassicDesktopStyleApplicationLifetime lifetime, IReadOnlyList<string> urls)
         {
             _lifetime = lifetime;
+            Dispatcher.UIThread.UnhandledException += OnUnhandledException;
             lifetime.ShutdownMode = ShutdownMode.OnLastWindowClose;
             lifetime.ShutdownRequested += (_, _) =>
             {
@@ -122,6 +123,43 @@ namespace PommeBrowser
             MainWindow window = OpenWindow();
             RestoreSession(window, urls);
             window.Show();
+        }
+
+        DateTime _lastErrorToast = DateTime.MinValue;
+
+        /// <summary>
+        /// Filet de sécurité du fil de l'interface : une erreur imprévue est consignée (errors.log)
+        /// au lieu d'arrêter PommeBrowser avec tous ses onglets. Échec du démarrage du moteur web
+        /// (relancé par Avalonia) : les onglets qui l'attendaient l'affichent ; sinon, une notification.
+        /// </summary>
+        void OnUnhandledException(object? sender, DispatcherUnhandledExceptionEventArgs e)
+        {
+            e.Handled = true;
+            Exception exception = e.Exception;
+            ErrorLog.Write("Interface", exception);
+            try
+            {
+                bool shown = false;
+                if (EngineHost.IsWebViewFailure(exception))
+                {
+                    foreach (MainWindow window in _windows.ToList())
+                    {
+                        foreach (BrowserTab tab in window.Tabs.ToList())
+                            shown |= tab.OnEngineStartupFailed(exception);
+                    }
+                }
+
+                // Au plus une notification toutes les cinq secondes (erreur répétée en boucle).
+                if (!shown && DateTime.UtcNow - _lastErrorToast > TimeSpan.FromSeconds(5))
+                {
+                    _lastErrorToast = DateTime.UtcNow;
+                    ActiveWindow?.ShowToast(Loc.Tr("Erreur inattendue : {0}", exception.Message), warning: true);
+                }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ErrorLog.Write("Interface (affichage de l'erreur)", ex);
+            }
         }
 
         /// <summary>Thème choisi (système, sombre ou clair).</summary>
