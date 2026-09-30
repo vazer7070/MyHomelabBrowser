@@ -28,13 +28,12 @@ namespace PommeBrowser.Views
         void InitializeAddressBar()
         {
             SuggestionList.ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<OmniboxEntry>((entry, _) => BuildSuggestion(entry), supportsRecycling: false);
-            SuggestionList.AddHandler(PointerReleasedEvent, (_, e) =>
-            {
-                if (SuggestionList.SelectedItem is OmniboxEntry entry)
-                    RunSuggestion(entry);
-            }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+            HandleSuggestionClicks(SuggestionList, RunSuggestion);
 
-            AddressBar.TextChanged += (_, _) =>
+            // TextChanging : signalé tout de suite. TextChanged arrive après coup, quand
+            // _settingAddress est déjà retombé : une adresse affichée par PommeBrowser passait
+            // pour une saisie et rouvrait les propositions.
+            AddressBar.TextChanging += (_, _) =>
             {
                 if (_settingAddress || !AddressBar.IsFocused)
                     return;
@@ -176,7 +175,37 @@ namespace PommeBrowser.Views
             _addressEditing = false;
             entry.Run();
             ShowAddress(_selected);
+            _selected?.FocusPage();
         }
+
+        /// <summary>
+        /// Clic sur une proposition : exécutée au relâchement, sans que la liste prenne le focus.
+        /// Sinon le champ perdrait le focus à l'appui et fermerait la liste avant la fin du clic,
+        /// qui ne ferait rien.
+        /// </summary>
+        internal static void HandleSuggestionClicks(ListBox list, Action<OmniboxEntry> run)
+        {
+            OmniboxEntry? pressed = null;
+            list.AddHandler(PointerPressedEvent, (_, e) =>
+            {
+                pressed = EntryAt(e);
+                if (pressed != null && e.GetCurrentPoint(list).Properties.IsLeftButtonPressed)
+                    e.Handled = true;
+                else
+                    pressed = null;
+            }, RoutingStrategies.Tunnel);
+            list.AddHandler(PointerReleasedEvent, (_, e) =>
+            {
+                OmniboxEntry? entry = pressed;
+                pressed = null;
+                if (entry == null || EntryAt(e) != entry)
+                    return;
+                e.Handled = true;
+                run(entry);
+            }, RoutingStrategies.Tunnel, handledEventsToo: true);
+        }
+
+        static OmniboxEntry? EntryAt(RoutedEventArgs e) => (e.Source as Avalonia.StyledElement)?.DataContext as OmniboxEntry;
 
         internal List<OmniboxEntry> BuildSuggestions(string query)
         {

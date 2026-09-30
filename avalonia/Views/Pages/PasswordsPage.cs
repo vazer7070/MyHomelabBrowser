@@ -25,6 +25,7 @@ namespace PommeBrowser.Views.Pages
 
         readonly List<(TextBlock Label, TotpParameters Parameters)> _codes = new();
         readonly HashSet<string> _expanded = new(StringComparer.OrdinalIgnoreCase);
+        readonly StackPanel _list = new() { Spacing = 10 };
         readonly DispatcherTimer _timer;
         string _query = string.Empty;
 
@@ -65,10 +66,16 @@ namespace PommeBrowser.Views.Pages
             }
 
             var search = new TextBox { PlaceholderText = Tr("Rechercher un site ou un identifiant"), Text = _query };
+            // Avalonia signale aussi, après coup, le texte donné à la création : seule une vraie
+            // saisie filtre. La recherche ne met à jour que la liste : reconstruire la page
+            // recréerait ce champ, qui se signalerait à nouveau, sans fin (fiches qui clignotent).
             search.TextChanged += (_, _) =>
             {
-                _query = search.Text ?? string.Empty;
-                ScheduleRefresh();
+                string text = search.Text ?? string.Empty;
+                if (text == _query)
+                    return;
+                _query = text;
+                FillList();
             };
             var bar = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(8, 0, 0, 0) };
@@ -82,6 +89,15 @@ namespace PommeBrowser.Views.Pages
             bar.Children.Add(buttons);
             bar.Children.Add(search);
             content.Children.Add(bar);
+            content.Children.Add(_list);
+            FillList();
+        }
+
+        /// <summary>Identifiants correspondant à la recherche.</summary>
+        void FillList()
+        {
+            _list.Children.Clear();
+            _codes.Clear();
 
             string[] tokens = _query.ToLowerInvariant().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             List<CredentialEntry> entries = Service.GetAll()
@@ -92,7 +108,7 @@ namespace PommeBrowser.Views.Pages
 
             if (entries.Count == 0)
             {
-                content.Children.Add(EmptyState("IconKey",
+                _list.Children.Add(EmptyState("IconKey",
                     tokens.Length > 0 ? Tr("Aucun résultat") : Tr("Aucun identifiant enregistré"),
                     tokens.Length > 0
                         ? Tr("Aucun identifiant ne correspond à cette recherche.")
@@ -100,9 +116,9 @@ namespace PommeBrowser.Views.Pages
                 return;
             }
 
-            content.Children.Add(Heading(entries.Count == 1 ? Tr("1 identifiant") : Tr("{0} identifiants", entries.Count)));
+            _list.Children.Add(Heading(entries.Count == 1 ? Tr("1 identifiant") : Tr("{0} identifiants", entries.Count)));
             foreach (CredentialEntry entry in entries)
-                content.Children.Add(EntryCard(entry));
+                _list.Children.Add(EntryCard(entry));
             UpdateCodes();
         }
 
