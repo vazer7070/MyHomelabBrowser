@@ -18,6 +18,12 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
 		<ApplicationIcon>../PommeBrowser_desktop.ico</ApplicationIcon>
+		<!--
+			Windows : versions prises en charge. Sans cette liste, Windows traite PommeBrowser comme une
+			application ancienne et refuse les fenêtres enfants « superposées » (WS_EX_LAYERED) dans
+			lesquelles Avalonia affiche WebView2 : aucune page web ne s'ouvrait.
+		-->
+		<ApplicationManifest>app.manifest</ApplicationManifest>
 
 		<Version>0.9.8</Version>
 		<AssemblyVersion>0.9.8.0</AssemblyVersion>
