@@ -116,7 +116,7 @@ namespace PommeBrowser
             _lifetime.ShutdownRequested -= OnShutdownRequested;
             _monitor?.Stop();
             AdBlock.Detach();
-            Vault.Lock();
+            Vault.Dispose();
             History.Dispose();
             LegacyBrowser.CloseAll();
         }

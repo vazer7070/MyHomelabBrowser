@@ -64,6 +64,10 @@ namespace MyHomelabBrowser.classes
         public bool ReportIncludeLogs { get; set; } = true;
         public bool ReportIncludePcInfo { get; set; } = true;
         public bool ReportIncludeMode { get; set; } = true;
+
+        // Coffre verrouillé après ce délai sans utilisation (0 : jamais).
+        public int VaultAutoLockMinutes { get; set; } = 15;
+
         public StartupMode Startup { get; set; }
         public string? CustomStartupPage { get; set; }
 
@@ -122,6 +126,7 @@ namespace MyHomelabBrowser.classes
                 ReportIncludeLogs = ReportIncludeLogs,
                 ReportIncludePcInfo = ReportIncludePcInfo,
                 ReportIncludeMode = ReportIncludeMode,
+                VaultAutoLockMinutes = VaultAutoLockMinutes,
 
                 Commands = Commands
                     .Select(c => new CommandSetting

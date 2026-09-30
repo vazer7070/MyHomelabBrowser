@@ -45,6 +45,7 @@ namespace PommeBrowser
             History = new HistoryService(AppPaths.HistoryDatabase);
             Zoom = new SiteZoomStore(() => AppPaths.Profile("zoom.json"));
             CertificatePins = new CertificatePinStore(() => AppPaths.Profile("pinned-certificates.json"));
+            Vault = new Vault(() => Settings.VaultAutoLockMinutes);
         }
 
         public static BrowserApp Current { get; private set; } = null!;

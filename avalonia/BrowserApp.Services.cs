@@ -18,7 +18,7 @@ namespace PommeBrowser
 
         public HomelabServiceStore Services { get; } = new(() => AppPaths.Profile("services.json"));
 
-        public Vault Vault { get; } = new();
+        public Vault Vault { get; }
 
         public AdBlockService AdBlock { get; } = new();
 

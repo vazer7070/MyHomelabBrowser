@@ -18,17 +18,24 @@ namespace PommeBrowser.Core
     /// clé dérivée du mot de passe du coffre). Propose d'enregistrer les identifiants après une
     /// connexion, remplit les formulaires et les codes de double authentification.
     /// </summary>
-    public sealed class Vault
+    public sealed class Vault : IDisposable
     {
         static readonly TimeSpan PromptCooldown = TimeSpan.FromSeconds(15);
 
         readonly Dictionary<string, DateTime> _recentPrompts = new(StringComparer.OrdinalIgnoreCase);
+        readonly Func<int> _autoLockMinutes;
+        readonly DispatcherTimer _autoLock;
+        DateTime _lastUse = DateTime.UtcNow;
         bool _prompting;
         bool _busy;
 
-        public Vault()
+        /// <param name="autoLockMinutes">Délai sans utilisation avant le verrouillage (0 : jamais), lu à chaque vérification.</param>
+        public Vault(Func<int> autoLockMinutes)
         {
             Service = new CredentialVaultService(() => AppPaths.Profile("vault.json.enc"));
+            _autoLockMinutes = autoLockMinutes;
+            _autoLock = new DispatcherTimer(TimeSpan.FromSeconds(30), DispatcherPriority.Background, (_, _) => CheckAutoLock());
+            _autoLock.Start();
         }
 
         public CredentialVaultService Service { get; }
@@ -42,14 +49,34 @@ namespace PommeBrowser.Core
 
         /// <summary>Comptes enregistrés pour une origine (coffre déverrouillé), le plus récent d'abord.</summary>
         public IReadOnlyList<CredentialEntry> ForOrigin(string origin)
-            => IsUnlocked
-                ? Service.GetAll().Where(x => string.Equals(x.Host, origin, StringComparison.OrdinalIgnoreCase)).ToList()
-                : Array.Empty<CredentialEntry>();
+        {
+            if (!IsUnlocked)
+                return Array.Empty<CredentialEntry>();
+            Touch();
+            return Service.GetAll().Where(x => string.Equals(x.Host, origin, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
 
         public void Lock()
         {
             Service.Lock();
             Changed?.Invoke();
+        }
+
+        /// <summary>Coffre utilisé (déverrouillage, remplissage, page du coffre) : le délai de verrouillage repart.</summary>
+        public void Touch() => _lastUse = DateTime.UtcNow;
+
+        void CheckAutoLock()
+        {
+            int minutes = _autoLockMinutes();
+            if (minutes > 0 && IsUnlocked && !_prompting && DateTime.UtcNow - _lastUse >= TimeSpan.FromMinutes(minutes))
+                Lock();
+        }
+
+        /// <summary>Profil quitté : plus de vérification, coffre verrouillé.</summary>
+        public void Dispose()
+        {
+            _autoLock.Stop();
+            Service.Lock();
         }
 
         // ---------------------------------------------------------------
@@ -93,6 +120,7 @@ namespace PommeBrowser.Core
                 (bool unlocked, VaultUnlockFailure failure) = await RunAsync(() => (Service.TryUnlock(text, out VaultUnlockFailure reason), reason));
                 if (unlocked)
                 {
+                    Touch();
                     Changed?.Invoke();
                     return null;
                 }
@@ -160,6 +188,7 @@ namespace PommeBrowser.Core
                     return Tr("Les mots de passe ne correspondent pas.");
                 if (!await RunAsync(() => Service.TryInitializeNewVault(text)))
                     return Tr("Impossible de créer le coffre.");
+                Touch();
                 Changed?.Invoke();
                 return null;
             };
