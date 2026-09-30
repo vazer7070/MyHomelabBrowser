@@ -250,8 +250,12 @@ namespace PommeBrowser.Core
         async Task BuildOnceAsync()
         {
             AdBlockSettings settings = _settings.Current;
-            IReadOnlyList<(string SourceName, string Content)> sources = await Task.Run(() => _lists.LoadAvailableLists());
-            string id = IdentifierPrefix + ComputeKey(sources, settings.CosmeticFiltering);
+            // Listes (plusieurs Mo) lues et résumées hors du fil de l'interface.
+            (IReadOnlyList<(string SourceName, string Content)> sources, string id) = await Task.Run(() =>
+            {
+                IReadOnlyList<(string SourceName, string Content)> lists = _lists.LoadAvailableLists();
+                return (lists, IdentifierPrefix + ComputeKey(lists, settings.CosmeticFiltering));
+            });
             if (id == _filterId)
                 return;
 

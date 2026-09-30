@@ -33,6 +33,11 @@
 		<InvariantGlobalization>false</InvariantGlobalization>
 		<TieredPGO>true</TieredPGO>
 		<RuffleAssetDir>$(MSBuildProjectDirectory)/Assets/Ruffle</RuffleAssetDir>
+		<!--
+			Paquets (Release pour un système donné) : code précompilé (ReadyToRun), moins de
+			compilation à la volée au lancement, donc un démarrage plus rapide.
+		-->
+		<PublishReadyToRun Condition="'$(Configuration)' == 'Release' And '$(RuntimeIdentifier)' != ''">true</PublishReadyToRun>
 	</PropertyGroup>
 
 	<ItemGroup>

@@ -16,6 +16,9 @@ namespace PommeBrowser
 
         public static AppearanceSettings Appearance { get; private set; } = new();
 
+        /// <summary>Lancement du programme (durée du démarrage, dans le journal).</summary>
+        public static readonly long StartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+
         /// <summary>Adresses passées en ligne de commande (ouvertes dans des onglets).</summary>
         public static string[] StartupUrls { get; private set; } = Array.Empty<string>();
 

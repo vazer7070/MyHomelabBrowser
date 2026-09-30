@@ -127,6 +127,14 @@ namespace PommeBrowser
             placement?.ApplyTo(window);
             RestoreSession(window, urls);
             window.Show();
+
+            // Durée du démarrage, jusqu'à la fenêtre affichée (journal joint aux rapports).
+            if (placement == null)
+            {
+                Dispatcher.UIThread.Post(() => RuntimeLogBuffer.Append(
+                    $"[Démarrage] fenêtre affichée en {System.Diagnostics.Stopwatch.GetElapsedTime(Program.StartedAt).TotalMilliseconds:F0} ms"),
+                    DispatcherPriority.Background);
+            }
         }
 
         void OnShutdownRequested(object? sender, ShutdownRequestedEventArgs e)

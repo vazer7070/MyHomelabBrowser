@@ -128,6 +128,23 @@ namespace MyHomelabBrowser.classes.History
         public void Trim(int maxEntries = MaxStoredEntries)
         {
             using SqliteConnection connection = Open();
+            Trim(connection, maxEntries);
+        }
+
+        /// <summary>Même élagage, avec les autres écritures (hors du fil de l'interface, au démarrage).</summary>
+        public void TrimInBackground(int maxEntries = MaxStoredEntries)
+            => Enqueue(connection => Trim(connection, maxEntries));
+
+        static void Trim(SqliteConnection connection, int maxEntries)
+        {
+            // Cas courant : rien à retirer. Un comptage suffit, sans trier toute la table.
+            using (SqliteCommand count = connection.CreateCommand())
+            {
+                count.CommandText = "SELECT COUNT(*) FROM visits";
+                if ((long)count.ExecuteScalar()! <= maxEntries)
+                    return;
+            }
+
             using SqliteCommand command = connection.CreateCommand();
             command.CommandText = """
                 DELETE FROM visits WHERE id NOT IN (
