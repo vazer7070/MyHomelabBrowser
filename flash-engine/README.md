@@ -1,7 +1,8 @@
 # Moteur Flash intégré (PommeFlashHost)
 
 PommeBrowser lit les contenus Flash avec **Ruffle**. Pour ceux que Ruffle ne sait pas lire, le
-moteur intégré utilise **le module Flash Player de l'utilisateur** (`NPSWF64_*.dll`), comme le
+moteur intégré utilise **le module Flash Player de l'utilisateur** (`NPSWF64_*.dll`, ou
+`NPSWF32_*.dll` en 32 bits), comme le
 faisait Basilisk, mais sans Basilisk : PommeBrowser joue lui-même le rôle du navigateur auprès du
 module, par l'interface NPAPI.
 
@@ -28,6 +29,13 @@ PommeBrowser ──(ligne de commande, stdin/stdout JSON)──► PommeFlashHos
 - **Page** (`PageObjects.cs`) : `window`, `location`, `document`, `navigator` et l'élément,
   en lecture seule. Flash y lit l'adresse de la page pour ses règles de sécurité
   (`top.location + "__flashplugin_unique__"`) : l'hôte répond lui-même.
+- **32 et 64 bits.** Un processus ne charge que les modules de son architecture : l'hôte est publié
+  en `win-x64` (`flash\PommeFlashHost.exe`) et en `win-x86` (`flash\x86\PommeFlashHost.exe`).
+  PommeBrowser lance celui du module : le module 32 bits (rangé dans `plugins\x86`, hors de la vue de
+  Basilisk, qui est en 64 bits) sert au moteur intégré quand il est installé, certains jeux ne
+  fonctionnant qu'avec lui. En 32 bits, les conventions d'appel comptent : fonctions NPAPI en
+  `cdecl`, points d'entrée `NP_*` en `stdcall` (déclarées explicitement, sans effet en 64 bits) ;
+  `NPVariant` fait 16 octets et la table `NPNetscapeFuncs` 236.
 - **Fenêtre** (`HostWindow.cs`) : mode fenêtré, le module dessine dans sa fenêtre, que
   PommeBrowser loge dans l'onglet comme il le faisait pour Basilisk. Les modes `direct` et `gpu`
   demandés par la page sont gardés (fenêtrés sous Windows, ils donnent accès à Stage3D, dont
@@ -78,7 +86,8 @@ POMMEFLASH_LAUNCHER=wine xvfb-run -a dotnet test tests/PommeFlash.Tests
 ```
 
 Sous Windows, le greffon se compile avec `clang -shared` (ou `cl /LD`) et `POMMEFLASH_LAUNCHER`
-n'est pas nécessaire.
+n'est pas nécessaire. En 32 bits : `clang --target=i686-pc-windows-msvc`, avec l'hôte publié en
+`win-x86` ; la CI Windows passe les tests dans les deux architectures.
 
 ## Comparer avec Basilisk : l'espion
 

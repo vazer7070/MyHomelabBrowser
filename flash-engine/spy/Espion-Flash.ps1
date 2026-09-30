@@ -3,7 +3,8 @@
     Installe ou retire l'espion NPAPI de PommeBrowser devant le module Flash.
 
 .DESCRIPTION
-    L'espion (npPommeEspion.dll) se place entre le navigateur et le vrai module Flash et note
+    L'espion (npPommeEspion.dll, ou npPommeEspion32.dll devant un module 32 bits NPSWF32_*.dll)
+    se place entre le navigateur et le vrai module Flash et note
     chaque échange entre eux. Il prend le nom du module dans le dossier des modules de
     PommeBrowser : Pomme Legacy (Basilisk) et le moteur intégré le chargent alors tous les deux,
     et chacun laisse un journal dans <dossier>\espion\journaux.
@@ -18,15 +19,17 @@
     Remet le vrai module à sa place et copie les journaux sur le Bureau.
 
 .PARAMETER Dossier
-    Dossier des modules (par défaut : celui de PommeBrowser). Pour un Basilisk lancé à part, qui
-    prend le Flash installé dans Windows : C:\Windows\System32\Macromed\Flash (PowerShell en
-    administrateur). Le navigateur n'ayant alors pas le droit d'écrire à côté du module, les
+    Dossier des modules (par défaut : celui de PommeBrowser ; son module 32 bits est dans
+    %LOCALAPPDATA%\PommeBrowser\plugins\x86). Pour un Basilisk lancé à part, qui prend le Flash
+    installé dans Windows : C:\Windows\System32\Macromed\Flash (Basilisk 64 bits) ou
+    C:\Windows\SysWOW64\Macromed\Flash (Basilisk 32 bits), PowerShell en administrateur. Le navigateur n'ayant alors pas le droit d'écrire à côté du module, les
     journaux vont dans %LOCALAPPDATA%\PommeBrowser\espion-journaux.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\Espion-Flash.ps1
     powershell -ExecutionPolicy Bypass -File .\Espion-Flash.ps1 -Retirer
     powershell -ExecutionPolicy Bypass -File .\Espion-Flash.ps1 -Dossier C:\Windows\System32\Macromed\Flash
+    powershell -ExecutionPolicy Bypass -File .\Espion-Flash.ps1 -Dossier C:\Windows\SysWOW64\Macromed\Flash
 #>
 param(
     [switch]$Retirer,
@@ -126,7 +129,7 @@ if ($Dossier.StartsWith($env:WINDIR, [StringComparison]::OrdinalIgnoreCase) -and
 }
 
 if ($Retirer) {
-    $reels = @(Get-ChildItem -Path $rangement -Filter 'NPSWF64_*.dll' -File -ErrorAction SilentlyContinue)
+    $reels = @(Get-ChildItem -Path $rangement -Filter 'NPSWF*.dll' -File -ErrorAction SilentlyContinue)
     if ($reels.Count -eq 0) {
         Write-Host "L'espion n'est pas installé dans $Dossier."
     }
@@ -145,19 +148,21 @@ if ($Retirer) {
     return
 }
 
-$espion = Join-Path $PSScriptRoot 'npPommeEspion.dll'
-if (-not (Test-Path $espion)) {
-    throw "npPommeEspion.dll introuvable à côté du script ($PSScriptRoot)."
-}
-if (@(Get-ChildItem -Path $rangement -Filter 'NPSWF64_*.dll' -File -ErrorAction SilentlyContinue).Count -gt 0) {
+if (@(Get-ChildItem -Path $rangement -Filter 'NPSWF*.dll' -File -ErrorAction SilentlyContinue).Count -gt 0) {
     throw "L'espion est déjà installé (le vrai module est dans $rangement). Retirez-le d'abord avec -Retirer."
 }
-$modules = @(Get-ChildItem -Path $Dossier -Filter 'NPSWF64_*.dll' -File)
+$modules = @(Get-ChildItem -Path $Dossier -Filter 'NPSWF*.dll' -File | Where-Object { $_.Name -match '^NPSWF(64|32)_' })
 if ($modules.Count -ne 1) {
-    throw "Un seul module Flash (NPSWF64_*.dll) attendu dans $Dossier, $($modules.Count) trouvé(s)."
+    throw "Un seul module Flash (NPSWF64_*.dll ou NPSWF32_*.dll) attendu dans $Dossier, $($modules.Count) trouvé(s)."
 }
 
 $module = $modules[0]
+# Espion de l'architecture du module : un processus ne charge que des DLL de la sienne.
+$nomEspion = if ($module.Name -match '^NPSWF32_') { 'npPommeEspion32.dll' } else { 'npPommeEspion.dll' }
+$espion = Join-Path $PSScriptRoot $nomEspion
+if (-not (Test-Path $espion)) {
+    throw "$nomEspion introuvable à côté du script ($PSScriptRoot)."
+}
 New-Item -ItemType Directory -Force -Path $journaux | Out-Null
 $reel = Join-Path $rangement $module.Name
 Move-Item -Path $module.FullName -Destination $reel

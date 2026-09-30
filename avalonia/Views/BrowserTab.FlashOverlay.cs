@@ -109,7 +109,7 @@ namespace PommeBrowser.Views
         {
             if (!OperatingSystem.IsWindows() || HasFlashOverlay || !CanPlaceInPage(content))
                 return;
-            if (LegacyEngine.InstalledModule is { } module)
+            if (LegacyEngine.IntegratedModule is { } module)
                 OpenFlashInPage(content, module);
         }
 

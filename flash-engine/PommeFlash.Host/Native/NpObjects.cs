@@ -25,7 +25,7 @@ namespace PommeFlash.Host.Native
             if (type == null)
                 return 0;
             NPObject* obj = type->allocate != 0
-                ? ((delegate* unmanaged<nint, NPClass*, NPObject*>)type->allocate)(npp, type)
+                ? ((delegate* unmanaged[Cdecl]<nint, NPClass*, NPObject*>)type->allocate)(npp, type)
                 : (NPObject*)NpMemory.AllocZeroed((nuint)sizeof(NPObject));
             if (obj == null)
                 return 0;
@@ -49,7 +49,7 @@ namespace PommeFlash.Host.Native
             if (obj->referenceCount == 0 || --obj->referenceCount > 0)
                 return;
             if (obj->_class != null && obj->_class->deallocate != 0)
-                ((delegate* unmanaged<NPObject*, void>)obj->_class->deallocate)(obj);
+                ((delegate* unmanaged[Cdecl]<NPObject*, void>)obj->_class->deallocate)(obj);
             else
                 NpMemory.Free(pointer);
         }
@@ -60,49 +60,49 @@ namespace PommeFlash.Host.Native
         {
             NPClass* type = ClassOf(obj);
             return type != null && type->hasMethod != 0 &&
-                   ((delegate* unmanaged<nint, nint, byte>)type->hasMethod)(obj, name) != 0;
+                   ((delegate* unmanaged[Cdecl]<nint, nint, byte>)type->hasMethod)(obj, name) != 0;
         }
 
         public static bool Invoke(nint obj, nint name, NPVariant* args, uint count, NPVariant* result)
         {
             NPClass* type = ClassOf(obj);
             return type != null && type->invoke != 0 &&
-                   ((delegate* unmanaged<nint, nint, NPVariant*, uint, NPVariant*, byte>)type->invoke)(obj, name, args, count, result) != 0;
+                   ((delegate* unmanaged[Cdecl]<nint, nint, NPVariant*, uint, NPVariant*, byte>)type->invoke)(obj, name, args, count, result) != 0;
         }
 
         public static bool InvokeDefault(nint obj, NPVariant* args, uint count, NPVariant* result)
         {
             NPClass* type = ClassOf(obj);
             return type != null && type->invokeDefault != 0 &&
-                   ((delegate* unmanaged<nint, NPVariant*, uint, NPVariant*, byte>)type->invokeDefault)(obj, args, count, result) != 0;
+                   ((delegate* unmanaged[Cdecl]<nint, NPVariant*, uint, NPVariant*, byte>)type->invokeDefault)(obj, args, count, result) != 0;
         }
 
         public static bool HasProperty(nint obj, nint name)
         {
             NPClass* type = ClassOf(obj);
             return type != null && type->hasProperty != 0 &&
-                   ((delegate* unmanaged<nint, nint, byte>)type->hasProperty)(obj, name) != 0;
+                   ((delegate* unmanaged[Cdecl]<nint, nint, byte>)type->hasProperty)(obj, name) != 0;
         }
 
         public static bool GetProperty(nint obj, nint name, NPVariant* result)
         {
             NPClass* type = ClassOf(obj);
             return type != null && type->getProperty != 0 &&
-                   ((delegate* unmanaged<nint, nint, NPVariant*, byte>)type->getProperty)(obj, name, result) != 0;
+                   ((delegate* unmanaged[Cdecl]<nint, nint, NPVariant*, byte>)type->getProperty)(obj, name, result) != 0;
         }
 
         public static bool SetProperty(nint obj, nint name, NPVariant* value)
         {
             NPClass* type = ClassOf(obj);
             return type != null && type->setProperty != 0 &&
-                   ((delegate* unmanaged<nint, nint, NPVariant*, byte>)type->setProperty)(obj, name, value) != 0;
+                   ((delegate* unmanaged[Cdecl]<nint, nint, NPVariant*, byte>)type->setProperty)(obj, name, value) != 0;
         }
 
         public static bool RemoveProperty(nint obj, nint name)
         {
             NPClass* type = ClassOf(obj);
             return type != null && type->removeProperty != 0 &&
-                   ((delegate* unmanaged<nint, nint, byte>)type->removeProperty)(obj, name) != 0;
+                   ((delegate* unmanaged[Cdecl]<nint, nint, byte>)type->removeProperty)(obj, name) != 0;
         }
 
         public static bool Enumerate(nint obj, nint* identifiers, uint* count)
@@ -114,14 +114,14 @@ namespace PommeFlash.Host.Native
                 *count = 0;
                 return true;
             }
-            return ((delegate* unmanaged<nint, nint*, uint*, byte>)type->enumerate)(obj, identifiers, count) != 0;
+            return ((delegate* unmanaged[Cdecl]<nint, nint*, uint*, byte>)type->enumerate)(obj, identifiers, count) != 0;
         }
 
         public static bool Construct(nint obj, NPVariant* args, uint count, NPVariant* result)
         {
             NPClass* type = ClassOf(obj);
             return type != null && type->structVersion >= 2 && type->construct != 0 &&
-                   ((delegate* unmanaged<nint, NPVariant*, uint, NPVariant*, byte>)type->construct)(obj, args, count, result) != 0;
+                   ((delegate* unmanaged[Cdecl]<nint, NPVariant*, uint, NPVariant*, byte>)type->construct)(obj, args, count, result) != 0;
         }
 
         // ---------------------------------------------------------------
@@ -146,15 +146,15 @@ namespace PommeFlash.Host.Native
                     return _hostClass;
                 var type = (NPClass*)NpMemory.AllocZeroed((nuint)sizeof(NPClass));
                 type->structVersion = Np.ClassStructVersion;
-                type->deallocate = (nint)(delegate* unmanaged<nint, void>)&HostDeallocate;
-                type->invalidate = (nint)(delegate* unmanaged<nint, void>)&HostInvalidate;
-                type->hasMethod = (nint)(delegate* unmanaged<nint, nint, byte>)&HostHasMethod;
-                type->invoke = (nint)(delegate* unmanaged<nint, nint, NPVariant*, uint, NPVariant*, byte>)&HostInvoke;
-                type->invokeDefault = (nint)(delegate* unmanaged<nint, NPVariant*, uint, NPVariant*, byte>)&HostInvokeDefault;
-                type->hasProperty = (nint)(delegate* unmanaged<nint, nint, byte>)&HostHasProperty;
-                type->getProperty = (nint)(delegate* unmanaged<nint, nint, NPVariant*, byte>)&HostGetProperty;
-                type->setProperty = (nint)(delegate* unmanaged<nint, nint, NPVariant*, byte>)&HostSetProperty;
-                type->removeProperty = (nint)(delegate* unmanaged<nint, nint, byte>)&HostRemoveProperty;
+                type->deallocate = (nint)(delegate* unmanaged[Cdecl]<nint, void>)&HostDeallocate;
+                type->invalidate = (nint)(delegate* unmanaged[Cdecl]<nint, void>)&HostInvalidate;
+                type->hasMethod = (nint)(delegate* unmanaged[Cdecl]<nint, nint, byte>)&HostHasMethod;
+                type->invoke = (nint)(delegate* unmanaged[Cdecl]<nint, nint, NPVariant*, uint, NPVariant*, byte>)&HostInvoke;
+                type->invokeDefault = (nint)(delegate* unmanaged[Cdecl]<nint, NPVariant*, uint, NPVariant*, byte>)&HostInvokeDefault;
+                type->hasProperty = (nint)(delegate* unmanaged[Cdecl]<nint, nint, byte>)&HostHasProperty;
+                type->getProperty = (nint)(delegate* unmanaged[Cdecl]<nint, nint, NPVariant*, byte>)&HostGetProperty;
+                type->setProperty = (nint)(delegate* unmanaged[Cdecl]<nint, nint, NPVariant*, byte>)&HostSetProperty;
+                type->removeProperty = (nint)(delegate* unmanaged[Cdecl]<nint, nint, byte>)&HostRemoveProperty;
                 _hostClass = type;
                 return type;
             }
@@ -189,7 +189,7 @@ namespace PommeFlash.Host.Native
             }
         }
 
-        [UnmanagedCallersOnly]
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         static void HostDeallocate(nint obj)
         {
             var block = (HostBlock*)obj;
@@ -198,7 +198,7 @@ namespace PommeFlash.Host.Native
             NpMemory.Free(obj);
         }
 
-        [UnmanagedCallersOnly]
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         static void HostInvalidate(nint obj)
         {
         }
@@ -214,14 +214,14 @@ namespace PommeFlash.Host.Native
             return found;
         }
 
-        [UnmanagedCallersOnly]
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         static byte HostHasMethod(nint obj, nint name)
         {
             string method = NpIdentifiers.Describe(name);
             return Traced(obj, "méthode", method, Guard(() => Managed(obj)?.HasMethod(method) == true));
         }
 
-        [UnmanagedCallersOnly]
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         static byte HostInvoke(nint obj, nint name, NPVariant* args, uint count, NPVariant* result)
         {
             object?[] values = Arguments(args, count);
@@ -233,7 +233,7 @@ namespace PommeFlash.Host.Native
             return ok;
         }
 
-        [UnmanagedCallersOnly]
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         static byte HostInvokeDefault(nint obj, NPVariant* args, uint count, NPVariant* result)
         {
             object?[] values = Arguments(args, count);
@@ -244,14 +244,14 @@ namespace PommeFlash.Host.Native
             return ok;
         }
 
-        [UnmanagedCallersOnly]
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         static byte HostHasProperty(nint obj, nint name)
         {
             string property = NpIdentifiers.Describe(name);
             return Traced(obj, "propriété", property, Guard(() => Managed(obj)?.HasProperty(property) == true));
         }
 
-        [UnmanagedCallersOnly]
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         static byte HostGetProperty(nint obj, nint name, NPVariant* result)
         {
             object? value = null;
@@ -261,14 +261,14 @@ namespace PommeFlash.Host.Native
             return ok;
         }
 
-        [UnmanagedCallersOnly]
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         static byte HostSetProperty(nint obj, nint name, NPVariant* value)
         {
             object? managed = NpVariants.Read(value);
             return Guard(() => Managed(obj)?.SetProperty(NpIdentifiers.Describe(name), managed) == true);
         }
 
-        [UnmanagedCallersOnly]
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         static byte HostRemoveProperty(nint obj, nint name)
             => Guard(() => Managed(obj)?.RemoveProperty(NpIdentifiers.Describe(name)) == true);
     }

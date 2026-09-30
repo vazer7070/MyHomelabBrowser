@@ -1,6 +1,7 @@
 # Espion NPAPI (diagnostic)
 
-`npPommeEspion.dll` se place entre un navigateur et le vrai module Flash, et note chaque échange
+`npPommeEspion.dll` (ou `npPommeEspion32.dll` devant un module 32 bits `NPSWF32_*.dll`, choisi
+par le script) se place entre un navigateur et le vrai module Flash, et note chaque échange
 entre eux dans un journal : paramètres de l'élément (`NPP_New`), questions du module au navigateur
 (`NPN_GetValue`) et réponses, scripts de la page (`NPN_Evaluate`) et résultats, propriétés lues
 sur la page (`window.location`, `navigator`…), chargements, flux, fenêtre, minuteries.
@@ -28,7 +29,8 @@ Ce n'est pas une partie de PommeBrowser : il n'est livré que par la CI (artefac
 ## Basilisk lancé à part
 
 Un Basilisk lancé hors de PommeBrowser prend souvent le Flash installé dans Windows (inscrit dans le
-registre) : l'espion se place alors devant lui, depuis PowerShell **en administrateur** :
+registre) : l'espion se place alors devant lui, depuis PowerShell **en administrateur**. Basilisk
+64 bits : `System32\Macromed\Flash` ; Basilisk 32 bits : `SysWOW64\Macromed\Flash`.
 
 ```
 powershell -ExecutionPolicy Bypass -File .\Espion-Flash.ps1 -Dossier C:\Windows\System32\Macromed\Flash

@@ -2,10 +2,11 @@
 
 	<!--
 		Moteur Flash intégré de PommeBrowser : hôte NPAPI hors processus. Il charge le module Flash
-		de l'utilisateur (NPSWF64_*.dll, jamais fourni par PommeBrowser), joue le rôle du navigateur
+		de l'utilisateur (NPSWF64_*.dll ou NPSWF32_*.dll, jamais fourni par PommeBrowser), joue le rôle du navigateur
 		auprès de lui (flux réseau, scripts, fenêtre) et affiche le contenu dans sa propre fenêtre,
 		que PommeBrowser loge dans l'onglet. Un plantage du module n'emporte que ce processus.
-		Windows x64 seulement pour l'instant (Flash Player 64 bits) ; publié en NativeAOT.
+		Windows, publié en NativeAOT pour win-x64 (module 64 bits) et win-x86 (module 32 bits) :
+		un processus ne charge que les modules de son architecture.
 	-->
 
 	<PropertyGroup>
@@ -16,7 +17,6 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<AssemblyName>PommeFlashHost</AssemblyName>
 		<RootNamespace>PommeFlash.Host</RootNamespace>
-		<PlatformTarget>x64</PlatformTarget>
 		<InvariantGlobalization>true</InvariantGlobalization>
 		<SatelliteResourceLanguages>fr</SatelliteResourceLanguages>
 		<IsAotCompatible>true</IsAotCompatible>

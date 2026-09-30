@@ -539,12 +539,26 @@ namespace PommeBrowser.Views.Pages
             var module = Hint(FlashModuleStatus());
             var path = new TextBlock { Text = string.IsNullOrWhiteSpace(Settings.BasiliskPath) ? Tr("Recherche automatique") : Settings.BasiliskPath, TextWrapping = TextWrapping.Wrap };
             Button search = null!;
+            Button remove32 = null!;
             // Module installé : statut à jour, et le bouton de recherche n'est plus mis en avant.
             void Installed()
             {
                 module.Text = FlashModuleStatus();
-                search.Classes.Remove("primary");
+                remove32.IsVisible = LegacyEngine.InstalledModule32 != null;
+                if (LegacyEngine.InstalledModule != null || LegacyEngine.InstalledModule32 != null)
+                    search.Classes.Remove("primary");
             }
+            remove32 = Action(Tr("Retirer le module 32 bits"), async () =>
+            {
+                if (LegacyEngine.RemoveModule32() is { } error)
+                {
+                    await Dialogs.Dialogs.AlertAsync(_window, Tr("Module Flash"), error);
+                    return;
+                }
+                module.Text = FlashModuleStatus();
+                remove32.IsVisible = false;
+            });
+            remove32.IsVisible = LegacyEngine.InstalledModule32 != null;
             search = Action(Tr("Rechercher le module Flash"), async () => await SearchFlashModuleAsync(search, Installed), primary: LegacyEngine.InstalledModule == null);
             panel.Children.Add(Card(Tr("Moteur de secours Legacy (Basilisk)"),
                 LegacyView.IsSupported
@@ -576,8 +590,12 @@ namespace PommeBrowser.Views.Pages
                     })),
                 module,
                 Hint(Tr("Adobe ne distribue plus Flash Player : PommeBrowser ne peut pas le fournir. « Rechercher le module Flash » trouve votre copie sur l'ordinateur, par exemple dans un Basilisk portable ; sinon, choisissez le fichier ({0}). Les dernières versions bloquent les contenus depuis le 12 janvier 2021 : prenez une version plus ancienne.", LegacyEngine.ExpectedModuleName)),
+                OperatingSystem.IsWindows()
+                    ? Hint(Tr("Le moteur intégré accepte aussi le module 32 bits (NPSWF32_….dll, dans SysWOW64\\Macromed\\Flash quand Flash Player est installé) : certains jeux ne fonctionnent qu'avec lui. Il l'utilise alors à la place du module 64 bits, qui reste celui de Basilisk."))
+                    : new Panel { IsVisible = false },
                 Buttons(
                     search,
+                    remove32,
                     Action(Tr("Choisir le module Flash…"), async () =>
                     {
                         IReadOnlyList<IStorageFile> files = await _window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
@@ -650,8 +668,12 @@ namespace PommeBrowser.Views.Pages
             }));
             if (!FlashHostProcess.IsAvailable)
                 panel.Children.Add(Hint(Tr("Le moteur intégré n'est pas présent dans cette compilation.")));
-            else if (LegacyEngine.InstalledModule == null)
+            else if (LegacyEngine.IntegratedModule is not { } module)
                 panel.Children.Add(Hint(Tr("Il utilise votre module Flash : ajoutez-le ci-dessous.")));
+            else if (!FlashHostProcess.IsAvailableFor(module))
+                panel.Children.Add(Hint(Tr("Le moteur intégré 32 bits n'est pas présent dans cette compilation : retirez le module 32 bits pour utiliser le module 64 bits.")));
+            else
+                panel.Children.Add(Hint(Tr("Module utilisé : {0}", System.IO.Path.GetFileName(module))));
             return panel;
         }
 
@@ -710,8 +732,8 @@ namespace PommeBrowser.Views.Pages
             {
                 int choice = await Dialogs.Dialogs.ChoiceAsync(_window, Tr("Module Flash introuvable"),
                     folder == null
-                        ? Tr("Aucun module Flash 64 bits ({0}) n'a été trouvé dans les dossiers habituels. Indiquez le dossier où il se trouve, par exemple celui d'un Basilisk ou d'un Pale Moon portable : il y sera cherché, sous-dossiers compris.", LegacyEngine.ExpectedModuleName)
-                        : Tr("Aucun module Flash 64 bits ({0}) dans {1}, sous-dossiers compris.", LegacyEngine.ExpectedModuleName, folder),
+                        ? Tr("Aucun module Flash ({0}) n'a été trouvé dans les dossiers habituels. Indiquez le dossier où il se trouve, par exemple celui d'un Basilisk ou d'un Pale Moon portable : il y sera cherché, sous-dossiers compris.", LegacyEngine.ExpectedModuleName)
+                        : Tr("Aucun module Flash ({0}) dans {1}, sous-dossiers compris.", LegacyEngine.ExpectedModuleName, folder),
                     (Tr("Annuler"), false, false), (Tr("Choisir un dossier…"), true, false));
                 if (choice == 1)
                     await SearchFlashFolderAsync(installed);
@@ -721,7 +743,7 @@ namespace PommeBrowser.Views.Pages
             string? chosen = null;
             bool browse = false;
             var dialog = new ListDialog(Tr("Module Flash trouvé"),
-                Tr("Choisissez le module à utiliser avec Basilisk. Il est copié dans les données de PommeBrowser : son dossier d'origine n'est plus nécessaire ensuite."),
+                Tr("Choisissez le module à installer. Il est copié dans les données de PommeBrowser : son dossier d'origine n'est plus nécessaire ensuite. Un module 32 bits ne sert qu'au moteur intégré."),
                 string.Empty,
                 list => found.Select(m => list.Row(System.IO.Path.GetFileName(m.Path), FlashModuleDetail(m), Tr("Installer"), () =>
                 {
@@ -748,23 +770,31 @@ namespace PommeBrowser.Views.Pages
                 return;
             }
             installed();
-            _window.ShowToast(Tr("Module Flash installé : il sera utilisé à la prochaine ouverture dans Basilisk."));
+            _window.ShowToast(FlashModuleSearch.Is32BitModuleName(path)
+                ? Tr("Module Flash 32 bits installé : le moteur intégré l'utilisera.")
+                : Tr("Module Flash installé : il sera utilisé à la prochaine ouverture dans Basilisk."));
         }
 
         /// <summary>Version et dossier du module ; avertissement pour les versions qui bloquent les contenus.</summary>
         static string FlashModuleDetail(FlashModuleSearch.Module module)
         {
             string folder = System.IO.Path.GetDirectoryName(module.Path) ?? module.Path;
-            if (module.Version is not { } version)
-                return folder;
-            return FlashModuleSearch.MayBlockContent(module)
-                ? Tr("Version {0}, dans {1}. Cette version peut refuser les contenus Flash (blocage du 12 janvier 2021), sauf si elle a été modifiée pour l'éviter.", version, folder)
-                : Tr("Version {0}, dans {1}", version, folder);
+            string detail = module.Version is not { } version
+                ? folder
+                : FlashModuleSearch.MayBlockContent(module)
+                    ? Tr("Version {0}, dans {1}. Cette version peut refuser les contenus Flash (blocage du 12 janvier 2021), sauf si elle a été modifiée pour l'éviter.", version, folder)
+                    : Tr("Version {0}, dans {1}", version, folder);
+            return module.Is32Bit ? Tr("32 bits, pour le moteur intégré seulement. {0}", detail) : detail;
         }
 
         static string FlashModuleStatus()
-            => LegacyEngine.InstalledModule is { } module
+        {
+            string status = LegacyEngine.InstalledModule is { } module
                 ? Tr("Module Flash : {0}", System.IO.Path.GetFileName(module))
                 : Tr("Module Flash absent : Basilisk ne pourra pas lire les contenus Flash.");
+            return LegacyEngine.InstalledModule32 is { } module32
+                ? status + "\n" + Tr("Module 32 bits (moteur intégré) : {0}", System.IO.Path.GetFileName(module32))
+                : status;
+        }
     }
 }

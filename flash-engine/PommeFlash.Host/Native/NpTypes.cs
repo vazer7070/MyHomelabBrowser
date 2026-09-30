@@ -89,7 +89,11 @@ namespace PommeFlash.Host.Native
         Object = 6
     }
 
-    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    /// <summary>
+    /// Valeur NPAPI : type, puis la valeur à 8 octets du début. Sa taille suit celle des pointeurs
+    /// (NPString) : 24 octets en 64 bits, 16 en 32 bits ; les tableaux d'arguments en dépendent.
+    /// </summary>
+    [StructLayout(LayoutKind.Explicit)]
     struct NPVariant
     {
         [FieldOffset(0)] public NPVariantType type;

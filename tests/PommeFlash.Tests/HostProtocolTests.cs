@@ -51,7 +51,8 @@ public sealed class HostProtocolTests
         string page = server.Url("jeu/page.html");
 
         // Démarrage : table du navigateur, paramètres de l'élément, fenêtre.
-        Assert.Contains("init size=472 version=29", reports);
+        // Table des fonctions du navigateur : 58 pointeurs après l'en-tête (64 ou 32 bits).
+        Assert.Contains($"init size={(HostRun.Is32BitHost ? 236 : 472)} version=29", reports);
         Assert.Contains("new mime=application/x-shockwave-flash mode=1 argc=12", reports);
         Assert.Contains("arg src=" + server.Url("movie.swf"), reports);
         Assert.Contains("arg flashvars=a=1&b=2", reports);

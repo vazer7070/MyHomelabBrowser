@@ -17,7 +17,11 @@ namespace PommeBrowser.Legacy
     public static partial class FlashModuleSearch
     {
         /// <summary>Module trouvé ; version lue dans le nom du fichier (NPSWF64_32_0_0_371.dll) ou ses propriétés.</summary>
-        public sealed record Module(string Path, Version? Version);
+        public sealed record Module(string Path, Version? Version)
+        {
+            /// <summary>Module 32 bits de Windows : moteur intégré seulement (Basilisk est en 64 bits).</summary>
+            public bool Is32Bit => Is32BitModuleName(Path);
+        }
 
         /// <summary>Dossier à fouiller, avec au plus <see cref="Depth"/> niveaux de sous-dossiers.</summary>
         public readonly record struct Location(string Path, int Depth);
@@ -50,7 +54,7 @@ namespace PommeBrowser.Legacy
             AttributesToSkip = FileAttributes.Offline
         };
 
-        /// <summary>Nom du module NPAPI 64 bits : NPSWF64_….dll (Windows), libflashplayer.so (Linux).</summary>
+        /// <summary>Nom du module NPAPI 64 bits (celui de Basilisk) : NPSWF64_….dll (Windows), libflashplayer.so (Linux).</summary>
         public static bool IsModuleName(string path, bool windows)
         {
             string name = Path.GetFileName(path);
@@ -59,7 +63,21 @@ namespace PommeBrowser.Legacy
                 : name == "libflashplayer.so";
         }
 
-        /// <summary>Bibliothèque 64 bits pour processeur x86-64 : PE « AMD64 » (Windows) ou ELF64 x86-64 (Linux).</summary>
+        /// <summary>Nom du module NPAPI 32 bits de Windows (NPSWF32_….dll), que seul le moteur intégré utilise.</summary>
+        public static bool Is32BitModuleName(string path)
+        {
+            string name = Path.GetFileName(path);
+            return name.StartsWith("NPSWF32", StringComparison.OrdinalIgnoreCase) && name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>Module 64 bits, ou 32 bits sous Windows.</summary>
+        public static bool IsAnyModuleName(string path, bool windows)
+            => IsModuleName(path, windows) || (windows && Is32BitModuleName(path));
+
+        /// <summary>
+        /// Bibliothèque de l'architecture qu'annonce son nom : PE « i386 » pour NPSWF32_….dll,
+        /// PE « AMD64 » pour les autres (Windows), ELF64 x86-64 (Linux).
+        /// </summary>
         public static bool IsModuleBinary(string path, bool windows)
         {
             try
@@ -85,8 +103,9 @@ namespace PommeBrowser.Legacy
                 Span<byte> pe = stackalloc byte[6];
                 if (stream.ReadAtLeast(pe, pe.Length, throwOnEndOfStream: false) < pe.Length)
                     return false;
+                ushort machine = Is32BitModuleName(path) ? (ushort)0x14C /* i386 */ : (ushort)0x8664 /* AMD64 */;
                 return pe[0] == (byte)'P' && pe[1] == (byte)'E' && pe[2] == 0 && pe[3] == 0 &&
-                       BinaryPrimitives.ReadUInt16LittleEndian(pe[4..]) == 0x8664 /* AMD64 */;
+                       BinaryPrimitives.ReadUInt16LittleEndian(pe[4..]) == machine;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -94,7 +113,7 @@ namespace PommeBrowser.Legacy
             }
         }
 
-        /// <summary>Version du module : nom du fichier de Flash Player (NPSWF64_32_0_0_371.dll), sinon ses propriétés (Windows).</summary>
+        /// <summary>Version du module : nom du fichier de Flash Player (NPSWF64_32_0_0_371.dll, NPSWF32_…), sinon ses propriétés (Windows).</summary>
         public static Version? VersionOf(string path)
         {
             Match match = VersionInName().Match(Path.GetFileName(path));
@@ -124,7 +143,7 @@ namespace PommeBrowser.Legacy
         public static bool MayBlockContent(Module module) => module.Version is { } version && version > LastWithoutTimeBomb;
 
         /// <summary>
-        /// Modules Flash 64 bits de ce système trouvés dans <paramref name="locations"/> (dans l'ordre,
+        /// Modules Flash de ce système (64 bits, et 32 bits sous Windows) trouvés dans <paramref name="locations"/> (dans l'ordre,
         /// les moins profonds d'abord), sans ceux de <paramref name="exclude"/> (modules déjà installés)
         /// ni les copies d'un même fichier. S'arrête à l'annulation ou après
         /// <paramref name="maxDirectories"/> dossiers, avec ce qui a été trouvé. Les versions sans le
@@ -134,7 +153,7 @@ namespace PommeBrowser.Legacy
         {
             StringComparer comparer = windows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
             string? excluded = exclude is { Length: > 0 } ? Normalize(exclude) : null;
-            string pattern = windows ? "NPSWF64*.dll" : "libflashplayer.so";
+            string pattern = windows ? "NPSWF*.dll" : "libflashplayer.so";
             EnumerationOptions files = Files(windows);
 
             // Profondeur restante la plus grande avec laquelle chaque dossier a été parcouru.
@@ -167,7 +186,7 @@ namespace PommeBrowser.Legacy
                         {
                             foreach (string file in Directory.EnumerateFiles(directory, pattern, files))
                             {
-                                if (!IsModuleName(file, windows) || !IsModuleBinary(file, windows))
+                                if (!IsAnyModuleName(file, windows) || !IsModuleBinary(file, windows))
                                     continue;
                                 long length = new FileInfo(file).Length;
                                 if (seen.Add((Path.GetFileName(file).ToLowerInvariant(), length)))
@@ -207,7 +226,7 @@ namespace PommeBrowser.Legacy
             }
         }
 
-        [GeneratedRegex(@"^NPSWF64_(\d+)_(\d+)_(\d+)_(\d+)\.dll$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        [GeneratedRegex(@"^NPSWF(?:64|32)_(\d+)_(\d+)_(\d+)_(\d+)\.dll$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex VersionInName();
     }
 }

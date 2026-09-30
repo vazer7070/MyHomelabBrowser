@@ -381,7 +381,7 @@ namespace PommeFlash.Host
                 return;
             if (!timer.Repeat)
                 UnscheduleTimer(id);
-            ((delegate* unmanaged<NPP_t*, uint, void>)timer.Function)(_npp, id);
+            ((delegate* unmanaged[Cdecl]<NPP_t*, uint, void>)timer.Function)(_npp, id);
         }
     }
 }

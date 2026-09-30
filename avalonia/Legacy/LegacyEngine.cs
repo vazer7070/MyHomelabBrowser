@@ -49,7 +49,7 @@ namespace PommeBrowser.Legacy
         public static string PluginDirectory => AppPaths.SharedData("plugins");
 
         /// <summary>Nom attendu du module Flash sur ce système.</summary>
-        public static string ExpectedModuleName => OperatingSystem.IsWindows() ? "NPSWF64_….dll" : "libflashplayer.so";
+        public static string ExpectedModuleName => OperatingSystem.IsWindows() ? "NPSWF64_….dll, NPSWF32_….dll" : "libflashplayer.so";
 
         static string? FindBundled()
         {
@@ -57,6 +57,56 @@ namespace PommeBrowser.Legacy
                 return null;
             string path = Path.Combine(AppContext.BaseDirectory, "legacy", OperatingSystem.IsWindows() ? "basilisk.exe" : "basilisk");
             return File.Exists(path) ? path : null;
+        }
+
+        /// <summary>
+        /// Module 32 bits (Windows), pour le moteur intégré seulement : rangé à part, dans un
+        /// sous-dossier que Basilisk (64 bits) ne parcourt pas.
+        /// </summary>
+        public static string PluginDirectory32 => Path.Combine(PluginDirectory, "x86");
+
+        /// <summary>Module Flash 32 bits installé (Windows), ou null.</summary>
+        public static string? InstalledModule32
+        {
+            get
+            {
+                if (!OperatingSystem.IsWindows())
+                    return null;
+                try
+                {
+                    return Directory.Exists(PluginDirectory32)
+                        ? Directory.EnumerateFiles(PluginDirectory32).Where(FlashModuleSearch.Is32BitModuleName).OrderBy(p => p, StringComparer.OrdinalIgnoreCase).LastOrDefault()
+                        : null;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    return null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Module du moteur intégré : le module 32 bits s'il est installé (importé exprès, pour les
+        /// contenus qui ne fonctionnent qu'avec lui), sinon celui de Basilisk.
+        /// </summary>
+        public static string? IntegratedModule => InstalledModule32 ?? InstalledModule;
+
+        /// <summary>Retire le module 32 bits : le moteur intégré reprend le module 64 bits.</summary>
+        public static string? RemoveModule32()
+        {
+            try
+            {
+                if (Directory.Exists(PluginDirectory32))
+                {
+                    foreach (string module in Directory.EnumerateFiles(PluginDirectory32).Where(FlashModuleSearch.Is32BitModuleName).ToList())
+                        File.Delete(module);
+                }
+                return null;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return ex.Message;
+            }
         }
 
         /// <summary>Module Flash installé pour Basilisk (chemin), ou null.</summary>
@@ -104,8 +154,9 @@ namespace PommeBrowser.Legacy
 
             if (OperatingSystem.IsWindows())
             {
-                // Flash Player installé pour Firefox (version 64 bits dans System32).
+                // Flash Player installé pour Firefox (64 bits dans System32, 32 bits dans SysWOW64).
                 yield return new(Path.Combine(Environment.SystemDirectory, "Macromed", "Flash"), 0);
+                yield return new(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.SystemX86), "Macromed", "Flash"), 0);
                 foreach (string directory in pluginPath)
                     yield return new(directory, 0);
                 foreach (string directory in new[]
@@ -158,30 +209,38 @@ namespace PommeBrowser.Legacy
 
         /// <summary>
         /// Copie le module Flash choisi par l'utilisateur. Retourne un message d'erreur, ou null
-        /// si le module est installé. Un module précédent est remplacé.
+        /// si le module est installé. Un module précédent de la même architecture est remplacé :
+        /// le module 64 bits sert à Basilisk et au moteur intégré, le module 32 bits (Windows) au
+        /// moteur intégré seulement.
         /// </summary>
         public static string? InstallModule(string source)
         {
             if (!File.Exists(source))
                 return Tr("Fichier introuvable.");
 
+            bool windows = OperatingSystem.IsWindows();
             string name = Path.GetFileName(source);
-            if (OperatingSystem.IsWindows() && name.StartsWith("NPSWF32", StringComparison.OrdinalIgnoreCase))
-                return Tr("Ce module Flash est en 32 bits. Choisissez la version 64 bits ({0}).", ExpectedModuleName);
-            if (!IsModuleName(source))
+            if (!FlashModuleSearch.IsAnyModuleName(source, windows))
                 return Tr("Choisissez le module Flash Player pour navigateurs NPAPI : {0}.", ExpectedModuleName);
-            if (!FlashModuleSearch.IsModuleBinary(source, OperatingSystem.IsWindows()))
-                return Tr("Ce fichier n'est pas un module Flash 64 bits valide.");
+            if (!FlashModuleSearch.IsModuleBinary(source, windows))
+                return Tr("Ce fichier n'est pas un module Flash valide ({0}).", name);
 
+            bool is32Bit = windows && FlashModuleSearch.Is32BitModuleName(source);
+            string directory = is32Bit ? PluginDirectory32 : PluginDirectory;
+            Func<string, bool> sameKind = is32Bit ? FlashModuleSearch.Is32BitModuleName : IsModuleName;
+            string target = Path.Combine(directory, name);
+            // Module déjà installé choisi de nouveau : rien à copier.
+            if (string.Equals(Path.GetFullPath(source), Path.GetFullPath(target), windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                return null;
             try
             {
-                Directory.CreateDirectory(PluginDirectory);
-                foreach (string previous in Directory.EnumerateFiles(PluginDirectory).Where(IsModuleName).ToList())
+                Directory.CreateDirectory(directory);
+                foreach (string previous in Directory.EnumerateFiles(directory).Where(sameKind).ToList())
                 {
                     if (!string.Equals(Path.GetFileName(previous), name, StringComparison.OrdinalIgnoreCase))
                         File.Delete(previous);
                 }
-                File.Copy(source, Path.Combine(PluginDirectory, name), overwrite: true);
+                File.Copy(source, target, overwrite: true);
                 return null;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

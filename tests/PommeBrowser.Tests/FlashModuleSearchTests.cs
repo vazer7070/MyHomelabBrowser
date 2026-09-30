@@ -55,11 +55,26 @@ public sealed class FlashModuleSearchTests : IDisposable
     public void ModuleNamesAreThoseOfTheNpapiPlugin(string name, bool windows, bool expected)
         => Assert.Equal(expected, FlashModuleSearch.IsModuleName(name, windows));
 
+    [Theory]
+    [InlineData("NPSWF32_34_0_0_323.dll", true, true, true)]
+    [InlineData("npswf32_34_0_0_323.DLL", true, true, true)]
+    [InlineData("NPSWF64_34_0_0_323.dll", true, false, true)]
+    [InlineData("NPSWF32_34_0_0_323.dll", false, true, false)]
+    [InlineData("FlashUtil32_34_0_0_323_Plugin.dll", true, false, false)]
+    public void ThirtyTwoBitModulesAreForTheIntegratedEngineOnWindows(string name, bool windows, bool thirtyTwo, bool any)
+    {
+        Assert.Equal(thirtyTwo, FlashModuleSearch.Is32BitModuleName(name));
+        Assert.Equal(any, FlashModuleSearch.IsAnyModuleName(name, windows));
+    }
+
     [Fact]
-    public void OnlySixtyFourBitLibrariesAreModules()
+    public void LibrariesHaveTheArchitectureOfTheirName()
     {
         Assert.True(FlashModuleSearch.IsModuleBinary(Write("a.dll", PortableExecutable(0x8664)), windows: true));
         Assert.False(FlashModuleSearch.IsModuleBinary(Write("b.dll", PortableExecutable(0x14C)), windows: true));
+        Assert.True(FlashModuleSearch.IsModuleBinary(Write("NPSWF32_34_0_0_323.dll", PortableExecutable(0x14C)), windows: true));
+        Assert.False(FlashModuleSearch.IsModuleBinary(Write(Path.Combine("x", "NPSWF32_34_0_0_323.dll"), PortableExecutable(0x8664)), windows: true));
+        Assert.False(FlashModuleSearch.IsModuleBinary(Write("NPSWF64_34_0_0_323.dll", PortableExecutable(0x14C)), windows: true));
         Assert.True(FlashModuleSearch.IsModuleBinary(Write("c.so", Elf(2, 0x3E)), windows: false));
         Assert.False(FlashModuleSearch.IsModuleBinary(Write("d.so", Elf(1, 0x03)), windows: false));
         Assert.False(FlashModuleSearch.IsModuleBinary(Write("e.so", Elf(2, 0xB7)), windows: false));
@@ -71,6 +86,7 @@ public sealed class FlashModuleSearchTests : IDisposable
     public void VersionIsReadFromTheFileNameAndOldVersionsDoNotBlockContent()
     {
         Assert.Equal(new Version(32, 0, 0, 371), FlashModuleSearch.VersionOf("NPSWF64_32_0_0_371.dll"));
+        Assert.Equal(new Version(34, 0, 0, 323), FlashModuleSearch.VersionOf("NPSWF32_34_0_0_323.dll"));
         Assert.Null(FlashModuleSearch.VersionOf("libflashplayer.so"));
 
         Assert.False(FlashModuleSearch.MayBlockContent(new("x", new Version(32, 0, 0, 371))));
@@ -87,9 +103,13 @@ public sealed class FlashModuleSearchTests : IDisposable
         Write(Path.Combine("BasiliskPortable", "App", "Basilisk", "plugins", "NPSWF32_32_0_0_371.dll"), PortableExecutable(0x14C));
         Write(Path.Combine("Faux", "NPSWF64_1_0_0_0.dll"), "texte"u8.ToArray());
 
-        FlashModuleSearch.Module found = Assert.Single(Find(depth: 4, windows: true));
-        Assert.Equal(module, found.Path);
-        Assert.Equal(new Version(32, 0, 0, 371), found.Version);
+        // Les deux architectures sont proposées ; le module 32 bits est marqué comme tel.
+        IReadOnlyList<FlashModuleSearch.Module> found = Find(depth: 4, windows: true);
+        Assert.Equal(2, found.Count);
+        FlashModuleSearch.Module sixtyFour = Assert.Single(found, m => !m.Is32Bit);
+        Assert.Equal(module, sixtyFour.Path);
+        Assert.Equal(new Version(32, 0, 0, 371), sixtyFour.Version);
+        Assert.Single(found, m => m.Is32Bit && m.Path.EndsWith("NPSWF32_32_0_0_371.dll", StringComparison.Ordinal));
 
         // Trop profond pour la limite demandée.
         Assert.Empty(Find(depth: 3, windows: true));

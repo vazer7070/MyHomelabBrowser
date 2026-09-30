@@ -40,10 +40,20 @@ namespace PommeBrowser.Legacy
             _process = process;
         }
 
-        /// <summary>Hôte livré avec PommeBrowser (dossier flash de l'application).</summary>
-        public static string ExecutablePath => Path.Combine(AppContext.BaseDirectory, "flash", "PommeFlashHost.exe");
+        /// <summary>
+        /// Hôte livré avec PommeBrowser pour ce module : un processus ne charge que les modules de
+        /// son architecture (flash\PommeFlashHost.exe en 64 bits, flash\x86\PommeFlashHost.exe en 32 bits).
+        /// </summary>
+        public static string ExecutablePath(string module)
+            => FlashModuleSearch.Is32BitModuleName(module)
+                ? Path.Combine(AppContext.BaseDirectory, "flash", "x86", "PommeFlashHost.exe")
+                : Path.Combine(AppContext.BaseDirectory, "flash", "PommeFlashHost.exe");
 
-        public static bool IsAvailable => File.Exists(ExecutablePath);
+        /// <summary>Un hôte est livré dans cette compilation (au moins en 64 bits).</summary>
+        public static bool IsAvailable => File.Exists(Path.Combine(AppContext.BaseDirectory, "flash", "PommeFlashHost.exe"));
+
+        /// <summary>L'hôte de l'architecture de ce module est livré.</summary>
+        public static bool IsAvailableFor(string module) => File.Exists(ExecutablePath(module));
 
         public event Action? Exited;
 
@@ -58,10 +68,11 @@ namespace PommeBrowser.Legacy
 
         public static FlashHostProcess Start(FlashContent content, string module, bool isPrivate)
         {
+            string executable = ExecutablePath(module);
             var start = new ProcessStartInfo
             {
-                FileName = ExecutablePath,
-                WorkingDirectory = Path.GetDirectoryName(ExecutablePath)!,
+                FileName = executable,
+                WorkingDirectory = Path.GetDirectoryName(executable)!,
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,

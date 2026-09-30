@@ -24,9 +24,12 @@ namespace PommeBrowser.Views
         // Contenu lu par le moteur intégré (null : Basilisk).
         FlashContent? _integrated;
 
-        /// <summary>Moteur intégré prêt pour le contenu de la page : Windows, réglage activé, module importé.</summary>
+        /// <summary>
+        /// Moteur intégré prêt pour le contenu de la page : Windows, réglage activé, module importé
+        /// (32 bits de préférence, voir LegacyEngine.IntegratedModule) et hôte de son architecture livré.
+        /// </summary>
         bool UsesIntegratedFlash => OperatingSystem.IsWindows() && _app.Settings.FlashIntegratedEngine &&
-                                    FlashHostProcess.IsAvailable && LegacyEngine.InstalledModule != null && _flashContent != null;
+                                    LegacyEngine.IntegratedModule is { } module && FlashHostProcess.IsAvailableFor(module) && _flashContent != null;
 
         /// <summary>Un moteur de secours peut lire le Flash de cette page.</summary>
         public bool HasFlashFallback => UsesIntegratedFlash || _app.BasiliskExecutable != null;
@@ -46,7 +49,7 @@ namespace PommeBrowser.Views
             if (OperatingSystem.IsWindows() && UsesIntegratedFlash)
             {
                 FlashContent content = _flashContent!;
-                if (CanPlaceInPage(content) && LegacyEngine.InstalledModule is { } module)
+                if (CanPlaceInPage(content) && LegacyEngine.IntegratedModule is { } module)
                     OpenFlashInPage(content, module);
                 else
                     OpenInIntegratedFlash(content);
@@ -64,7 +67,7 @@ namespace PommeBrowser.Views
         [SupportedOSPlatform("windows")]
         void OpenInIntegratedFlash(FlashContent content)
         {
-            if (LegacyEngine.InstalledModule is not { } module)
+            if (LegacyEngine.IntegratedModule is not { } module)
             {
                 Window.ShowToast(Tr("Module Flash absent : ajoutez votre copie de Flash Player dans les paramètres."), Tr("Paramètres"), () => Window.OpenSettings("flash"), warning: true);
                 return;

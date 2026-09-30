@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Reflection.PortableExecutable;
 using System.Text.Json;
 
 namespace PommeFlash.Tests;
@@ -24,6 +25,16 @@ sealed class HostRun : IAsyncDisposable
     public static string? HostPath => Environment.GetEnvironmentVariable("POMMEFLASH_HOST");
     public static string? PluginPath => Environment.GetEnvironmentVariable("POMMEFLASH_TEST_PLUGIN");
     static string? Launcher => Environment.GetEnvironmentVariable("POMMEFLASH_LAUNCHER") is { Length: > 0 } launcher ? launcher : null;
+
+    /// <summary>Hôte 32 bits (win-x86), pour un module NPSWF32 : la table NPNetscapeFuncs y fait 236 octets.</summary>
+    public static bool Is32BitHost
+    {
+        get
+        {
+            using var reader = new PEReader(File.OpenRead(HostPath!));
+            return reader.PEHeaders.CoffHeader.Machine == Machine.I386;
+        }
+    }
 
     /// <summary>Chemin vu par l'hôte (sous Wine, le disque Z: est la racine du système).</summary>
     public static string HostVisiblePath(string path) => Launcher != null && path.StartsWith('/') ? "Z:" + path : path;

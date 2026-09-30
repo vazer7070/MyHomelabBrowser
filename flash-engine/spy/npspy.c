@@ -18,13 +18,13 @@
 #include <string.h>
 #include "../test-plugin/npapi-min.h"
 
-#define EXPORT __declspec(dllexport)
 #define MAX_LINES 40000
 #define MAX_TEXT 400
 
-typedef NPError (*GetEntryPointsFn)(NPPluginFuncs *);
-typedef NPError (*InitializeFn)(NPNetscapeFuncs *);
-typedef NPError (*ShutdownFn)(void);
+/* Points d'entrée du vrai module : __stdcall en 32 bits (sans effet en 64 bits). */
+typedef NPError (WINAPI *GetEntryPointsFn)(NPPluginFuncs *);
+typedef NPError (WINAPI *InitializeFn)(NPNetscapeFuncs *);
+typedef NPError (WINAPI *ShutdownFn)(void);
 
 static HMODULE self;
 static HMODULE real;
@@ -807,7 +807,7 @@ static int loadReal(void)
 
 #define FITS(table, field, size) (offsetof(table, field) + sizeof(void *) <= (size_t)(size))
 
-EXPORT NPError WINAPI NP_GetEntryPoints(NPPluginFuncs *funcs)
+NP_EXPORT NPError WINAPI NP_GetEntryPoints(NPPluginFuncs *funcs)
 {
     if (!funcs || !loadReal())
         return NPERR_GENERIC_ERROR;
@@ -846,7 +846,7 @@ EXPORT NPError WINAPI NP_GetEntryPoints(NPPluginFuncs *funcs)
     return result;
 }
 
-EXPORT NPError WINAPI NP_Initialize(NPNetscapeFuncs *funcs)
+NP_EXPORT NPError WINAPI NP_Initialize(NPNetscapeFuncs *funcs)
 {
     if (!funcs || !loadReal())
         return NPERR_GENERIC_ERROR;
@@ -896,7 +896,7 @@ EXPORT NPError WINAPI NP_Initialize(NPNetscapeFuncs *funcs)
     return result;
 }
 
-EXPORT NPError WINAPI NP_Shutdown(void)
+NP_EXPORT NPError WINAPI NP_Shutdown(void)
 {
     ShutdownFn shutdown = real ? (ShutdownFn)(void *)GetProcAddress(real, "NP_Shutdown") : NULL;
     NPError result = shutdown ? shutdown() : NPERR_NO_ERROR;

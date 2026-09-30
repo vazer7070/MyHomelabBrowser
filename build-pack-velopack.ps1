@@ -500,12 +500,17 @@ try {
         # Moteur Flash d'origine (Pomme Legacy) livré avec l'application, dans legacy\.
         & (Join-Path $scriptDir "legacy-engine\fetch-engine.ps1") -Destination (Join-Path $publishDir "legacy")
 
-        # Moteur Flash intégré (hôte NPAPI, code natif) dans flash\.
+        # Moteur Flash intégré (hôte NPAPI, code natif) dans flash\ (module 64 bits) et
+        # flash\x86\ (module 32 bits NPSWF32).
         $flashHost = Join-Path $scriptDir "flash-engine\PommeFlash.Host\PommeFlash.Host.csproj"
         Invoke-Native -FilePath "dotnet" -Arguments @(
             "publish", $flashHost, "-c", "Release", "-r", "win-x64",
             "-p:PublishAot=true", "-p:DebugType=none", "-o", (Join-Path $publishDir "flash")
         ) -FailureMessage "Publication du moteur Flash intégré impossible"
+        Invoke-Native -FilePath "dotnet" -Arguments @(
+            "publish", $flashHost, "-c", "Release", "-r", "win-x86",
+            "-p:PublishAot=true", "-p:DebugType=none", "-o", (Join-Path $publishDir "flash\x86")
+        ) -FailureMessage "Publication du moteur Flash intégré 32 bits impossible"
     }
 
     $mainExePath = Join-Path $publishDir $mainExe

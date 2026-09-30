@@ -129,67 +129,89 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: ./legacy-engine/fetch-engine.ps1 -Destination artifacts/avalonia-win-x64/legacy
 
-      # Moteur Flash intégré (flash-engine/) : hôte NPAPI compilé en code natif (NativeAOT).
+      # Moteur Flash intégré (flash-engine/) : hôte NPAPI compilé en code natif (NativeAOT), en
+      # 64 bits (module NPSWF64) et en 32 bits (module NPSWF32, dans flash\x86).
       - name: Moteur Flash intégré (PommeFlashHost)
         shell: pwsh
         run: |
           dotnet publish flash-engine/PommeFlash.Host/PommeFlash.Host.csproj --configuration Release --runtime win-x64 -p:PublishAot=true -p:DebugType=none --output artifacts/avalonia-win-x64/flash
           if (-not (Test-Path artifacts/avalonia-win-x64/flash/PommeFlashHost.exe)) { throw "PommeFlashHost absent de la publication." }
+          dotnet publish flash-engine/PommeFlash.Host/PommeFlash.Host.csproj --configuration Release --runtime win-x86 -p:PublishAot=true -p:DebugType=none --output artifacts/avalonia-win-x64/flash/x86
+          if (-not (Test-Path artifacts/avalonia-win-x64/flash/x86/PommeFlashHost.exe)) { throw "PommeFlashHost 32 bits absent de la publication." }
 
-      # Le vrai hôte, avec un greffon NPAPI de test qui rapporte ce qu'il observe.
+      # Le vrai hôte, avec un greffon NPAPI de test qui rapporte ce qu'il observe, dans les deux
+      # architectures (greffon 32 bits : clang pour i686, points d'entrée __stdcall comme Flash).
       - name: Tests du moteur Flash intégré
         shell: pwsh
         run: |
           $plugin = Join-Path $env:RUNNER_TEMP "npPommeTest.dll"
-          if (Get-Command clang -ErrorAction SilentlyContinue) {
-            clang -shared -O2 -o $plugin flash-engine/test-plugin/testplugin.c -luser32
-          } else {
-            gcc -shared -O2 -o $plugin flash-engine/test-plugin/testplugin.c
-          }
+          $plugin32 = Join-Path $env:RUNNER_TEMP "x86/npPommeTest.dll"
+          New-Item -ItemType Directory -Force (Split-Path $plugin32) | Out-Null
+          clang -shared -O2 -o $plugin flash-engine/test-plugin/testplugin.c -luser32
           if ($LASTEXITCODE -ne 0) { throw "Greffon de test non compilé." }
-          $env:POMMEFLASH_HOST = (Resolve-Path artifacts/avalonia-win-x64/flash/PommeFlashHost.exe).Path
-          $env:POMMEFLASH_TEST_PLUGIN = $plugin
-          dotnet test tests/PommeFlash.Tests/PommeFlash.Tests.csproj --configuration Release --logger "trx;LogFileName=moteur-flash.trx" --results-directory TestResults
-          if ($LASTEXITCODE -ne 0) { throw "Tests du moteur Flash intégré en échec." }
+          clang --target=i686-pc-windows-msvc -shared -O2 -o $plugin32 flash-engine/test-plugin/testplugin.c -luser32
+          if ($LASTEXITCODE -ne 0) { throw "Greffon de test 32 bits non compilé." }
+          $runs = @(
+            @{ Host = "artifacts/avalonia-win-x64/flash/PommeFlashHost.exe"; Plugin = $plugin; Name = "moteur-flash" },
+            @{ Host = "artifacts/avalonia-win-x64/flash/x86/PommeFlashHost.exe"; Plugin = $plugin32; Name = "moteur-flash-32" })
+          foreach ($run in $runs) {
+            $env:POMMEFLASH_HOST = (Resolve-Path $run.Host).Path
+            $env:POMMEFLASH_TEST_PLUGIN = $run.Plugin
+            dotnet test tests/PommeFlash.Tests/PommeFlash.Tests.csproj --configuration Release --logger "trx;LogFileName=$($run.Name).trx" --results-directory TestResults
+            if ($LASTEXITCODE -ne 0) { throw "Tests du moteur Flash intégré en échec ($($run.Name))." }
+          }
 
-      # Espion NPAPI (flash-engine/spy), outil de diagnostic livré à part : compilé, vérifié
-      # transparent devant le greffon de test, script d'installation essayé sur une DLL système.
+      # Espion NPAPI (flash-engine/spy), outil de diagnostic livré à part, en 64 et 32 bits :
+      # vérifié transparent devant le greffon de test, script d'installation essayé sur des DLL système.
       - name: Espion du moteur Flash
         shell: pwsh
         run: |
           $out = "artifacts/espion-flash"
           New-Item -ItemType Directory -Force $out | Out-Null
-          if (Get-Command clang -ErrorAction SilentlyContinue) {
-            clang -shared -O2 -o "$out/npPommeEspion.dll" flash-engine/spy/npspy.c
-          } else {
-            gcc -shared -O2 -o "$out/npPommeEspion.dll" flash-engine/spy/npspy.c
-          }
+          clang -shared -O2 -o "$out/npPommeEspion.dll" flash-engine/spy/npspy.c
           if ($LASTEXITCODE -ne 0) { throw "Espion non compilé." }
+          clang --target=i686-pc-windows-msvc -shared -O2 -o "$out/npPommeEspion32.dll" flash-engine/spy/npspy.c
+          if ($LASTEXITCODE -ne 0) { throw "Espion 32 bits non compilé." }
           Copy-Item flash-engine/spy/Espion-Flash.ps1, flash-engine/spy/README.md $out
 
           # Transparence : les tests de l'hôte passent à l'identique avec l'espion devant le greffon.
-          $dir = Join-Path $env:RUNNER_TEMP "espion-test"
-          New-Item -ItemType Directory -Force (Join-Path $dir "espion") | Out-Null
-          Copy-Item (Join-Path $env:RUNNER_TEMP "npPommeTest.dll") (Join-Path $dir "espion/npPommeTest.dll")
-          Copy-Item "$out/npPommeEspion.dll" (Join-Path $dir "npPommeTest.dll")
-          $env:POMMEFLASH_HOST = (Resolve-Path artifacts/avalonia-win-x64/flash/PommeFlashHost.exe).Path
-          $env:POMMEFLASH_TEST_PLUGIN = Join-Path $dir "npPommeTest.dll"
-          dotnet test tests/PommeFlash.Tests/PommeFlash.Tests.csproj --configuration Release
-          if ($LASTEXITCODE -ne 0) { throw "L'espion change le comportement du module." }
-          if (-not (Get-ChildItem (Join-Path $dir "espion/journaux") -Filter *.log)) { throw "Aucun journal de l'espion." }
+          $runs = @(
+            @{ Host = "artifacts/avalonia-win-x64/flash/PommeFlashHost.exe"; Plugin = (Join-Path $env:RUNNER_TEMP "npPommeTest.dll"); Spy = "$out/npPommeEspion.dll"; Dir = "espion-test" },
+            @{ Host = "artifacts/avalonia-win-x64/flash/x86/PommeFlashHost.exe"; Plugin = (Join-Path $env:RUNNER_TEMP "x86/npPommeTest.dll"); Spy = "$out/npPommeEspion32.dll"; Dir = "espion-test-32" })
+          foreach ($run in $runs) {
+            $dir = Join-Path $env:RUNNER_TEMP $run.Dir
+            New-Item -ItemType Directory -Force (Join-Path $dir "espion") | Out-Null
+            Copy-Item $run.Plugin (Join-Path $dir "espion/npPommeTest.dll")
+            Copy-Item $run.Spy (Join-Path $dir "npPommeTest.dll")
+            $env:POMMEFLASH_HOST = (Resolve-Path $run.Host).Path
+            $env:POMMEFLASH_TEST_PLUGIN = Join-Path $dir "npPommeTest.dll"
+            dotnet test tests/PommeFlash.Tests/PommeFlash.Tests.csproj --configuration Release
+            if ($LASTEXITCODE -ne 0) { throw "L'espion change le comportement du module ($($run.Dir))." }
+            if (-not (Get-ChildItem (Join-Path $dir "espion/journaux") -Filter *.log)) { throw "Aucun journal de l'espion ($($run.Dir))." }
+          }
 
-          # Script d'installation, sur la copie d'une DLL système (qui a une description de version).
-          $plugins = Join-Path $env:RUNNER_TEMP "espion-plugins"
-          New-Item -ItemType Directory -Force $plugins | Out-Null
-          $module = Join-Path $plugins "NPSWF64_1_0_0_0.dll"
-          Copy-Item "$env:WINDIR\System32\version.dll" $module
-          $original = (Get-FileHash $module).Hash
-          $description = (Get-Item $module).VersionInfo.FileDescription
-          & "$out/Espion-Flash.ps1" -Dossier $plugins
-          if ((Get-FileHash $module).Hash -eq $original) { throw "Espion non installé." }
-          if ((Get-Item $module).VersionInfo.FileDescription -ne $description) { throw "Description de version non copiée." }
-          & "$out/Espion-Flash.ps1" -Dossier $plugins -Retirer
-          if ((Get-FileHash $module).Hash -ne $original) { throw "Module non remis en place." }
+          # Script d'installation, sur des copies de DLL système (qui ont une description de version) :
+          # l'espion de l'architecture du module prend sa place, puis tout est remis en place.
+          $cases = @(
+            @{ Name = "NPSWF64_1_0_0_0.dll"; Source = "$env:WINDIR\System32\version.dll"; Dir = "espion-plugins"; Machine = "Amd64" },
+            @{ Name = "NPSWF32_1_0_0_0.dll"; Source = "$env:WINDIR\SysWOW64\version.dll"; Dir = "espion-plugins-32"; Machine = "I386" })
+          foreach ($case in $cases) {
+            $plugins = Join-Path $env:RUNNER_TEMP $case.Dir
+            New-Item -ItemType Directory -Force $plugins | Out-Null
+            $module = Join-Path $plugins $case.Name
+            Copy-Item $case.Source $module
+            $original = (Get-FileHash $module).Hash
+            $description = (Get-Item $module).VersionInfo.FileDescription
+            & "$out/Espion-Flash.ps1" -Dossier $plugins
+            if ((Get-FileHash $module).Hash -eq $original) { throw "Espion non installé ($($case.Name))." }
+            if ((Get-Item $module).VersionInfo.FileDescription -ne $description) { throw "Description de version non copiée ($($case.Name))." }
+            $reader = [System.Reflection.PortableExecutable.PEReader]::new([System.IO.File]::OpenRead($module))
+            $machine = $reader.PEHeaders.CoffHeader.Machine.ToString()
+            $reader.Dispose()
+            if ($machine -ne $case.Machine) { throw "Espion de la mauvaise architecture ($machine) pour $($case.Name)." }
+            & "$out/Espion-Flash.ps1" -Dossier $plugins -Retirer
+            if ((Get-FileHash $module).Hash -ne $original) { throw "Module non remis en place ($($case.Name))." }
+          }
 
       - name: Espion du moteur Flash (artefact)
         uses: actions/upload-artifact@v4
