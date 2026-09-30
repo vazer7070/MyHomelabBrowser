@@ -35,7 +35,6 @@ $journaux = Join-Path $rangement 'journaux'
 
 Add-Type -TypeDefinition @'
 using System;
-using System.ComponentModel;
 using System.Runtime.InteropServices;
 
 public static class RessourcesEspion
@@ -64,12 +63,19 @@ public static class RessourcesEspion
     [DllImport("kernel32.dll", SetLastError = true)]
     static extern bool EndUpdateResourceW(IntPtr update, bool discard);
 
+    // Types de System.Private.CoreLib seulement : Add-Type ne référence pas les mêmes
+    // assemblys selon la version de PowerShell (Win32Exception y manque parfois).
+    static Exception Erreur(string message)
+    {
+        return new InvalidOperationException(message + " (erreur Windows " + Marshal.GetLastWin32Error() + ")");
+    }
+
     /// Description de version (RT_VERSION) de source copiée dans cible. Faux si source n'en a pas.
     public static bool CopierVersion(string source, string cible)
     {
         IntPtr module = LoadLibraryExW(source, IntPtr.Zero, LoadLibraryAsDatafile | LoadLibraryAsImageResource);
         if (module == IntPtr.Zero)
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "Module illisible : " + source);
+            throw Erreur("Module illisible : " + source);
         byte[] donnees;
         try
         {
@@ -87,15 +93,15 @@ public static class RessourcesEspion
 
         IntPtr mise = BeginUpdateResourceW(cible, false);
         if (mise == IntPtr.Zero)
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "Espion non modifiable : " + cible);
+            throw Erreur("Espion non modifiable : " + cible);
         if (!UpdateResourceW(mise, Version, Premiere, 0x0409, donnees, (uint)donnees.Length))
         {
-            int erreur = Marshal.GetLastWin32Error();
+            Exception erreur = Erreur("Description de version non copiée.");
             EndUpdateResourceW(mise, true);
-            throw new Win32Exception(erreur, "Description de version non copiée.");
+            throw erreur;
         }
         if (!EndUpdateResourceW(mise, false))
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "Description de version non enregistrée.");
+            throw Erreur("Description de version non enregistrée.");
         return true;
     }
 }
