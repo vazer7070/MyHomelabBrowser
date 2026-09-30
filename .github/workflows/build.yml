@@ -183,6 +183,10 @@ jobs:
 
   avalonia-macos:
     name: Avalonia macOS (.app)
+    # Une minute de macOS en coûte dix de Linux : l'app n'est construite que sur master, à la
+    # demande (Run workflow) ou pour une PR portant l'étiquette « macos ». Le code macOS est
+    # compilé à chaque fois avec le reste de l'édition Avalonia (job Avalonia Linux).
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'macos')
     runs-on: macos-latest
     env:
       DOTNET_NOLOGO: true
