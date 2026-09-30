@@ -197,8 +197,16 @@ namespace PommeBrowser.Views
 
         void Legacy_Click(object? sender, RoutedEventArgs e)
         {
-            if (_selected is { } tab && BasiliskInstall.IsOpenable(tab.WebUrl, out Uri uri))
-                tab.OpenInBasilisk(uri);
+            if (_selected is not { } tab || !BasiliskInstall.IsOpenable(tab.WebUrl, out Uri uri))
+                return;
+
+            tab.OpenInBasilisk(uri);
+            // Basilisk lancé : le site peut s'y ouvrir d'office ensuite (« Lire avec Ruffle » annule).
+            if (tab.Page == TabPage.Legacy && FlashDomainRules.GetRule(uri) != FlashRuleMode.Legacy)
+            {
+                ShowToast(Tr("Toujours ouvrir {0} dans Basilisk ?", uri.Host), Tr("Toujours"),
+                    () => FlashDomainRules.SetRule(uri, FlashRuleMode.Legacy), timeout: 8);
+            }
         }
 
         /// <summary>Basilisk introuvable : où le trouver et comment l'installer.</summary>

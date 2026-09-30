@@ -51,12 +51,16 @@ namespace PommeBrowser.Views
 
             if (wanted)
             {
+                // Flash annoncé avant les scripts de la page, qui n'ajoutent souvent leur contenu qu'à cette condition.
+                engine.AddUserScript(RuffleContent.PluginScriptId, RuffleContent.PluginScript,
+                    allFrames: true, atDocumentStart: true, pageWorld: true);
                 engine.AddUserScript(RuffleContent.ScriptId,
                     RuffleContent.ProbeScript(EngineHost.RuffleBaseUrl, EngineHost.ScriptPost(RuffleContent.MessageHandler, "status")),
                     allFrames: true, atDocumentStart: false);
             }
             else
             {
+                engine.RemoveUserScript(RuffleContent.PluginScriptId);
                 engine.RemoveUserScript(RuffleContent.ScriptId);
             }
             _ruffleAttached = wanted;

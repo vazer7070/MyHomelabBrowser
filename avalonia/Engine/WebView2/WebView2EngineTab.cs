@@ -691,7 +691,8 @@ namespace PommeBrowser.Engine.WebView2
             }
         }
 
-        public void AddUserScript(string id, string source, bool allFrames, bool atDocumentStart)
+        /// <summary>Toujours dans le monde de la page (WebView2 n'en a pas d'autre).</summary>
+        public void AddUserScript(string id, string source, bool allFrames, bool atDocumentStart, bool pageWorld = false)
         {
             if (_disposed)
                 return;

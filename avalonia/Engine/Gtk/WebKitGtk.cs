@@ -128,6 +128,7 @@ namespace PommeBrowser.Engine.Gtk
         public const uint FindWrapAround = 1 << 4;
 
         // Scripts et messages
+        [DllImport(WebKit)] public static extern nint webkit_user_script_new([MarshalAs(UnmanagedType.LPUTF8Str)] string source, int frames, int time, nint allowList, nint blockList);
         [DllImport(WebKit)] public static extern nint webkit_user_script_new_for_world([MarshalAs(UnmanagedType.LPUTF8Str)] string source, int frames, int time, [MarshalAs(UnmanagedType.LPUTF8Str)] string world, nint allowList, nint blockList);
         [DllImport(WebKit)] public static extern void webkit_user_script_unref(nint script);
         [DllImport(WebKit)] public static extern void webkit_user_content_manager_add_script(nint manager, nint script);

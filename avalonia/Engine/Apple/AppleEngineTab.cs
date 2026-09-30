@@ -43,7 +43,7 @@ namespace PommeBrowser.Engine.Apple
         readonly nint _controller;
         readonly nint _world;
         readonly DispatcherTimer _poll;
-        readonly Dictionary<string, (string Source, bool AllFrames, bool AtStart)> _scripts = new(StringComparer.Ordinal);
+        readonly Dictionary<string, (string Source, bool AllFrames, bool AtStart, bool PageWorld)> _scripts = new(StringComparer.Ordinal);
         readonly HashSet<string> _channels = new(StringComparer.Ordinal);
         readonly List<PermissionRequest> _pendingPermissions = new();
 
@@ -472,9 +472,9 @@ namespace PommeBrowser.Engine.Apple
                 completion?.TrySetResult(Describe(result));
         }
 
-        public void AddUserScript(string id, string source, bool allFrames, bool atDocumentStart)
+        public void AddUserScript(string id, string source, bool allFrames, bool atDocumentStart, bool pageWorld = false)
         {
-            _scripts[id] = (source, allFrames, atDocumentStart);
+            _scripts[id] = (source, allFrames, atDocumentStart, pageWorld);
             RebuildScripts();
         }
 
@@ -490,11 +490,12 @@ namespace PommeBrowser.Engine.Apple
             if (_disposed)
                 return;
             Send(_controller, Sel("removeAllUserScripts"));
-            foreach ((string source, bool allFrames, bool atStart) in _scripts.Values)
+            nint pageWorld = Send(Class("WKContentWorld"), Sel("pageWorld"));
+            foreach ((string source, bool allFrames, bool atStart, bool inPage) in _scripts.Values)
             {
                 nint script = SendObjectLongBool(Send(Class("WKUserScript"), Sel("alloc")),
                     Sel("initWithSource:injectionTime:forMainFrameOnly:inContentWorld:"),
-                    String(source), atStart ? InjectAtStart : InjectAtEnd, !allFrames, _world);
+                    String(source), atStart ? InjectAtStart : InjectAtEnd, !allFrames, inPage ? pageWorld : _world);
                 Send(_controller, Sel("addUserScript:"), script);
                 Release(script);
             }
