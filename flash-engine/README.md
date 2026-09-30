@@ -80,6 +80,13 @@ POMMEFLASH_LAUNCHER=wine xvfb-run -a dotnet test tests/PommeFlash.Tests
 Sous Windows, le greffon se compile avec `clang -shared` (ou `cl /LD`) et `POMMEFLASH_LAUNCHER`
 n'est pas nécessaire.
 
+## Comparer avec Basilisk : l'espion
+
+`flash-engine/spy` : un module espion qui se place entre le navigateur et le vrai module Flash et
+note chaque échange (paramètres, questions et réponses, scripts, propriétés de la page,
+chargements). Installé devant le module de PommeBrowser, il est chargé par Basilisk comme par le
+moteur intégré : deux journaux pour la même page, à comparer. Voir `flash-engine/spy/README.md`.
+
 ## Dans PommeBrowser
 
 Réglage **Paramètres › Avancé › Moteur Flash intégré (expérimental)**, Windows seulement.

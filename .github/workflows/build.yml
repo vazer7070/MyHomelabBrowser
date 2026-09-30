@@ -152,6 +152,52 @@ jobs:
           dotnet test tests/PommeFlash.Tests/PommeFlash.Tests.csproj --configuration Release --logger "trx;LogFileName=moteur-flash.trx" --results-directory TestResults
           if ($LASTEXITCODE -ne 0) { throw "Tests du moteur Flash intégré en échec." }
 
+      # Espion NPAPI (flash-engine/spy), outil de diagnostic livré à part : compilé, vérifié
+      # transparent devant le greffon de test, script d'installation essayé sur une DLL système.
+      - name: Espion du moteur Flash
+        shell: pwsh
+        run: |
+          $out = "artifacts/espion-flash"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          if (Get-Command clang -ErrorAction SilentlyContinue) {
+            clang -shared -O2 -o "$out/npPommeEspion.dll" flash-engine/spy/npspy.c
+          } else {
+            gcc -shared -O2 -o "$out/npPommeEspion.dll" flash-engine/spy/npspy.c
+          }
+          if ($LASTEXITCODE -ne 0) { throw "Espion non compilé." }
+          Copy-Item flash-engine/spy/Espion-Flash.ps1, flash-engine/spy/README.md $out
+
+          # Transparence : les tests de l'hôte passent à l'identique avec l'espion devant le greffon.
+          $dir = Join-Path $env:RUNNER_TEMP "espion-test"
+          New-Item -ItemType Directory -Force (Join-Path $dir "espion") | Out-Null
+          Copy-Item (Join-Path $env:RUNNER_TEMP "npPommeTest.dll") (Join-Path $dir "espion/npPommeTest.dll")
+          Copy-Item "$out/npPommeEspion.dll" (Join-Path $dir "npPommeTest.dll")
+          $env:POMMEFLASH_HOST = (Resolve-Path artifacts/avalonia-win-x64/flash/PommeFlashHost.exe).Path
+          $env:POMMEFLASH_TEST_PLUGIN = Join-Path $dir "npPommeTest.dll"
+          dotnet test tests/PommeFlash.Tests/PommeFlash.Tests.csproj --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw "L'espion change le comportement du module." }
+          if (-not (Get-ChildItem (Join-Path $dir "espion/journaux") -Filter *.log)) { throw "Aucun journal de l'espion." }
+
+          # Script d'installation, sur la copie d'une DLL système (qui a une description de version).
+          $plugins = Join-Path $env:RUNNER_TEMP "espion-plugins"
+          New-Item -ItemType Directory -Force $plugins | Out-Null
+          $module = Join-Path $plugins "NPSWF64_1_0_0_0.dll"
+          Copy-Item "$env:WINDIR\System32\version.dll" $module
+          $original = (Get-FileHash $module).Hash
+          $description = (Get-Item $module).VersionInfo.FileDescription
+          & "$out/Espion-Flash.ps1" -Dossier $plugins
+          if ((Get-FileHash $module).Hash -eq $original) { throw "Espion non installé." }
+          if ((Get-Item $module).VersionInfo.FileDescription -ne $description) { throw "Description de version non copiée." }
+          & "$out/Espion-Flash.ps1" -Dossier $plugins -Retirer
+          if ((Get-FileHash $module).Hash -ne $original) { throw "Module non remis en place." }
+
+      - name: Espion du moteur Flash (artefact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: espion-flash
+          path: artifacts/espion-flash
+          if-no-files-found: error
+
       - name: Résultats des tests du moteur Flash
         if: always()
         uses: actions/upload-artifact@v4
