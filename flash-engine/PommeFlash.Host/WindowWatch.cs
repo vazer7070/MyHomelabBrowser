@@ -81,7 +81,8 @@ namespace PommeFlash.Host
                     {
                         added = true;
                         ProcessNames[process.Id] = process.Name;
-                        if (SeenProcesses.Add(process.Id))
+                        // conhost.exe : console de l'hôte lui-même (programme console), pas de Flash.
+                        if (SeenProcesses.Add(process.Id) && !process.Name.Equals("conhost.exe", StringComparison.OrdinalIgnoreCase))
                             HostChannel.Log($"Programme lancé par le module : {process.Name} (processus {process.Id})");
                     }
                 }
