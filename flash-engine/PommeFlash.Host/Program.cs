@@ -70,6 +70,7 @@ namespace PommeFlash.Host
                 (int width, int height) = HostWindow.ClientSize(HostWindow.PluginWindow);
                 _instance.SetWindow(HostWindow.PluginWindow, width, height);
                 _instance.StartSource();
+                WindowWatch.Start();
             }
             catch (Exception ex)
             {

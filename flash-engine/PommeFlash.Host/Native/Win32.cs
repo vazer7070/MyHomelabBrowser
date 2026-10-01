@@ -157,5 +157,90 @@ namespace PommeFlash.Host.Native
         [LibraryImport(User32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static partial bool PeekMessageW(MSG* msg, nint hwnd, uint min, uint max, uint remove);
+
+        // ---------------------------------------------------------------
+        // Diagnostic : fenêtres et programmes ouverts par le module
+        // ---------------------------------------------------------------
+
+        public const uint WM_GETTEXT = 0x000D;
+        public const uint SMTO_ABORTIFHUNG = 0x0002;
+        const uint TH32CS_SNAPPROCESS = 0x00000002;
+
+        [LibraryImport(User32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool EnumWindows(delegate* unmanaged<nint, nint, int> callback, nint parameter);
+
+        [LibraryImport(User32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool EnumChildWindows(nint parent, delegate* unmanaged<nint, nint, int> callback, nint parameter);
+
+        [LibraryImport(User32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool IsWindowVisible(nint hwnd);
+
+        [LibraryImport(User32)]
+        public static partial uint GetWindowThreadProcessId(nint hwnd, uint* process);
+
+        [LibraryImport(User32)]
+        public static partial nint SendMessageTimeoutW(nint hwnd, uint msg, nuint wParam, nint lParam, uint flags, uint timeout, nuint* result);
+
+        [LibraryImport(User32)]
+        public static partial int GetClassNameW(nint hwnd, char* name, int length);
+
+        [LibraryImport(Kernel32)]
+        public static partial uint GetCurrentProcessId();
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct PROCESSENTRY32W
+        {
+            public uint dwSize;
+            public uint cntUsage;
+            public uint th32ProcessID;
+            public nuint th32DefaultHeapID;
+            public uint th32ModuleID;
+            public uint cntThreads;
+            public uint th32ParentProcessID;
+            public int pcPriClassBase;
+            public uint dwFlags;
+            public fixed char szExeFile[260];
+        }
+
+        [LibraryImport(Kernel32, SetLastError = true)]
+        private static partial nint CreateToolhelp32Snapshot(uint flags, uint process);
+
+        [LibraryImport(Kernel32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool Process32FirstW(nint snapshot, PROCESSENTRY32W* entry);
+
+        [LibraryImport(Kernel32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool Process32NextW(nint snapshot, PROCESSENTRY32W* entry);
+
+        [LibraryImport(Kernel32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool CloseHandle(nint handle);
+
+        public readonly record struct ProcessInfo(uint Id, uint ParentId, string Name);
+
+        /// <summary>Processus en cours (numéro, parent, nom du programme) ; vide si la liste est inaccessible.</summary>
+        public static List<ProcessInfo> Processes()
+        {
+            var processes = new List<ProcessInfo>();
+            nint snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if (snapshot == 0 || snapshot == -1)
+                return processes;
+            try
+            {
+                PROCESSENTRY32W entry = default;
+                entry.dwSize = (uint)sizeof(PROCESSENTRY32W);
+                for (bool more = Process32FirstW(snapshot, &entry); more; more = Process32NextW(snapshot, &entry))
+                    processes.Add(new ProcessInfo(entry.th32ProcessID, entry.th32ParentProcessID, new string(entry.szExeFile)));
+            }
+            finally
+            {
+                CloseHandle(snapshot);
+            }
+            return processes;
+        }
     }
 }

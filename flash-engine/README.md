@@ -72,7 +72,15 @@ le module applique lui-même `allowScriptAccess`.
 **Journal** : version du module, contenu, noms des flashvars (pas leurs valeurs), puis une trace de
 chaque fichier chargé (et de la réponse), de chaque script demandé à la page et de ce que l'hôte ne
 fournit pas (valeurs `NPN_GetValue`, membres des objets de la page) ; 300 traces au plus. Page
-**Diagnostic** de PommeBrowser, lignes `[Flash]`.
+**Diagnostic** de PommeBrowser, lignes `[Flash]`. L'hôte y note aussi (`WindowWatch.cs`) chaque
+fenêtre que le module ouvre, avec son titre et son texte (boîte de dialogue de Flash, message de
+mise à jour), les programmes qu'il lance (FlashUtil…) et ceux de Flash déjà présents (service
+d'aide de la version chinoise), ainsi que les pages demandées avec une cible : on sait alors si un
+message vient de Flash lui-même ou du contenu, qui dessine les siens dans sa fenêtre.
+
+**Comme Basilisk** : le module reçoit l'identité de navigateur de Basilisk (`NPN_UserAgent`,
+`WOW64` pour l'hôte 32 bits) et le facteur d'échelle du contenu (`NPNVcontentsScaleFactor`, 1 :
+l'hôte n'est pas adapté aux DPI, Windows met ses fenêtres à l'échelle).
 
 ## Tests
 

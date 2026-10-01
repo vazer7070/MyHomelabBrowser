@@ -20,6 +20,10 @@ public sealed class HostProtocolTests
         return hash;
     }
 
+    static bool IsLog(JsonElement e, string text)
+        => e.GetProperty("event").GetString() == "log" &&
+           e.TryGetProperty("message", out JsonElement message) && message.GetString()?.Contains(text, StringComparison.Ordinal) == true;
+
     [Fact(Timeout = 180_000)]
     public async Task The_host_plays_the_role_of_the_browser()
     {
@@ -63,7 +67,9 @@ public sealed class HostProtocolTests
         Assert.NotEqual(0, ready.GetProperty("window").GetInt64());
 
         // Questions sur la page.
-        Assert.Contains(reports, r => r.StartsWith("ua=Mozilla/5.0", StringComparison.Ordinal) && r.Contains("PommeBrowser", StringComparison.Ordinal));
+        // Identité de Basilisk, avec l'architecture de l'hôte.
+        Assert.Contains(reports, r => r.StartsWith("ua=Mozilla/5.0", StringComparison.Ordinal) && r.Contains("Goanna/", StringComparison.Ordinal) &&
+                                      r.Contains("Basilisk/", StringComparison.Ordinal) && r.Contains(HostRun.Is32BitHost ? "WOW64" : "Win64; x64", StringComparison.Ordinal));
         Assert.Contains($"origin=http://127.0.0.1:{server.Port}", reports);
         Assert.Contains("javascript=1", reports);
         Assert.Contains("windowless=0", reports);
@@ -103,6 +109,15 @@ public sealed class HostProtocolTests
         // Fils et minuteries : tout revient sur le fil du module.
         Assert.Contains("async main=1 data=c0ffee", reports);
         Assert.Contains("timer ticks=3 main=1", reports);
+
+        // Diagnostic : fenêtres ouvertes par le module (comme une boîte de Flash), notées avec
+        // leur texte ; pages demandées avec une cible ; programmes Flash présents.
+        await host.WaitForAsync(h => h.Events.Any(e => IsLog(e, "Fenêtre ouverte par le module : « TEST dialogue »")), TimeSpan.FromSeconds(20));
+        Assert.Contains(host.Events, e => IsLog(e, "« Texte du dialogue de test »"));
+        Assert.Contains(host.Events, e => IsLog(e, "Page demandée par le contenu (cible _blank) : https://example.org/page"));
+        // La liste des processus est lue (structure de la bonne taille, en 64 comme en 32 bits).
+        string programs = host.Events.Where(e => IsLog(e, "Programmes Flash déjà en cours : ")).Select(e => e.GetProperty("message").GetString()!).Single();
+        Assert.Matches(@"\(([1-9]\d*) processus vus\)$", programs);
 
         // Fin demandée par PommeBrowser : instance détruite, sortie normale.
         await host.SendAsync("close");

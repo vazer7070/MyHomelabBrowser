@@ -177,6 +177,8 @@ namespace PommeFlash.Host
 
             if (!string.IsNullOrEmpty(target))
             {
+                HostChannel.Trace("nav:" + target + uri.GetLeftPart(UriPartial.Path),
+                    $"Page demandée par le contenu (cible {target}) : {uri.GetLeftPart(UriPartial.Path)}");
                 HostChannel.Send("navigate", ("url", uri.AbsoluteUri), ("target", target), ("popups", _popups.Count == 0 || _popups.Peek()));
                 if (notify)
                     NotifyLater(url, Np.ReasonDone, notifyData);
@@ -261,6 +263,11 @@ namespace PommeFlash.Host
                     *(byte*)value = instance?._options.IsPrivate == true ? (byte)1 : (byte)0;
                     return Np.NoError;
                 case NPNVariable.CSSZoomFactor:
+                    *(double*)value = 1.0;
+                    return Np.NoError;
+                case NPNVariable.ContentsScaleFactor:
+                    // Comme Basilisk sous Windows. L'hôte n'est pas adapté aux DPI : Windows met
+                    // ses fenêtres à l'échelle, le contenu reste à l'échelle 1.
                     *(double*)value = 1.0;
                     return Np.NoError;
                 case NPNVariable.WindowNPObject when instance != null:

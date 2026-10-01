@@ -17,6 +17,7 @@ static NPNetscapeFuncs *browser;
 static uint16_t browserSize, browserVersion;
 static DWORD mainThread;
 static NPP instanceNpp;
+static HWND dialog;
 static int notifications, timerTicks, asyncDone, streamsDone, finished;
 static uint32_t timerId;
 
@@ -267,6 +268,13 @@ static NPError NPP_New(NPMIMEType type, NPP npp, uint16_t mode, int16_t argc, ch
     inspectPage();
     checkIdentifiers();
     checkObjects();
+
+    /* Comme une boîte de dialogue de Flash : une fenêtre à part, avec un texte, que l'hôte note
+       dans son journal. Hors de l'écran et sans prendre le clavier. */
+    dialog = CreateWindowExA(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, "STATIC", "TEST dialogue", WS_POPUP | WS_VISIBLE,
+                             -3000, -3000, 240, 80, NULL, NULL, NULL, NULL);
+    if (dialog)
+        CreateWindowExA(0, "STATIC", "Texte du dialogue de test", WS_CHILD | WS_VISIBLE, 0, 0, 240, 40, dialog, NULL, NULL, NULL);
     return NPERR_NO_ERROR;
 }
 
@@ -275,6 +283,11 @@ static NPError NPP_Destroy(NPP npp, NPSavedData **save)
     (void)npp;
     (void)save;
     report("destroy");
+    if (dialog)
+    {
+        DestroyWindow(dialog);
+        dialog = NULL;
+    }
     return NPERR_NO_ERROR;
 }
 

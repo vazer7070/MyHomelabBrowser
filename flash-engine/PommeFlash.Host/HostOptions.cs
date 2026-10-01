@@ -20,12 +20,23 @@ namespace PommeFlash.Host
         public int Height { get; private set; } = 600;
         public string? ElementId { get; private set; }
         public List<KeyValuePair<string, string>> Params { get; } = new();
-        public string UserAgent { get; private set; } =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:52.9) Gecko/20100101 Goanna/4.8 Firefox/52.9 PommeBrowser";
+        public string UserAgent { get; private set; } = BasiliskUserAgent();
         public bool IsPrivate { get; private set; }
 
         /// <summary>Fenêtre créée cachée : PommeBrowser la loge dans l'onglet avant de l'afficher.</summary>
         public bool Hidden { get; private set; }
+
+        /// <summary>
+        /// Identité de navigateur donnée au module (NPN_UserAgent) et aux chargements : celle de
+        /// Basilisk, où les contenus fonctionnent, avec l'architecture de l'hôte (WOW64 pour un
+        /// hôte 32 bits sur Windows 64 bits, comme un Basilisk 32 bits).
+        /// </summary>
+        public static string BasiliskUserAgent()
+        {
+            Version os = OperatingSystem.IsWindows() ? Environment.OSVersion.Version : new Version(10, 0);
+            string platform = Environment.Is64BitProcess ? "; Win64; x64" : Environment.Is64BitOperatingSystem ? "; WOW64" : string.Empty;
+            return $"Mozilla/5.0 (Windows NT {os.Major}.{os.Minor}{platform}; rv:140.0) Gecko/20100101 Goanna/6.9 Firefox/140.0 Basilisk/20250701";
+        }
 
         public static HostOptions Parse(IReadOnlyList<string> args)
         {
