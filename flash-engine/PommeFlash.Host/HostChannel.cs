@@ -12,7 +12,7 @@ namespace PommeFlash.Host
     /// (« close », « result &lt;id&gt; &lt;json&gt; »). La fin de l'entrée standard (PommeBrowser
     /// fermé) arrête l'hôte.
     /// </summary>
-    static unsafe class HostChannel
+    static class HostChannel
     {
         static readonly object Gate = new();
         static readonly Stream Output = Console.OpenStandardOutput();
@@ -100,7 +100,7 @@ namespace PommeFlash.Host
 
         /// <summary>
         /// Lit les commandes sur un fil à part ; <paramref name="ended"/> quand l'entrée se ferme.
-        /// Les réponses aux scripts (« result ») sont remises directement au fil du module, qui les attend.
+        /// Les réponses aux questions (« result ») sont remises directement à qui les attend.
         /// </summary>
         public static void StartReading(Action<string> command, Action ended)
         {
@@ -122,7 +122,7 @@ namespace PommeFlash.Host
                 {
                 }
                 _inputEnded = true;
-                ResultArrived.Set();
+                FailPending();
                 ended();
             })
             {
@@ -133,40 +133,61 @@ namespace PommeFlash.Host
         }
 
         // ---------------------------------------------------------------
-        // Scripts exécutés dans la page par PommeBrowser
+        // Questions à PommeBrowser : scripts de la page, cookies
         // ---------------------------------------------------------------
 
-        static readonly Dictionary<int, (bool Ok, object? Value)> Results = new();
-        static readonly AutoResetEvent ResultArrived = new(false);
-        static int _nextScript;
+        static readonly Dictionary<int, TaskCompletionSource<(bool Ok, object? Value)>> Pending = new();
+        static readonly TimeSpan CookieTimeout = TimeSpan.FromSeconds(10);
+        static int _nextRequest;
         static volatile bool _inputEnded;
 
-        /// <summary>
-        /// Script de la page (NPN_Evaluate) : PommeBrowser l'exécute dans la page et renvoie son
-        /// résultat. Le module attend la réponse, comme dans un navigateur ; pendant ce temps, les
-        /// messages envoyés par les autres fils sont traités (PommeBrowser place et affiche la
-        /// fenêtre du module : sans cela, les deux processus s'attendraient l'un l'autre).
-        /// Faux si PommeBrowser refuse, ne répond pas à temps ou s'est fermé.
-        /// </summary>
-        public static bool RunInPage(string code, TimeSpan timeout, out object? value)
+        /// <summary>Question numérotée ; la réponse arrive par « result &lt;id&gt; {"ok":…,"value":…} ».</summary>
+        static (int Id, Task<(bool Ok, object? Value)> Reply) Ask(string name, params (string Key, object? Value)[] fields)
         {
-            int id = Interlocked.Increment(ref _nextScript);
-            Send("eval", ("id", id), ("code", code));
+            int id = Interlocked.Increment(ref _nextRequest);
+            var reply = new TaskCompletionSource<(bool Ok, object? Value)>(TaskCreationOptions.RunContinuationsAsynchronously);
+            lock (Pending)
+                Pending[id] = reply;
+            if (_inputEnded)
+                Complete(id, (false, null));
+            else
+                Send(name, new[] { ("id", (object?)id) }.Concat(fields).ToArray());
+            return (id, reply.Task);
+        }
 
-            nint handle = ResultArrived.SafeWaitHandle.DangerousGetHandle();
-            var clock = Stopwatch.StartNew();
-            while (true)
+        static void Complete(int id, (bool Ok, object? Value) result)
+        {
+            TaskCompletionSource<(bool Ok, object? Value)>? reply;
+            lock (Pending)
             {
-                lock (Results)
-                {
-                    if (Results.Remove(id, out (bool Ok, object? Value) result))
-                    {
-                        value = result.Value;
-                        return result.Ok;
-                    }
-                }
+                if (!Pending.Remove(id, out reply))
+                    return;
+            }
+            reply.TrySetResult(result);
+        }
+
+        static void FailPending()
+        {
+            int[] ids;
+            lock (Pending)
+                ids = Pending.Keys.ToArray();
+            foreach (int id in ids)
+                Complete(id, (false, null));
+        }
+
+        /// <summary>
+        /// Attente d'une réponse sur le fil du module, qui reste bloqué comme dans un navigateur ;
+        /// pendant ce temps, les messages envoyés par les autres fils sont traités (PommeBrowser place
+        /// et affiche la fenêtre du module : sans cela, les deux processus s'attendraient l'un l'autre).
+        /// </summary>
+        static unsafe bool Wait(int id, Task<(bool Ok, object? Value)> reply, TimeSpan timeout, out object? value)
+        {
+            nint handle = ((IAsyncResult)reply).AsyncWaitHandle.SafeWaitHandle.DangerousGetHandle();
+            var clock = Stopwatch.StartNew();
+            while (!reply.IsCompleted)
+            {
                 long remaining = (long)(timeout - clock.Elapsed).TotalMilliseconds;
-                if (remaining <= 0 || _inputEnded)
+                if (remaining <= 0)
                     break;
                 uint wait = Win32.MsgWaitForMultipleObjectsEx(1, &handle, (uint)remaining, Win32.QS_SENDMESSAGE, 0);
                 if (wait == Win32.WAIT_OBJECT_0 + 1)
@@ -176,13 +197,63 @@ namespace PommeFlash.Host
                 }
             }
 
-            if (!_inputEnded)
-                Log($"Script de la page sans réponse après {timeout.TotalSeconds:0} s.");
-            value = null;
-            return false;
+            if (!reply.IsCompleted)
+            {
+                Complete(id, (false, null));
+                if (!_inputEnded)
+                    Log($"PommeBrowser n'a pas répondu après {timeout.TotalSeconds:0} s.");
+            }
+            (bool ok, value) = reply.Result;
+            return ok;
         }
 
-        /// <summary>« result &lt;id&gt; {"ok":…,"value":…} » : réponse de PommeBrowser à un script.</summary>
+        /// <summary>
+        /// Script de la page (NPN_Evaluate) : PommeBrowser l'exécute dans la page et renvoie son
+        /// résultat. Faux si PommeBrowser refuse, ne répond pas à temps ou s'est fermé.
+        /// </summary>
+        public static bool RunInPage(string code, TimeSpan timeout, out object? value)
+        {
+            (int id, Task<(bool Ok, object? Value)> reply) = Ask("eval", ("code", code));
+            return Wait(id, reply, timeout, out value);
+        }
+
+        /// <summary>
+        /// Cookies de la page pour une adresse (en-tête Cookie), demandés depuis le fil du module
+        /// (NPN_GetValueForURL) : ceux qu'un script de la page verrait, sans les HttpOnly. Null si
+        /// PommeBrowser ne les donne pas.
+        /// </summary>
+        public static string? PageCookies(Uri url)
+        {
+            (int id, Task<(bool Ok, object? Value)> reply) = Ask("cookies", ("url", url.AbsoluteUri), ("http", false));
+            return Wait(id, reply, CookieTimeout, out object? value) ? value as string : null;
+        }
+
+        /// <summary>
+        /// Cookies de la page pour un chargement (HttpOnly compris, comme une requête du
+        /// navigateur), depuis n'importe quel fil. Null si PommeBrowser ne les donne pas à temps.
+        /// </summary>
+        public static async Task<string?> PageCookiesAsync(Uri url, CancellationToken cancellation)
+        {
+            (int id, Task<(bool Ok, object? Value)> reply) = Ask("cookies", ("url", url.AbsoluteUri), ("http", true));
+            Task finished = await Task.WhenAny(reply, Task.Delay(CookieTimeout, cancellation)).ConfigureAwait(false);
+            if (finished != reply)
+            {
+                Complete(id, (false, null));
+                cancellation.ThrowIfCancellationRequested();
+                Log("PommeBrowser n'a pas donné les cookies à temps : " + url.GetLeftPart(UriPartial.Path));
+            }
+            (bool ok, object? value) = await reply.ConfigureAwait(false);
+            return ok ? value as string : null;
+        }
+
+        /// <summary>
+        /// Cookie à enregistrer dans la page : reçu d'un serveur (en-tête Set-Cookie,
+        /// <paramref name="fromHttp"/>) ou posé par le module (NPN_SetValueForURL).
+        /// </summary>
+        public static void SetPageCookie(Uri url, string cookie, bool fromHttp)
+            => Send("set-cookie", ("url", url.AbsoluteUri), ("cookie", cookie), ("http", fromHttp));
+
+        /// <summary>« result &lt;id&gt; {"ok":…,"value":…} » : réponse de PommeBrowser à une question.</summary>
         static void OnResult(string line)
         {
             string[] parts = line.Split(' ', 3);
@@ -207,9 +278,7 @@ namespace PommeFlash.Host
             catch (JsonException)
             {
             }
-            lock (Results)
-                Results[id] = result;
-            ResultArrived.Set();
+            Complete(id, result);
         }
     }
 }

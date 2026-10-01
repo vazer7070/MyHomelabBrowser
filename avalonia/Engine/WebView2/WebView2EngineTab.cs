@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -674,6 +675,43 @@ namespace PommeBrowser.Engine.WebView2
         public void Print() => Safe(() => { _core.ShowPrintUI(CoreWebView2PrintDialogKind.Browser); return 0; }, 0);
 
         public void ShowDevTools() => Safe(() => { _core.OpenDevToolsWindow(); return 0; }, 0);
+
+        /// <summary>Cookies du profil de la page pour cette adresse (en-tête Cookie).</summary>
+        public async Task<string?> GetCookieHeaderAsync(Uri url, bool includeHttpOnly)
+        {
+            if (_disposed)
+                return null;
+            List<CoreWebView2Cookie> cookies = await _core.CookieManager.GetCookiesAsync(url.AbsoluteUri);
+            return FlashCookies.Header(cookies.Where(c => includeHttpOnly || !c.IsHttpOnly).Select(c => (c.Name, c.Value)));
+        }
+
+        /// <summary>Cookie enregistré (ou retiré, s'il est expiré) dans le profil de la page.</summary>
+        public Task SetCookieAsync(PageCookie cookie)
+        {
+            if (_disposed)
+                return Task.CompletedTask;
+            CoreWebView2CookieManager manager = _core.CookieManager;
+            // Domaine d'un cookie de domaine : avec un point initial ; cookie d'hôte : l'hôte exact.
+            string domain = cookie.HostOnly ? cookie.Domain : "." + cookie.Domain;
+            if (cookie.IsExpired(DateTimeOffset.UtcNow))
+            {
+                manager.DeleteCookiesWithDomainAndPath(cookie.Name, domain, cookie.Path);
+                return Task.CompletedTask;
+            }
+            CoreWebView2Cookie created = manager.CreateCookie(cookie.Name, cookie.Value, domain, cookie.Path);
+            created.IsHttpOnly = cookie.HttpOnly;
+            created.IsSecure = cookie.Secure;
+            created.SameSite = cookie.SameSite switch
+            {
+                "Strict" => CoreWebView2CookieSameSiteKind.Strict,
+                "None" => CoreWebView2CookieSameSiteKind.None,
+                _ => CoreWebView2CookieSameSiteKind.Lax
+            };
+            if (cookie.Expires is { } expires)
+                created.Expires = expires.UtcDateTime;
+            manager.AddOrUpdateCookie(created);
+            return Task.CompletedTask;
+        }
 
         /// <summary>WebView2 n'a pas de monde isolé : les scripts de PommeBrowser tournent dans celui de la page.</summary>
         public async Task<string?> EvaluateAsync(string script, bool isolated)

@@ -218,6 +218,16 @@ namespace PommeBrowser.Engine
         Task<string?> EvaluateAsync(string script, bool isolated);
 
         /// <summary>
+        /// Cookies du profil de la page pour une adresse, au format de l'en-tête Cookie (vide s'il
+        /// n'y en a pas) ; sans les HttpOnly si <paramref name="includeHttpOnly"/> est faux. Null :
+        /// ce moteur ne les partage pas (moteur Flash intégré, Windows seulement).
+        /// </summary>
+        Task<string?> GetCookieHeaderAsync(Uri url, bool includeHttpOnly);
+
+        /// <summary>Cookie enregistré dans le profil de la page (retiré s'il est expiré).</summary>
+        Task SetCookieAsync(PageCookie cookie);
+
+        /// <summary>
         /// Script injecté à chaque chargement, dans le monde isolé de PommeBrowser ; avec
         /// <paramref name="pageWorld"/>, dans celui de la page (pour ce qui doit la modifier avant ses scripts).
         /// </summary>

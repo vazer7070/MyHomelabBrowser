@@ -14,11 +14,13 @@ sealed class HostRun : IAsyncDisposable
     readonly SemaphoreSlim _arrived = new(0);
     readonly SemaphoreSlim _input = new(1, 1);
     readonly Func<string, (bool Ok, string? Value)>? _scripts;
+    readonly Func<string, bool, string?>? _cookies;
 
-    HostRun(Process process, Func<string, (bool Ok, string? Value)>? scripts)
+    HostRun(Process process, Func<string, (bool Ok, string? Value)>? scripts, Func<string, bool, string?>? cookies)
     {
         _process = process;
         _scripts = scripts;
+        _cookies = cookies;
         _reader = Task.Run(ReadAsync);
     }
 
@@ -48,10 +50,12 @@ sealed class HostRun : IAsyncDisposable
     }
 
     /// <summary>
-    /// Hôte lancé ; <paramref name="scripts"/> répond aux scripts de la page qu'il demande
-    /// (événements « eval »), à la place de PommeBrowser.
+    /// Hôte lancé ; à la place de PommeBrowser, <paramref name="scripts"/> répond aux scripts de la
+    /// page qu'il demande (événements « eval ») et <paramref name="cookies"/> aux cookies d'une
+    /// adresse (« cookies » : adresse, HttpOnly compris ; null : refusés).
     /// </summary>
-    public static HostRun Start(IEnumerable<string> arguments, Func<string, (bool Ok, string? Value)>? scripts = null)
+    public static HostRun Start(IEnumerable<string> arguments, Func<string, (bool Ok, string? Value)>? scripts = null,
+        Func<string, bool, string?>? cookies = null)
     {
         var start = new ProcessStartInfo
         {
@@ -67,7 +71,7 @@ sealed class HostRun : IAsyncDisposable
         foreach (string argument in arguments)
             start.ArgumentList.Add(argument);
         start.Environment["WINEDEBUG"] = "-all";
-        return new HostRun(Process.Start(start) ?? throw new InvalidOperationException("Hôte non lancé."), scripts);
+        return new HostRun(Process.Start(start) ?? throw new InvalidOperationException("Hôte non lancé."), scripts, cookies);
     }
 
     async Task ReadAsync()
@@ -79,10 +83,17 @@ sealed class HostRun : IAsyncDisposable
             using JsonDocument document = JsonDocument.Parse(line);
             JsonElement received = document.RootElement.Clone();
             _events.Enqueue(received);
-            if (_scripts != null && received.GetProperty("event").GetString() == "eval")
+            string? kind = received.GetProperty("event").GetString();
+            if (_scripts != null && kind == "eval")
             {
                 (bool ok, string? value) = _scripts(received.GetProperty("code").GetString()!);
                 string reply = JsonSerializer.Serialize(new { ok, value });
+                await SendAsync($"result {received.GetProperty("id").GetInt32()} {reply}");
+            }
+            else if (_cookies != null && kind == "cookies")
+            {
+                string? value = _cookies(received.GetProperty("url").GetString()!, received.GetProperty("http").GetBoolean());
+                string reply = JsonSerializer.Serialize(new { ok = value != null, value });
                 await SendAsync($"result {received.GetProperty("id").GetInt32()} {reply}");
             }
             _arrived.Release();

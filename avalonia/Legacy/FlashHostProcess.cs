@@ -77,9 +77,18 @@ namespace PommeBrowser.Legacy
 
         /// <summary>
         /// Script à exécuter dans la page (ExternalInterface.call, adresse javascript:). Avec un
-        /// numéro, l'hôte attend la réponse (<see cref="ReplyScript"/>) ; sans, aucune.
+        /// numéro, l'hôte attend la réponse (<see cref="Reply"/>) ; sans, aucune.
         /// </summary>
         public event Action<int?, string>? ScriptRequested;
+
+        /// <summary>
+        /// Cookies de la page pour une adresse que le module charge (numéro de la question,
+        /// adresse, HttpOnly compris) : réponse par <see cref="Reply"/>, avec l'en-tête Cookie.
+        /// </summary>
+        public event Action<int, Uri, bool>? CookiesRequested;
+
+        /// <summary>Cookie à enregistrer dans la page : en-tête Set-Cookie reçu (vrai) ou posé par le module.</summary>
+        public event Action<Uri, string, bool>? CookieReceived;
 
         public static FlashHostProcess Start(FlashContent content, string module, bool isPrivate)
         {
@@ -145,6 +154,8 @@ namespace PommeBrowser.Legacy
             }
             if (isPrivate)
                 yield return "--private";
+            // Cookies de la page donnés au lecteur, et ceux qu'il reçoit gardés dans la page.
+            yield return "--share-cookies";
             // Fenêtre cachée jusqu'à ce que l'onglet la loge.
             yield return "--hidden";
         }
@@ -205,8 +216,28 @@ namespace PommeBrowser.Legacy
                             if (ScriptRequested is { } handler)
                                 handler(id, evaluated);
                             else
-                                ReplyScript(id, false, null);
+                                Reply(id, false, null);
                         });
+                        break;
+                    case "cookies" when root.TryGetProperty("id", out JsonElement question) && question.TryGetInt32(out int cookieQuestion):
+                        bool withHttpOnly = root.TryGetProperty("http", out JsonElement httpOnly) && httpOnly.ValueKind == JsonValueKind.True;
+                        if (!Uri.TryCreate(Text(root, "url"), UriKind.Absolute, out Uri? cookieUrl))
+                        {
+                            Reply(cookieQuestion, false, null);
+                            break;
+                        }
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (CookiesRequested is { } handler)
+                                handler(cookieQuestion, cookieUrl, withHttpOnly);
+                            else
+                                Reply(cookieQuestion, false, null);
+                        });
+                        break;
+                    case "set-cookie" when Uri.TryCreate(Text(root, "url"), UriKind.Absolute, out Uri? receivedFrom):
+                        string received = Text(root, "cookie");
+                        bool fromHttp = root.TryGetProperty("http", out JsonElement viaHttp) && viaHttp.ValueKind == JsonValueKind.True;
+                        Dispatcher.UIThread.Post(() => CookieReceived?.Invoke(receivedFrom, received, fromHttp));
                         break;
                     case "script":
                         // Adresse javascript: : exécutée dans la page si elle vise la page elle-même.
@@ -227,8 +258,8 @@ namespace PommeBrowser.Legacy
         static string Text(JsonElement root, string name)
             => root.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty;
 
-        /// <summary>Réponse à un script de la page : « result &lt;id&gt; {"ok":…,"value":…} ».</summary>
-        public void ReplyScript(int id, bool ok, string? value)
+        /// <summary>Réponse à une question de l'hôte (script de la page, cookies) : « result &lt;id&gt; {"ok":…,"value":…} ».</summary>
+        public void Reply(int id, bool ok, string? value)
         {
             using var buffer = new MemoryStream();
             using (var writer = new Utf8JsonWriter(buffer))

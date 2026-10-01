@@ -54,13 +54,15 @@ Lancement :
 ```
 PommeFlashHost.exe --plugin <NPSWF64_*.dll> --swf <adresse> --page <adresse de la page>
     [--flashvars <…>] [--width N] [--height N] [--id <…>] [--param nom=valeur]…
-    [--user-agent <…>] [--private] [--hidden]
+    [--user-agent <…>] [--private] [--share-cookies] [--hidden]
 ```
 
 Sortie standard, un événement JSON par ligne : `ready` (fenêtre à loger), `status`,
 `navigate` (url, cible), `script` (adresse `javascript:`, sans réponse), `eval` (id, code : script
-de la page dont le module attend le résultat), `audio`, `log` (niveaux info, error, trace), `exit`.
-Entrée standard : `close`, et `result <id> {"ok":true,"value":…}` en réponse à `eval`.
+de la page dont le module attend le résultat), `cookies` (id, url, http : cookies de la page pour
+une adresse), `set-cookie` (url, cookie, http : cookie à garder dans la page), `audio`, `log`
+(niveaux info, error, trace), `exit`. Entrée standard : `close`, et
+`result <id> {"ok":true,"value":…}` en réponse à `eval` et `cookies`.
 
 **Scripts de la page** (`ExternalInterface.call`, `NPN_Evaluate`) : le module attend le résultat,
 comme dans un navigateur. L'hôte envoie `eval` puis attend la réponse (20 s au plus) en traitant les
@@ -68,6 +70,17 @@ messages que Windows lui envoie d'autres fils : PommeBrowser place et affiche la
 pendant ce temps, et les deux processus s'attendraient sinon l'un l'autre. PommeBrowser exécute le
 script dans la page (document principal seulement : un contenu venu d'un cadre reçoit un refus) ;
 le module applique lui-même `allowScriptAccess`.
+
+**Cookies partagés avec la page** (`--share-cookies`, `PageCookieHandler.cs`) : comme dans un
+navigateur, chaque chargement du module porte les cookies de la page pour son adresse, HttpOnly
+compris, et ceux que les réponses déposent (`Set-Cookie`) sont gardés dans la page. Les
+redirections sont suivies par l'hôte, étape par étape, pour que chacune porte ses propres cookies.
+`NPN_GetValueForURL` donne ce qu'un script verrait (sans HttpOnly), `NPN_SetValueForURL` pose un
+cookie comme un script. PommeBrowser (`FlashCookies.cs`) ne partage que le site de la page (même
+domaine enregistrable) : le lecteur exécute un module tiers, il n'a pas accès aux cookies des autres
+sites. Chaque cookie reçu est vérifié (domaine, Secure, HttpOnly, préfixes `__Secure-` et
+`__Host-`) avant d'aller dans le profil WebView2 de l'onglet, navigation privée comprise. Sans
+l'option, l'hôte a ses propres cookies, vides au départ.
 
 **Journal** : version du module, contenu, noms des flashvars (pas leurs valeurs), puis une trace de
 chaque fichier chargé (et de la réponse), de chaque script demandé à la page et de ce que l'hôte ne
@@ -141,7 +154,8 @@ Sans le réglage, sans module Flash ou sans description du contenu, Basilisk res
 
 1. **Hôte NPAPI sous Windows** (fait) : le contenu principal est lu dans une fenêtre logée dans l'onglet.
 2. **Contenu à sa place dans la page** (fait) : suivi du défilement, des dimensions et du zoom.
-3. Cookies et session partagés avec la page.
+3. **Cookies et session partagés avec la page** (fait) : chargements, redirections,
+   `NPN_GetValueForURL` et `NPN_SetValueForURL`, limités au site de la page.
 4. `ExternalInterface` : appels entre les scripts de la page et Flash. **Flash → page fait**
    (`ExternalInterface.call`, adresses `javascript:`) ; reste page → Flash (`addCallback`).
 5. Linux (`libflashplayer.so`, GTK 2 / XEmbed).

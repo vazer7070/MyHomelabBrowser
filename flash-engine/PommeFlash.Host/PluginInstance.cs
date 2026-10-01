@@ -36,13 +36,17 @@ namespace PommeFlash.Host
             _window = (NPWindow*)NpMemory.AllocZeroed((nuint)sizeof(NPWindow));
             _self = GCHandle.Alloc(this);
             _npp->ndata = GCHandle.ToIntPtr(_self);
-            _http = new HttpClient(new SocketsHttpHandler
-            {
-                AutomaticDecompression = DecompressionMethods.All,
-                AllowAutoRedirect = true,
-                UseCookies = true,
-                CookieContainer = _cookies
-            });
+            // Cookies de la page (PommeBrowser) ou propres à l'hôte.
+            HttpMessageHandler handler = options.ShareCookies
+                ? new PageCookieHandler()
+                : new SocketsHttpHandler
+                {
+                    AutomaticDecompression = DecompressionMethods.All,
+                    AllowAutoRedirect = true,
+                    UseCookies = true,
+                    CookieContainer = _cookies
+                };
+            _http = new HttpClient(handler);
             _http.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
 
             var page = new PageObjects(options);
@@ -314,7 +318,9 @@ namespace PommeFlash.Host
 
             string? text = variable switch
             {
-                NPNURLVariable.Cookie => _cookies.GetCookieHeader(uri),
+                // Ceux qu'un script de la page verrait (sans HttpOnly), comme dans un navigateur.
+                NPNURLVariable.Cookie when uri.Scheme is "http" or "https" =>
+                    _options.ShareCookies ? HostChannel.PageCookies(uri) : _cookies.GetCookieHeader(uri),
                 NPNURLVariable.Proxy => "DIRECT",
                 _ => null
             };
@@ -323,6 +329,30 @@ namespace PommeFlash.Host
             *value = NpMemory.Utf8(text, out uint count);
             *length = count;
             return Np.NoError;
+        }
+
+        /// <summary>NPN_SetValueForURL : cookie posé par le module, comme par un script de la page.</summary>
+        public short SetValueForUrl(NPNURLVariable variable, string? url, string? value)
+        {
+            if (variable != NPNURLVariable.Cookie || string.IsNullOrEmpty(value) || url == null ||
+                !Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) || uri.Scheme is not ("http" or "https"))
+            {
+                return Np.InvalidParam;
+            }
+            if (_options.ShareCookies)
+            {
+                HostChannel.SetPageCookie(uri, value, fromHttp: false);
+                return Np.NoError;
+            }
+            try
+            {
+                _cookies.SetCookies(uri, value);
+                return Np.NoError;
+            }
+            catch (CookieException)
+            {
+                return Np.InvalidParam;
+            }
         }
 
         public void PushPopups(bool enabled) => _popups.Push(enabled);

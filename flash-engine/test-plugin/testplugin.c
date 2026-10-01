@@ -220,10 +220,33 @@ static void evaluateScript(const char *script, const char *key)
 }
 
 /* Contenu principal reçu : le reste du scénario. */
-static void continueScenario(void)
+typedef NPError (*GetValueForUrlFunc)(NPP npp, int variable, const char *url, char **value, uint32_t *length);
+typedef NPError (*SetValueForUrlFunc)(NPP npp, int variable, const char *url, const char *value, uint32_t length);
+
+/* Cookies de la page (NPN_GetValueForURL, NPNURLVCookie = 501), puis un cookie posé par le greffon. */
+static void checkCookies(const char *url)
+{
+    char *value = NULL;
+    uint32_t length = 0;
+    NPError error = ((GetValueForUrlFunc)browser->getvalueforurl)(instanceNpp, 501, url, &value, &length);
+    if (error == NPERR_NO_ERROR && value)
+    {
+        report("url-cookie=%.*s", (int)length, value);
+        browser->memfree(value);
+    }
+    else
+    {
+        report("url-cookie-error=%d", error);
+    }
+    const char *cookie = "pose=1; Path=/";
+    report("set-cookie=%d", ((SetValueForUrlFunc)browser->setvalueforurl)(instanceNpp, 501, url, cookie, (uint32_t)strlen(cookie)));
+}
+
+static void continueScenario(const char *movieUrl)
 {
     evaluateScript("try { __flash__toXML(pommeAdd(2,3)) ; } catch (e) { \"<undefined/>\"; }", "script");
     evaluateScript("pommeRefuse()", "script-refused");
+    checkCookies(movieUrl);
     browser->geturlnotify(instanceNpp, "data.txt", NULL, (void *)0x1234);
     browser->geturlnotify(instanceNpp, "missing.txt", NULL, (void *)0x5678);
     const char *post = "Content-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello";
@@ -359,7 +382,7 @@ static NPError NPP_DestroyStream(NPP npp, NPStream *stream, NPReason reason)
     stream->pdata = NULL;
     streamsDone++;
     if (isMovie)
-        continueScenario();
+        continueScenario(stream->url);
     checkFinished();
     return NPERR_NO_ERROR;
 }

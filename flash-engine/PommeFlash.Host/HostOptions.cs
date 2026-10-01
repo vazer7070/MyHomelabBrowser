@@ -23,6 +23,12 @@ namespace PommeFlash.Host
         public string UserAgent { get; private set; } = BasiliskUserAgent();
         public bool IsPrivate { get; private set; }
 
+        /// <summary>
+        /// Cookies partagés avec la page : PommeBrowser donne ceux de chaque adresse chargée et
+        /// garde ceux que les réponses déposent. Sans, l'hôte a ses propres cookies, vides au départ.
+        /// </summary>
+        public bool ShareCookies { get; private set; }
+
         /// <summary>Fenêtre créée cachée : PommeBrowser la loge dans l'onglet avant de l'afficher.</summary>
         public bool Hidden { get; private set; }
 
@@ -82,6 +88,9 @@ namespace PommeFlash.Host
                         break;
                     case "--private":
                         options.IsPrivate = true;
+                        break;
+                    case "--share-cookies":
+                        options.ShareCookies = true;
                         break;
                     case "--hidden":
                         options.Hidden = true;

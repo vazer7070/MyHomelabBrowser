@@ -134,10 +134,64 @@ namespace PommeBrowser.Views
                 if (Page == TabPage.Legacy)
                     ShowLegacyPage(running: false);
             };
-            host.NavigateRequested += OnFlashNavigate;
-            host.ScriptRequested += (id, code) => RunFlashScript(host, content, id, code);
+            ConnectFlashHost(host, content);
             host.SetBackground(!IsSelected);
             ShowEmbeddedLegacy(host, Tr("Ouverture du lecteur Flash…"), Tr("{0} s'ouvre avec votre module Flash.", content.Swf.Host), content.Page);
+        }
+
+        /// <summary>Le lecteur agit sur la page comme un greffon de navigateur : pages demandées, scripts, cookies.</summary>
+        [SupportedOSPlatform("windows")]
+        void ConnectFlashHost(FlashHostProcess host, FlashContent content)
+        {
+            host.NavigateRequested += OnFlashNavigate;
+            host.ScriptRequested += (id, code) => RunFlashScript(host, content, id, code);
+            host.CookiesRequested += (id, url, httpOnly) => GiveFlashCookies(host, content, id, url, httpOnly);
+            host.CookieReceived += (url, cookie, fromHttp) => KeepFlashCookie(content, url, cookie, fromHttp);
+        }
+
+        /// <summary>
+        /// Cookies de la page pour une adresse que le lecteur charge, comme un navigateur les joint
+        /// aux requêtes d'un greffon. Seulement pour le site de la page : le lecteur exécute un
+        /// module tiers, il n'a pas accès aux cookies des autres sites.
+        /// </summary>
+        [SupportedOSPlatform("windows")]
+        async void GiveFlashCookies(FlashHostProcess host, FlashContent content, int id, Uri url, bool httpOnly)
+        {
+            string? header = null;
+            if (_engine is { } engine && FlashCookies.IsShared(content.Page, url))
+            {
+                try
+                {
+                    header = await engine.GetCookieHeaderAsync(url, httpOnly);
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or
+                                               System.Runtime.InteropServices.COMException or ArgumentException)
+                {
+                    RuntimeLogBuffer.Append("[Flash] Cookies de la page indisponibles : " + ex.Message);
+                }
+            }
+            host.Reply(id, header != null, header);
+        }
+
+        /// <summary>Cookie reçu par le lecteur (ou posé par lui) : gardé dans la page, s'il est du site de la page et valide.</summary>
+        async void KeepFlashCookie(FlashContent content, Uri url, string cookie, bool fromHttp)
+        {
+            if (_engine is not { } engine || !FlashCookies.IsShared(content.Page, url))
+                return;
+            if (FlashCookies.Parse(url, cookie, fromHttp, DateTimeOffset.UtcNow) is not { } parsed)
+            {
+                RuntimeLogBuffer.Append($"[Flash] Cookie refusé ({url.Host}) : {cookie.Split(';', 2)[0].Split('=', 2)[0].Trim()}");
+                return;
+            }
+            try
+            {
+                await engine.SetCookieAsync(parsed);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or
+                                           System.Runtime.InteropServices.COMException or ArgumentException)
+            {
+                RuntimeLogBuffer.Append($"[Flash] Cookie « {parsed.Name} » non enregistré : {ex.Message}");
+            }
         }
 
         /// <summary>Page demandée par le contenu : dans l'onglet (_self, _top) ou dans un nouvel onglet.</summary>
@@ -187,7 +241,7 @@ namespace PommeBrowser.Views
                 }
             }
             if (id is { } request)
-                host.ReplyScript(request, ok, value);
+                host.Reply(request, ok, value);
         }
 
         /// <summary>Site réglé sur « toujours dans Basilisk », et Basilisk installé.</summary>

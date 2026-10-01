@@ -101,6 +101,11 @@ public sealed class HostProtocolTests
         Assert.Contains(host.Events, e => e.GetProperty("event").GetString() == "script" &&
                                           e.GetProperty("code").GetString() == "window.alert('pomme')");
 
+        // Sans partage avec la page : l'hôte a ses propres cookies, vides au départ.
+        Assert.Contains("url-cookie=", reports);
+        Assert.Contains("set-cookie=0", reports);
+        Assert.DoesNotContain(host.Events, e => e.GetProperty("event").GetString() is "cookies" or "set-cookie");
+
         // Scripts de la page (ExternalInterface.call) : le module attend la réponse de PommeBrowser.
         Assert.Contains("script=<number>5</number>", reports);
         Assert.Contains("script-refused=failed", reports);
@@ -124,5 +129,62 @@ public sealed class HostProtocolTests
         Assert.Equal(0, await host.WaitForExitAsync(TimeSpan.FromSeconds(30)));
         Assert.Contains("destroy", host.Reports);
         Assert.Contains(host.Events, e => e.GetProperty("event").GetString() == "exit");
+    }
+
+    [Fact(Timeout = 180_000)]
+    public async Task With_shared_cookies_requests_carry_those_of_the_page()
+    {
+        HostRun.SkipIfUnavailable();
+
+        byte[] movie = new byte[20_000];
+        new Random(3).NextBytes(movie);
+        byte[] data = Encoding.UTF8.GetBytes("données après redirection");
+        using var server = new TestServer();
+        server.Add("movie.swf", movie, "application/x-shockwave-flash");
+        // data.txt redirige vers vrai.txt et dépose un cookie au passage.
+        server.Redirect("jeu/data.txt", "/jeu/vrai.txt", "jeton=xyz; Path=/; HttpOnly");
+        server.Add("jeu/vrai.txt", data, "text/plain; charset=utf-8");
+
+        await using HostRun host = HostRun.Start(new[]
+        {
+            "--plugin", HostRun.HostVisiblePath(HostRun.PluginPath!),
+            "--swf", server.Url("movie.swf"),
+            "--page", server.Url("jeu/page.html"),
+            "--share-cookies",
+            "--hidden"
+        }, code => code.Contains("pommeAdd(2,3)", StringComparison.Ordinal) ? (true, "<number>5</number>") : (false, null),
+        // PommeBrowser : cookies de la page, HttpOnly compris pour les chargements.
+        (url, http) => http ? "session=abc; prefs=fr" : "prefs=fr");
+
+        await host.WaitForAsync(h => h.Reports.Contains("done"), Scenario);
+        IReadOnlyList<string> reports = host.Reports;
+        IReadOnlyList<JsonElement> events = host.Events;
+
+        // Chaque chargement, et chaque étape d'une redirection, porte les cookies de la page.
+        Assert.Equal("session=abc; prefs=fr", server.CookieHeader("movie.swf"));
+        Assert.Equal("session=abc; prefs=fr", server.CookieHeader("jeu/data.txt"));
+        Assert.Equal("session=abc; prefs=fr", server.CookieHeader("jeu/vrai.txt"));
+        Assert.Equal("session=abc; prefs=fr", server.CookieHeader("jeu/echo"));
+        Assert.Contains(events, e => e.GetProperty("event").GetString() == "cookies" &&
+                                     e.GetProperty("url").GetString() == server.Url("jeu/vrai.txt") && e.GetProperty("http").GetBoolean());
+
+        // Le cookie déposé par la redirection est transmis à la page ; le contenu suit la redirection.
+        Assert.Contains(events, e => e.GetProperty("event").GetString() == "set-cookie" &&
+                                     e.GetProperty("url").GetString() == server.Url("jeu/data.txt") &&
+                                     e.GetProperty("cookie").GetString() == "jeton=xyz; Path=/; HttpOnly" &&
+                                     e.GetProperty("http").GetBoolean());
+        Assert.Contains($"stream-done url={server.Url("jeu/vrai.txt")} bytes={data.Length} hash={Fnv1a(data):x8} ordered=1 reason=0", reports);
+        Assert.Contains("notify url=data.txt reason=0 data=1234", reports);
+
+        // NPN_GetValueForURL : les cookies qu'un script verrait ; NPN_SetValueForURL : cookie posé dans la page.
+        Assert.Contains("url-cookie=prefs=fr", reports);
+        Assert.Contains("set-cookie=0", reports);
+        Assert.Contains(events, e => e.GetProperty("event").GetString() == "set-cookie" &&
+                                     e.GetProperty("url").GetString() == server.Url("movie.swf") &&
+                                     e.GetProperty("cookie").GetString() == "pose=1; Path=/" &&
+                                     !e.GetProperty("http").GetBoolean());
+
+        await host.SendAsync("close");
+        Assert.Equal(0, await host.WaitForExitAsync(TimeSpan.FromSeconds(30)));
     }
 }

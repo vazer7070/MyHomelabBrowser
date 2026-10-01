@@ -834,6 +834,11 @@ namespace PommeBrowser.Engine.Gtk
 
         public void ShowDevTools() => OnView(view => webkit_web_inspector_show(webkit_web_view_get_inspector(view)));
 
+        /// <summary>Le moteur Flash intégré n'existe que sous Windows : pas de partage ici.</summary>
+        public Task<string?> GetCookieHeaderAsync(Uri url, bool includeHttpOnly) => Task.FromResult<string?>(null);
+
+        public Task SetCookieAsync(PageCookie cookie) => Task.CompletedTask;
+
         public Task<string?> EvaluateAsync(string script, bool isolated)
         {
             var completion = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
