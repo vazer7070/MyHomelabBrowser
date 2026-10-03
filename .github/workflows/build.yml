@@ -69,6 +69,23 @@ jobs:
           --logger "trx;LogFileName=resultats-interface.trx"
           --results-directory TestResults
 
+      # Moteur Flash intégré (flash-engine/) : hôte NPAPI de Linux (GTK 2, XEmbed), compilé en code
+      # natif (NativeAOT), puis testé sans écran avec le greffon NPAPI de test (GTK 2, comme Flash).
+      - name: Moteur Flash intégré (PommeFlashHost, linux-x64)
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libgtk2.0-dev xvfb xauth
+          dotnet publish flash-engine/PommeFlash.Host/PommeFlash.Host.csproj --configuration Release --runtime linux-x64 -p:PublishAot=true -p:DebugType=none --output artifacts/flash-linux-x64
+          test -x artifacts/flash-linux-x64/PommeFlashHost
+
+      - name: Tests du moteur Flash intégré
+        env:
+          POMMEFLASH_HOST: ${{ github.workspace }}/artifacts/flash-linux-x64/PommeFlashHost
+          POMMEFLASH_TEST_PLUGIN: ${{ runner.temp }}/libnpPommeTest.so
+        run: |
+          gcc -shared -fPIC -O2 -o "$POMMEFLASH_TEST_PLUGIN" flash-engine/test-plugin/testplugin.c $(pkg-config --cflags --libs gtk+-2.0) -lX11 -lpthread
+          xvfb-run --auto-servernum dotnet test tests/PommeFlash.Tests/PommeFlash.Tests.csproj --configuration Release --logger "trx;LogFileName=moteur-flash-linux.trx" --results-directory TestResults
+
       - name: Résultats des tests
         if: always()
         uses: actions/upload-artifact@v4
@@ -76,6 +93,13 @@ jobs:
           name: resultats-tests
           path: TestResults
           if-no-files-found: ignore
+
+      - name: Moteur Flash intégré (artefact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PommeFlashHost-Linux-x64
+          path: artifacts/flash-linux-x64
+          if-no-files-found: error
 
       - name: Compilation de l'édition Avalonia
         run: dotnet build avalonia/PommeBrowser.csproj --configuration Release

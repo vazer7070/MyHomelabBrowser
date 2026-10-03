@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using PommeFlash.Host.Native;
 
 namespace PommeFlash.Host
 {
@@ -9,32 +8,25 @@ namespace PommeFlash.Host
     /// </summary>
     static class UiThread
     {
-        public const uint RunMessage = Win32.WM_APP + 1;
-
         static readonly ConcurrentQueue<Action> Pending = new();
-        static readonly Dictionary<nuint, Action> Delayed = new();
-        static nuint _nextDelay = 1;
+        static volatile IHostDisplay? _display;
 
-        public static nint Window { get; private set; }
+        /// <summary>Fenêtre et boucle de messages de l'hôte, une fois créées.</summary>
+        public static IHostDisplay Display => _display ?? throw new InvalidOperationException("Fenêtre de l'hôte pas encore créée.");
 
-        public static uint ThreadId { get; private set; }
-
-        public static bool IsCurrent => Win32.GetCurrentThreadId() == ThreadId;
-
-        public static void Attach(nint window)
+        /// <summary>Sur le fil du module, une fois la fenêtre créée.</summary>
+        public static void Attach(IHostDisplay display)
         {
-            Window = window;
-            ThreadId = Win32.GetCurrentThreadId();
+            _display = display;
             if (!Pending.IsEmpty)
-                Win32.PostMessageW(window, RunMessage, 0, 0);
+                display.Wake();
         }
 
         /// <summary>Depuis n'importe quel fil.</summary>
         public static void Post(Action action)
         {
             Pending.Enqueue(action);
-            if (Window != 0)
-                Win32.PostMessageW(Window, RunMessage, 0, 0);
+            _display?.Wake();
         }
 
         public static void RunPending()
@@ -43,26 +35,10 @@ namespace PommeFlash.Host
                 Run(action);
         }
 
-        /// <summary>Plus tard, sur ce fil (minuteries 1 à 999 ; celles du module commencent à 1000).</summary>
-        public static void Delay(uint milliseconds, Action action)
-        {
-            nuint id = _nextDelay;
-            _nextDelay = _nextDelay >= 999 ? 1 : _nextDelay + 1;
-            Delayed[id] = action;
-            Win32.SetTimer(Window, id, milliseconds, 0);
-        }
+        /// <summary>Plus tard, sur ce fil.</summary>
+        public static void Delay(uint milliseconds, Action action) => Display.Delay(milliseconds, action);
 
-        /// <summary>Minuterie arrivée à échéance : vrai si elle venait de <see cref="Delay"/>.</summary>
-        public static bool RunDelayed(nuint id)
-        {
-            if (!Delayed.Remove(id, out Action? action))
-                return false;
-            Win32.KillTimer(Window, id);
-            Run(action);
-            return true;
-        }
-
-        static void Run(Action action)
+        public static void Run(Action action)
         {
             try
             {

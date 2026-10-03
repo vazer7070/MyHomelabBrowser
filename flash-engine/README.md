@@ -2,9 +2,9 @@
 
 PommeBrowser lit les contenus Flash avec **Ruffle**. Pour ceux que Ruffle ne sait pas lire, le
 moteur intégré utilise **le module Flash Player de l'utilisateur** (`NPSWF64_*.dll`, ou
-`NPSWF32_*.dll` en 32 bits), comme le
-faisait Basilisk, mais sans Basilisk : PommeBrowser joue lui-même le rôle du navigateur auprès du
-module, par l'interface NPAPI.
+`NPSWF32_*.dll` en 32 bits ; `libflashplayer.so` sous Linux), comme le faisait Basilisk, mais
+sans Basilisk : PommeBrowser joue lui-même le rôle du navigateur auprès du module, par
+l'interface NPAPI.
 
 Adobe interdit de redistribuer Flash Player : PommeBrowser ne le fournit jamais. Chacun ajoute
 sa copie dans **Paramètres › Avancé** (voir `avalonia/Legacy/LegacyEngine.cs`).
@@ -42,13 +42,22 @@ PommeBrowser ──(ligne de commande, stdin/stdout JSON)──► PommeFlashHos
   installe le meilleur module de chaque architecture trouvé. En 32 bits, les conventions d'appel comptent : fonctions NPAPI en
   `cdecl`, points d'entrée `NP_*` en `stdcall` (déclarées explicitement, sans effet en 64 bits) ;
   `NPVariant` fait 16 octets et la table `NPNetscapeFuncs` 236.
-- **Fenêtre** (`HostWindow.cs`) : mode fenêtré, le module dessine dans sa fenêtre, que
-  PommeBrowser loge dans l'onglet comme il le faisait pour Basilisk. Les modes `direct` et `gpu`
-  demandés par la page sont gardés (fenêtrés sous Windows, ils donnent accès à Stage3D, dont
-  beaucoup de jeux ont besoin) ; `opaque` et `transparent`, sans fenêtre, deviennent `window`.
-  Un clic dans le contenu lui donne le clavier (`WM_MOUSEACTIVATE`, comme Firefox le faisait
-  pour ses modules : Flash compte sur le navigateur), et PommeBrowser le reprend quand un de ses
-  champs a le focus.
+- **Fenêtre** (`IHostDisplay` : `Win32Display.cs` sous Windows, `GtkDisplay.cs` sous Linux) :
+  mode fenêtré, le module dessine dans sa fenêtre, que PommeBrowser loge dans l'onglet comme il
+  le faisait pour Basilisk. Les modes `direct` et `gpu` demandés par la page sont gardés
+  (fenêtrés sous Windows, ils donnent accès à Stage3D, dont beaucoup de jeux ont besoin) ;
+  `opaque` et `transparent`, sans fenêtre, deviennent `window`. Sous Windows, un clic dans le
+  contenu lui donne le clavier (`WM_MOUSEACTIVATE`, comme Firefox le faisait pour ses modules :
+  Flash compte sur le navigateur), et PommeBrowser le reprend quand un de ses champs a le focus.
+- **Linux** (`GtkDisplay.cs`, `Native/Gtk.cs`) : le module Flash de Linux est écrit pour GTK 2
+  et XEmbed. L'hôte ouvre une fenêtre GTK 2 avec une prise (`GtkSocket`) donnée au module
+  (`NPWindow.window` = XID de la prise, `ws_info` = `NPSetWindowCallbackStruct` avec l'affichage
+  X11, le visuel, la palette et la profondeur) et répond `NPNVToolkit` = GTK 2,
+  `NPNVSupportsXEmbedBool` = vrai, `NPNVxDisplay`. Le module y branche un `GtkPlug` avec la GTK
+  que l'hôte a chargée. Boucle de messages : celle de GTK (`g_idle_add`, `g_timeout_add` pour les
+  minuteries). Le module est chargé par `dlopen` et son `NP_Initialize(browser, plugin)` d'Unix.
+  L'hôte meurt avec PommeBrowser (`prctl(PR_SET_PDEATHSIG)`) ; les erreurs X11 sont notées dans
+  le journal avant le traitement de GDK. Il faut X11 ou XWayland (variable `DISPLAY`).
 
 ## Échanges avec PommeBrowser
 
@@ -108,8 +117,9 @@ d'aide de la version chinoise), ainsi que les pages demandées avec une cible : 
 message vient de Flash lui-même ou du contenu, qui dessine les siens dans sa fenêtre.
 
 **Comme Basilisk** : le module reçoit l'identité de navigateur de Basilisk (`NPN_UserAgent`,
-`WOW64` pour l'hôte 32 bits) et le facteur d'échelle du contenu (`NPNVcontentsScaleFactor`, 1 :
-l'hôte n'est pas adapté aux DPI, Windows met ses fenêtres à l'échelle).
+`WOW64` pour l'hôte 32 bits, `X11; Linux x86_64` sous Linux) et le facteur d'échelle du contenu
+(`NPNVcontentsScaleFactor`, 1 : l'hôte n'est pas adapté aux DPI, Windows met ses fenêtres à
+l'échelle).
 
 ## Tests
 
@@ -119,7 +129,16 @@ module Flash vis-à-vis de l'hôte et rapporte ce qu'il observe (`NPN_Status("TE
 tout le parcours : paramètres, fenêtre, flux par petites bouchées, notifications, 404, envoi,
 objets de la page, fils, minuteries, navigation, fin propre.
 
-Sous Linux, avec Wine :
+Sous Linux, l'hôte de Linux (greffon GTK 2, sans écran) :
+
+```sh
+gcc -shared -fPIC -O2 -o /tmp/libnpPommeTest.so flash-engine/test-plugin/testplugin.c $(pkg-config --cflags --libs gtk+-2.0) -lX11 -lpthread
+dotnet publish flash-engine/PommeFlash.Host -c Release -r linux-x64 --self-contained -o /tmp/pommeflash-linux
+POMMEFLASH_HOST=/tmp/pommeflash-linux/PommeFlashHost POMMEFLASH_TEST_PLUGIN=/tmp/libnpPommeTest.so \
+xvfb-run -a dotnet test tests/PommeFlash.Tests
+```
+
+Sous Linux, l'hôte de Windows avec Wine :
 
 ```sh
 x86_64-w64-mingw32-gcc -shared -O2 -o /tmp/npPommeTest.dll flash-engine/test-plugin/testplugin.c
@@ -130,7 +149,10 @@ POMMEFLASH_LAUNCHER=wine xvfb-run -a dotnet test tests/PommeFlash.Tests
 
 Sous Windows, le greffon se compile avec `clang -shared` (ou `cl /LD`) et `POMMEFLASH_LAUNCHER`
 n'est pas nécessaire. En 32 bits : `clang --target=i686-pc-windows-msvc`, avec l'hôte publié en
-`win-x86` ; la CI Windows passe les tests dans les deux architectures.
+`win-x86` ; la CI Windows passe les tests dans les deux architectures, et la CI Linux avec l'hôte
+de Linux. Les vérifications propres à un système (clavier au clic, boîtes de dialogue et
+programmes du module sous Windows ; GTK 2, XEmbed et affichage X11 sous Linux) ne sont faites
+que pour l'hôte concerné.
 
 ## Comparer avec Basilisk : l'espion
 
@@ -174,4 +196,9 @@ Sans le réglage, sans module Flash ou sans description du contenu, Basilisk res
    `NPN_GetValueForURL` et `NPN_SetValueForURL`, limités au site de la page.
 4. **`ExternalInterface`** (fait) : appels entre les scripts de la page et Flash, dans les deux
    sens (`ExternalInterface.call` et adresses `javascript:`, `ExternalInterface.addCallback`).
-5. Linux (`libflashplayer.so`, GTK 2 / XEmbed).
+5. Linux (`libflashplayer.so`, GTK 2 / XEmbed) :
+   a. **Hôte sous Linux** (fait) : fenêtre GTK 2 et prise XEmbed, boucle GLib, `dlopen`,
+      greffon de test GTK 2, tests sans écran dans la CI Linux (`PommeFlashHost-Linux-x64`).
+   b. PommeBrowser sous Linux lance l'hôte (`libflashplayer.so` installé ou du système), le loge
+      dans l'onglet (X11) et le livre dans l'AppImage x86_64.
+   c. Contenu à sa place dans la page sous X11 ; cookies partagés avec WebKitGTK.

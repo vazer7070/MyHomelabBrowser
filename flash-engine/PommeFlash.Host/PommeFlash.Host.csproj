@@ -5,8 +5,8 @@
 		de l'utilisateur (NPSWF64_*.dll ou NPSWF32_*.dll, jamais fourni par PommeBrowser), joue le rôle du navigateur
 		auprès de lui (flux réseau, scripts, fenêtre) et affiche le contenu dans sa propre fenêtre,
 		que PommeBrowser loge dans l'onglet. Un plantage du module n'emporte que ce processus.
-		Windows, publié en NativeAOT pour win-x64 (module 64 bits) et win-x86 (module 32 bits) :
-		un processus ne charge que les modules de son architecture.
+		Publié en NativeAOT pour win-x64 (module 64 bits), win-x86 (module 32 bits : un processus
+		ne charge que les modules de son architecture) et linux-x64 (libflashplayer.so, GTK 2).
 	-->
 
 	<PropertyGroup>

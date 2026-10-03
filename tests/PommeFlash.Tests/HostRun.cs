@@ -28,11 +28,23 @@ sealed class HostRun : IAsyncDisposable
     public static string? PluginPath => Environment.GetEnvironmentVariable("POMMEFLASH_TEST_PLUGIN");
     static string? Launcher => Environment.GetEnvironmentVariable("POMMEFLASH_LAUNCHER") is { Length: > 0 } launcher ? launcher : null;
 
+    /// <summary>Hôte Windows (PommeFlashHost.exe, lancé en place ou par Wine) ; sinon l'hôte Linux, lancé en place.</summary>
+    public static bool IsWindowsHost
+    {
+        get
+        {
+            using FileStream file = File.OpenRead(HostPath!);
+            return file.ReadByte() == 'M' && file.ReadByte() == 'Z';
+        }
+    }
+
     /// <summary>Hôte 32 bits (win-x86), pour un module NPSWF32 : la table NPNetscapeFuncs y fait 236 octets.</summary>
     public static bool Is32BitHost
     {
         get
         {
+            if (!IsWindowsHost)
+                return false;
             using var reader = new PEReader(File.OpenRead(HostPath!));
             return reader.PEHeaders.CoffHeader.Machine == Machine.I386;
         }
@@ -45,8 +57,8 @@ sealed class HostRun : IAsyncDisposable
     {
         if (string.IsNullOrEmpty(HostPath) || string.IsNullOrEmpty(PluginPath))
             Assert.Skip("POMMEFLASH_HOST et POMMEFLASH_TEST_PLUGIN ne sont pas définis.");
-        if (!OperatingSystem.IsWindows() && Launcher == null)
-            Assert.Skip("Hors de Windows, l'hôte se lance avec Wine (POMMEFLASH_LAUNCHER=wine).");
+        if (!OperatingSystem.IsWindows() && Launcher == null && IsWindowsHost)
+            Assert.Skip("Hors de Windows, l'hôte Windows se lance avec Wine (POMMEFLASH_LAUNCHER=wine).");
     }
 
     /// <summary>

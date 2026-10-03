@@ -16,7 +16,8 @@ namespace PommeFlash.Host
         readonly PluginLibrary _library;
         readonly HostOptions _options;
         readonly NPP_t* _npp;
-        readonly NPWindow* _window;
+        // NPWindow, ou NPWindowUnix sous Linux (ws_info avant le type).
+        readonly nint _window;
         readonly List<nint> _strings = new();
         readonly List<PluginStream> _streams = new();
         readonly Dictionary<uint, (nint Function, bool Repeat)> _timers = new();
@@ -35,7 +36,7 @@ namespace PommeFlash.Host
             _library = library;
             _options = options;
             _npp = (NPP_t*)NpMemory.AllocZeroed((nuint)sizeof(NPP_t));
-            _window = (NPWindow*)NpMemory.AllocZeroed((nuint)sizeof(NPWindow));
+            _window = NpMemory.AllocZeroed((nuint)(OperatingSystem.IsWindows() ? sizeof(NPWindow) : sizeof(NPWindowUnix)));
             _self = GCHandle.Alloc(this);
             _npp->ndata = GCHandle.ToIntPtr(_self);
             // Cookies de la page (PommeBrowser) ou propres à l'hôte.
@@ -116,18 +117,31 @@ namespace PommeFlash.Host
             }
         }
 
-        /// <summary>Fenêtre donnée au module (il y crée la sienne), à chaque changement de taille.</summary>
-        public void SetWindow(nint window, int width, int height)
+        /// <summary>
+        /// Fenêtre donnée au module (il y crée la sienne), à chaque changement de taille. Sous
+        /// Linux, <paramref name="info"/> décrit l'affichage X11 (NPSetWindowCallbackStruct).
+        /// </summary>
+        public void SetWindow(nint window, nint info, int width, int height)
         {
             if (!IsAlive)
                 return;
-            _window->window = window;
-            _window->x = 0;
-            _window->y = 0;
-            _window->width = (uint)Math.Max(1, width);
-            _window->height = (uint)Math.Max(1, height);
-            _window->clipRect = new NPRect { top = 0, left = 0, bottom = (ushort)Math.Min(height, ushort.MaxValue), right = (ushort)Math.Min(width, ushort.MaxValue) };
-            _window->type = Np.WindowTypeWindow;
+            var clip = new NPRect { top = 0, left = 0, bottom = (ushort)Math.Min(height, ushort.MaxValue), right = (ushort)Math.Min(width, ushort.MaxValue) };
+            if (OperatingSystem.IsWindows())
+            {
+                *(NPWindow*)_window = new NPWindow
+                {
+                    window = window, width = (uint)Math.Max(1, width), height = (uint)Math.Max(1, height),
+                    clipRect = clip, type = Np.WindowTypeWindow
+                };
+            }
+            else
+            {
+                *(NPWindowUnix*)_window = new NPWindowUnix
+                {
+                    window = window, width = (uint)Math.Max(1, width), height = (uint)Math.Max(1, height),
+                    clipRect = clip, ws_info = info, type = Np.WindowTypeWindow
+                };
+            }
             short error = _library.SetWindow(_npp, _window);
             if (error != Np.NoError)
                 HostChannel.Error($"NPP_SetWindow a échoué ({error}).");
@@ -257,7 +271,17 @@ namespace PommeFlash.Host
             switch (variable)
             {
                 case NPNVariable.NetscapeWindow:
-                    *(nint*)value = UiThread.Window;
+                    *(nint*)value = UiThread.Display.NetscapeWindow;
+                    return Np.NoError;
+                // Linux : affichage X11, GTK 2 et XEmbed, comme Firefox (le module branche sa fenêtre dans la prise).
+                case NPNVariable.XDisplay when !OperatingSystem.IsWindows():
+                    *(nint*)value = UiThread.Display.XDisplay;
+                    return Np.NoError;
+                case NPNVariable.Toolkit when !OperatingSystem.IsWindows():
+                    *(int*)value = Np.ToolkitGtk2;
+                    return Np.NoError;
+                case NPNVariable.SupportsXEmbedBool when !OperatingSystem.IsWindows():
+                    *(byte*)value = 1;
                     return Np.NoError;
                 case NPNVariable.JavascriptEnabledBool:
                     *(byte*)value = 1;
@@ -454,17 +478,17 @@ namespace PommeFlash.Host
                 return 0;
             uint id = _nextTimer++;
             _timers[id] = (function, repeat);
-            Win32.SetTimer(UiThread.Window, id, Math.Max(1, interval), 0);
+            UiThread.Display.StartTimer(id, interval);
             return id;
         }
 
         public void UnscheduleTimer(uint id)
         {
             if (_timers.Remove(id))
-                Win32.KillTimer(UiThread.Window, id);
+                UiThread.Display.StopTimer(id);
         }
 
-        /// <summary>WM_TIMER d'une minuterie du module.</summary>
+        /// <summary>Échéance d'une minuterie du module.</summary>
         public void OnTimer(uint id)
         {
             if (!IsAlive || !_timers.TryGetValue(id, out (nint Function, bool Repeat) timer))
