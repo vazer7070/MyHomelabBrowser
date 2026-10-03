@@ -2,8 +2,8 @@ using System.Runtime.InteropServices;
 
 namespace PommeFlash.Host.Native
 {
-    // Types de l'interface NPAPI (Netscape Plugin API), disposition Windows x64. Écrits d'après la
-    // spécification publique : npapi.h, npfunctions.h et npruntime.h de Mozilla.
+    // Types de l'interface NPAPI (Netscape Plugin API), dispositions de Windows (64 et 32 bits) et de
+    // Linux x64. Écrits d'après la spécification publique : npapi.h, npfunctions.h et npruntime.h de Mozilla.
 
     /// <summary>Instance de module : pdata appartient au module, ndata au navigateur.</summary>
     [StructLayout(LayoutKind.Sequential)]
@@ -32,6 +32,31 @@ namespace PommeFlash.Host.Native
         public uint height;
         public NPRect clipRect;
         public int type;
+    }
+
+    /// <summary>NPWindow des systèmes Unix : ws_info (NPSetWindowCallbackStruct) avant le type.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    struct NPWindowUnix
+    {
+        public nint window;
+        public int x;
+        public int y;
+        public uint width;
+        public uint height;
+        public NPRect clipRect;
+        public nint ws_info;
+        public int type;
+    }
+
+    /// <summary>Affichage X11 donné au module avec sa fenêtre (NPWindow.ws_info, Unix).</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    struct NPSetWindowCallbackStruct
+    {
+        public int type;
+        public nint display;
+        public nint visual;
+        public nuint colormap;
+        public uint depth;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -159,6 +184,12 @@ namespace PommeFlash.Host.Native
 
         public const ushort ModeEmbed = 1;
         public const int WindowTypeWindow = 1;
+
+        /// <summary>NPSetWindowCallbackStruct.type (NP_SETWINDOW).</summary>
+        public const int SetWindow = 1;
+
+        /// <summary>Boîte à outils offerte au module Linux (NPNVToolkit) : GTK 2.</summary>
+        public const int ToolkitGtk2 = 2;
 
         public const uint ClassStructVersion = 3;
     }

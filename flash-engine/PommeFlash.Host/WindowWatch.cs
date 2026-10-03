@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using PommeFlash.Host.Native;
 
 namespace PommeFlash.Host
@@ -9,6 +10,7 @@ namespace PommeFlash.Host
     /// dans le journal, avec son texte : ce que l'utilisateur voit s'y retrouve, et l'on sait si
     /// un message vient de Flash lui-même ou du contenu (qui dessine les siens dans sa fenêtre).
     /// </summary>
+    [SupportedOSPlatform("windows")]
     static unsafe class WindowWatch
     {
         // Chaque seconde pendant deux minutes (démarrage du contenu), puis toutes les cinq secondes.
@@ -51,7 +53,7 @@ namespace PommeFlash.Host
                 {
                     if (SeenWindows.Count >= MaxWindows)
                         break;
-                    if (window == HostWindow.Frame || !Win32.IsWindowVisible(window))
+                    if (window == UiThread.Display.Frame || !Win32.IsWindowVisible(window))
                         continue;
                     uint process;
                     Win32.GetWindowThreadProcessId(window, &process);

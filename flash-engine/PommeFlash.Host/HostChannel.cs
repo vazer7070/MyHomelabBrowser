@@ -1,8 +1,6 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using PommeFlash.Host.Native;
 
 namespace PommeFlash.Host
 {
@@ -176,26 +174,13 @@ namespace PommeFlash.Host
         }
 
         /// <summary>
-        /// Attente d'une réponse sur le fil du module, qui reste bloqué comme dans un navigateur ;
-        /// pendant ce temps, les messages envoyés par les autres fils sont traités (PommeBrowser place
-        /// et affiche la fenêtre du module : sans cela, les deux processus s'attendraient l'un l'autre).
+        /// Attente d'une réponse sur le fil du module, qui reste bloqué comme dans un navigateur
+        /// (sous Windows, les messages envoyés par les autres fils sont traités pendant ce temps).
         /// </summary>
-        static unsafe bool Wait(int id, Task<(bool Ok, object? Value)> reply, TimeSpan timeout, out object? value)
+        static bool Wait(int id, Task<(bool Ok, object? Value)> reply, TimeSpan timeout, out object? value)
         {
-            nint handle = ((IAsyncResult)reply).AsyncWaitHandle.SafeWaitHandle.DangerousGetHandle();
-            var clock = Stopwatch.StartNew();
-            while (!reply.IsCompleted)
-            {
-                long remaining = (long)(timeout - clock.Elapsed).TotalMilliseconds;
-                if (remaining <= 0)
-                    break;
-                uint wait = Win32.MsgWaitForMultipleObjectsEx(1, &handle, (uint)remaining, Win32.QS_SENDMESSAGE, 0);
-                if (wait == Win32.WAIT_OBJECT_0 + 1)
-                {
-                    Win32.MSG message;
-                    Win32.PeekMessageW(&message, 0, 0, 0, Win32.PM_NOREMOVE | Win32.PM_QS_SENDMESSAGE);
-                }
-            }
+            if (!reply.IsCompleted)
+                UiThread.Display.Wait(((IAsyncResult)reply).AsyncWaitHandle, timeout);
 
             if (!reply.IsCompleted)
             {

@@ -1,6 +1,6 @@
 /*
  * Déclarations NPAPI minimales pour le greffon de test de PommeFlashHost, écrites d'après la
- * spécification publique (npapi.h, npfunctions.h, npruntime.h). Windows x64.
+ * spécification publique (npapi.h, npfunctions.h, npruntime.h). Windows (64 et 32 bits) et Linux x64.
  */
 #ifndef POMME_NPAPI_MIN_H
 #define POMME_NPAPI_MIN_H
@@ -9,9 +9,11 @@
 #include <stdbool.h>
 
 /*
- * Points d'entrée NP_* : __stdcall (WINAPI) en 32 bits, exportés sans décoration, comme ceux de
- * Flash : le navigateur les cherche par leur nom. MinGW 32 bits : lier avec -Wl,--kill-at.
+ * Points d'entrée NP_* : sous Windows, __stdcall (WINAPI) en 32 bits, exportés sans décoration,
+ * comme ceux de Flash : le navigateur les cherche par leur nom. MinGW 32 bits : lier avec
+ * -Wl,--kill-at. Sous Linux, symboles visibles d'une bibliothèque partagée.
  */
+#ifdef _WIN32
 #if defined(_M_IX86) && !defined(__MINGW32__)
 #define NP_EXPORT
 #pragma comment(linker, "/EXPORT:NP_GetEntryPoints=_NP_GetEntryPoints@4")
@@ -19,6 +21,10 @@
 #pragma comment(linker, "/EXPORT:NP_Shutdown=_NP_Shutdown@0")
 #else
 #define NP_EXPORT __declspec(dllexport)
+#endif
+#else
+#define NP_EXPORT __attribute__((visibility("default")))
+#define WINAPI
 #endif
 
 typedef unsigned char NPBool;
@@ -38,8 +44,17 @@ typedef void *NPIdentifier;
 typedef struct _NPP { void *pdata; void *ndata; } NPP_t, *NPP;
 typedef struct _NPRect { uint16_t top, left, bottom, right; } NPRect;
 typedef struct _NPWindow {
-    void *window; int32_t x, y; uint32_t width, height; NPRect clipRect; int type;
+    void *window; int32_t x, y; uint32_t width, height; NPRect clipRect;
+#ifndef _WIN32
+    void *ws_info; /* NPSetWindowCallbackStruct : l'affichage X11 */
+#endif
+    int type;
 } NPWindow;
+#ifndef _WIN32
+typedef struct _NPSetWindowCallbackStruct {
+    int32_t type; void *display; void *visual; unsigned long colormap; unsigned int depth;
+} NPSetWindowCallbackStruct;
+#endif
 typedef struct _NPStream {
     void *pdata; void *ndata; const char *url; uint32_t end; uint32_t lastmodified;
     void *notifyData; const char *headers;
@@ -47,11 +62,11 @@ typedef struct _NPStream {
 typedef struct _NPSavedData { int32_t len; void *buf; } NPSavedData;
 
 typedef enum {
-    NPNVnetscapeWindow = 3, NPNVjavascriptEnabledBool = 4, NPNVWindowNPObject = 15,
-    NPNVPluginElementNPObject = 16, NPNVSupportsWindowless = 17, NPNVprivateModeBool = 18,
-    NPNVdocumentOrigin = 22
+    NPNVxDisplay = 1, NPNVnetscapeWindow = 3, NPNVjavascriptEnabledBool = 4, NPNVToolkit = 13,
+    NPNVSupportsXEmbedBool = 14, NPNVWindowNPObject = 15, NPNVPluginElementNPObject = 16,
+    NPNVSupportsWindowless = 17, NPNVprivateModeBool = 18, NPNVdocumentOrigin = 22
 } NPNVariable;
-typedef enum { NPPVpluginNameString = 1, NPPVpluginScriptableNPObject = 15 } NPPVariable;
+typedef enum { NPPVpluginNameString = 1, NPPVpluginDescriptionString = 2, NPPVpluginScriptableNPObject = 15 } NPPVariable;
 
 typedef struct NPObject NPObject;
 typedef struct NPClass NPClass;

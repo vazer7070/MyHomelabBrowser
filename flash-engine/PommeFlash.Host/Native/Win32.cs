@@ -13,6 +13,12 @@ namespace PommeFlash.Host.Native
         public const uint WM_SETFOCUS = 0x0007;
         public const uint WM_CLOSE = 0x0010;
         public const uint WM_ERASEBKGND = 0x0014;
+        public const uint WM_MOUSEACTIVATE = 0x0021;
+        public const uint WM_LBUTTONDOWN = 0x0201;
+        public const uint WM_RBUTTONDOWN = 0x0204;
+        public const uint WM_MBUTTONDOWN = 0x0207;
+        public const uint WM_XBUTTONDOWN = 0x020B;
+        public const uint WM_PARENTNOTIFY = 0x0210;
         public const uint WM_TIMER = 0x0113;
         public const uint WM_APP = 0x8000;
 
@@ -121,6 +127,13 @@ namespace PommeFlash.Host.Native
 
         [LibraryImport(User32)]
         public static partial nint SetFocus(nint hwnd);
+
+        [LibraryImport(User32)]
+        public static partial nint GetFocus();
+
+        [LibraryImport(User32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool IsChild(nint parent, nint hwnd);
 
         [LibraryImport(User32)]
         public static partial nint GetWindow(nint hwnd, uint command);

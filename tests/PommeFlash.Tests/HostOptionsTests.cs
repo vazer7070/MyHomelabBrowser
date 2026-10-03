@@ -42,11 +42,14 @@ public sealed class HostOptionsTests : IDisposable
     public void The_module_sees_the_identity_of_Basilisk_unless_another_is_given()
     {
         string agent = Parse().UserAgent;
-        Assert.StartsWith("Mozilla/5.0 (Windows NT ", agent, StringComparison.Ordinal);
+        Assert.StartsWith(OperatingSystem.IsWindows() ? "Mozilla/5.0 (Windows NT " : "Mozilla/5.0 (X11; Linux ", agent, StringComparison.Ordinal);
         Assert.Contains("Gecko/20100101 Goanna/", agent, StringComparison.Ordinal);
         Assert.Contains(" Firefox/", agent, StringComparison.Ordinal);
         Assert.Contains(" Basilisk/", agent, StringComparison.Ordinal);
-        Assert.Contains(Environment.Is64BitProcess ? "; Win64; x64;" : "; WOW64;", agent, StringComparison.Ordinal);
+        if (OperatingSystem.IsWindows())
+            Assert.Contains(Environment.Is64BitProcess ? "; Win64; x64;" : "; WOW64;", agent, StringComparison.Ordinal);
+        else
+            Assert.Contains("(X11; Linux x86_64;", agent, StringComparison.Ordinal);
 
         Assert.Equal("Autre/1.0", Parse("--user-agent", "Autre/1.0").UserAgent);
     }

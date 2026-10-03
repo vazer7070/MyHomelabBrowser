@@ -2,26 +2,32 @@ using System.Reflection;
 using PommeFlash.Host;
 using PommeFlash.Host.Native;
 
-[assembly: System.Runtime.Versioning.SupportedOSPlatform("windows")]
-
 namespace PommeFlash.Host
 {
     /// <summary>
-    /// Hôte du moteur Flash intégré. Codes de sortie : 0 fin normale, 2 paramètres invalides,
-    /// 3 système non pris en charge, 4 module Flash impossible à charger, 5 contenu refusé par le module.
+    /// Hôte du moteur Flash intégré (Windows, Linux X11). Codes de sortie : 0 fin normale, 2 paramètres
+    /// invalides, 3 système non pris en charge, 4 module Flash impossible à charger ou fenêtre impossible
+    /// à créer, 5 contenu refusé par le module.
     /// </summary>
     static class Program
     {
         static PluginLibrary? _library;
         static PluginInstance? _instance;
+        static IHostDisplay? _display;
         static bool _closing;
 
         static int Main(string[] args)
         {
-            if (!OperatingSystem.IsWindows())
+            if (HostDisplay.ForThisSystem() is not { } display)
             {
-                Console.Error.WriteLine("PommeFlashHost ne fonctionne que sous Windows.");
+                Console.Error.WriteLine("PommeFlashHost ne fonctionne que sous Windows et Linux.");
                 return 3;
+            }
+            _display = display;
+            if (OperatingSystem.IsLinux())
+            {
+                // Fin de PommeBrowser : fin de l'hôte (sous Windows, le job qui le lance s'en charge).
+                Gtk.prctl(Gtk.PrSetPdeathsig, Gtk.SigKill, 0, 0, 0);
             }
 
             HostOptions options;
@@ -48,7 +54,8 @@ namespace PommeFlash.Host
 
             try
             {
-                HostWindow.Create(options);
+                display.Create(options);
+                UiThread.Attach(display);
                 _library = PluginLibrary.Load(options.PluginPath);
             }
             catch (Exception ex)
@@ -65,12 +72,13 @@ namespace PommeFlash.Host
             try
             {
                 _instance = new PluginInstance(_library, options);
-                HostWindow.Attach(_instance, Close);
+                display.Attach(_instance, Close);
                 _instance.Create();
-                (int width, int height) = HostWindow.ClientSize(HostWindow.PluginWindow);
-                _instance.SetWindow(HostWindow.PluginWindow, width, height);
+                (nint window, nint info, int width, int height) = display.PluginArea;
+                _instance.SetWindow(window, info, width, height);
                 _instance.StartSource();
-                WindowWatch.Start();
+                if (OperatingSystem.IsWindows())
+                    WindowWatch.Start();
             }
             catch (Exception ex)
             {
@@ -78,9 +86,9 @@ namespace PommeFlash.Host
                 return 5;
             }
 
-            HostChannel.Send("ready", ("window", (long)HostWindow.Frame));
+            HostChannel.Send("ready", ("window", (long)display.Frame));
 
-            int code = HostWindow.Run();
+            int code = display.Run();
             try
             {
                 _library.Shutdown();
@@ -166,7 +174,7 @@ namespace PommeFlash.Host
             {
                 HostChannel.Error("NPP_Destroy : " + ex.Message);
             }
-            Win32.DestroyWindow(HostWindow.Frame);
+            _display?.Close();
         }
     }
 }

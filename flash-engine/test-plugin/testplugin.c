@@ -6,20 +6,48 @@
  * Compilation : x86_64-w64-mingw32-gcc -shared -O2 -o npPommeTest.dll testplugin.c
  *               (32 bits : i686-w64-mingw32-gcc … -Wl,--kill-at)
  *           ou  clang [--target=i686-pc-windows-msvc] -shared -O2 -o npPommeTest.dll testplugin.c -luser32
+ *     Linux :   gcc -shared -fPIC -O2 -o libnpPommeTest.so testplugin.c $(pkg-config --cflags --libs gtk+-2.0) -lX11 -lpthread
+ *               (GTK 2, comme le module Flash de Linux : sa fenêtre est un GtkPlug dans la prise de l'hôte)
  */
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <pthread.h>
+#include <gtk/gtk.h>
+#include <gdk/gdkx.h>
+#endif
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include "npapi-min.h"
 
+/* Fil du module : celui de la fenêtre ; tout appel du greffon doit s'y faire. */
+#ifdef _WIN32
+typedef DWORD ThreadId;
+static ThreadId currentThread(void) { return GetCurrentThreadId(); }
+static int sameThread(ThreadId a, ThreadId b) { return a == b; }
+#else
+typedef pthread_t ThreadId;
+static ThreadId currentThread(void) { return pthread_self(); }
+static int sameThread(ThreadId a, ThreadId b) { return pthread_equal(a, b) != 0; }
+#endif
 
 static NPNetscapeFuncs *browser;
 static uint16_t browserSize, browserVersion;
-static DWORD mainThread;
+static ThreadId mainThread;
 static NPP instanceNpp;
+#ifdef _WIN32
 static HWND dialog;
+static HWND child;
+#else
+static GtkWidget *plug;
+static int toolkit;
+static NPBool xembed;
+#endif
 static int notifications, timerTicks, asyncDone, streamsDone, finished;
 static uint32_t timerId;
+
+static int onMainThread(void) { return sameThread(currentThread(), mainThread); }
 
 static void report(const char *format, ...)
 {
@@ -95,7 +123,7 @@ static bool scriptableInvoke(NPObject *obj, void *name, const NPVariant *args, u
     if (name != browser->getstringidentifier("CallFunction") || count < 1 || args[0].type != NPVariantType_String)
         return false;
     const NPString *request = &args[0].value.stringValue;
-    report("call main=%d request=%.*s", GetCurrentThreadId() == mainThread, (int)request->UTF8Length, request->UTF8Characters);
+    report("call main=%d request=%.*s", onMainThread(), (int)request->UTF8Length, request->UTF8Characters);
     static const char prefix[] = "retour:";
     uint32_t length = (uint32_t)(sizeof(prefix) - 1) + request->UTF8Length;
     char *text = (char *)browser->memalloc(length + 1);
@@ -217,17 +245,38 @@ static void checkObjects(void)
 
 static void asyncCallback(void *data)
 {
-    report("async main=%d data=%llx", GetCurrentThreadId() == mainThread, (unsigned long long)(uintptr_t)data);
+    report("async main=%d data=%llx", onMainThread(), (unsigned long long)(uintptr_t)data);
     asyncDone = 1;
     checkFinished();
 }
 
+#ifdef _WIN32
 static DWORD WINAPI workerThread(LPVOID unused)
 {
     (void)unused;
     browser->pluginthreadasynccall(instanceNpp, asyncCallback, (void *)0xC0FFEE);
     return 0;
 }
+
+static void startWorker(void)
+{
+    CloseHandle(CreateThread(NULL, 0, workerThread, NULL, 0, NULL));
+}
+#else
+static void *workerThread(void *unused)
+{
+    (void)unused;
+    browser->pluginthreadasynccall(instanceNpp, asyncCallback, (void *)0xC0FFEE);
+    return NULL;
+}
+
+static void startWorker(void)
+{
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, workerThread, NULL) == 0)
+        pthread_detach(thread);
+}
+#endif
 
 static void timerCallback(NPP npp, uint32_t id)
 {
@@ -237,7 +286,7 @@ static void timerCallback(NPP npp, uint32_t id)
     if (++timerTicks == 3)
     {
         browser->unscheduletimer(instanceNpp, timerId);
-        report("timer ticks=%d main=%d", timerTicks, GetCurrentThreadId() == mainThread);
+        report("timer ticks=%d main=%d", timerTicks, onMainThread());
         checkFinished();
     }
 }
@@ -285,8 +334,20 @@ static void checkCookies(const char *url)
     report("set-cookie=%d", ((SetValueForUrlFunc)browser->setvalueforurl)(instanceNpp, 501, url, cookie, (uint32_t)strlen(cookie)));
 }
 
+/* Clic dans la fenêtre du greffon, tel que Windows le signale (WM_MOUSEACTIVATE, remonté aux
+   parents) : l'hôte doit lui donner le clavier, comme un navigateur. */
+static void checkClickFocus(void)
+{
+#ifdef _WIN32
+    SetFocus(NULL);
+    SendMessageA(child, WM_MOUSEACTIVATE, (WPARAM)GetAncestor(child, GA_ROOT), MAKELONG(HTCLIENT, WM_LBUTTONDOWN));
+    report("click-focus=%d", child != NULL && GetFocus() == child);
+#endif
+}
+
 static void continueScenario(const char *movieUrl)
 {
+    checkClickFocus();
     evaluateScript("try { __flash__toXML(pommeAdd(2,3)) ; } catch (e) { \"<undefined/>\"; }", "script");
     evaluateScript("pommeRefuse()", "script-refused");
     checkCookies(movieUrl);
@@ -297,7 +358,7 @@ static void continueScenario(const char *movieUrl)
     browser->geturl(instanceNpp, "https://example.org/page", "_blank");
     browser->geturl(instanceNpp, "javascript:window.alert('pomme')", NULL);
     timerId = browser->scheduletimer(instanceNpp, 30, 1, timerCallback);
-    CloseHandle(CreateThread(NULL, 0, workerThread, NULL, 0, NULL));
+    startWorker();
 }
 
 /* ------------------------------------------------------------------ */
@@ -310,8 +371,12 @@ static NPError NPP_New(NPMIMEType type, NPP npp, uint16_t mode, int16_t argc, ch
 {
     (void)saved;
     instanceNpp = npp;
-    mainThread = GetCurrentThreadId();
+    mainThread = currentThread();
     report("init size=%u version=%u", browserSize, browserVersion);
+#ifndef _WIN32
+    /* Demandés à NP_Initialize, sans instance, comme Flash le fait. */
+    report("toolkit=%d xembed=%d", toolkit, xembed);
+#endif
     report("new mime=%s mode=%u argc=%d", type, mode, argc);
     for (int i = 0; i < argc; i++)
         report("arg %s=%s", argn[i], argv[i] ? argv[i] : "(null)");
@@ -335,12 +400,14 @@ static NPError NPP_New(NPMIMEType type, NPP npp, uint16_t mode, int16_t argc, ch
     checkIdentifiers();
     checkObjects();
 
+#ifdef _WIN32
     /* Comme une boîte de dialogue de Flash : une fenêtre à part, avec un texte, que l'hôte note
        dans son journal. Hors de l'écran et sans prendre le clavier. */
     dialog = CreateWindowExA(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, "STATIC", "TEST dialogue", WS_POPUP | WS_VISIBLE,
                              -3000, -3000, 240, 80, NULL, NULL, NULL, NULL);
     if (dialog)
         CreateWindowExA(0, "STATIC", "Texte du dialogue de test", WS_CHILD | WS_VISIBLE, 0, 0, 240, 40, dialog, NULL, NULL, NULL);
+#endif
     return NPERR_NO_ERROR;
 }
 
@@ -354,18 +421,26 @@ static NPError NPP_Destroy(NPP npp, NPSavedData **save)
         browser->releaseobject(scriptable);
         scriptable = NULL;
     }
+#ifdef _WIN32
     if (dialog)
     {
         DestroyWindow(dialog);
         dialog = NULL;
     }
+#else
+    if (plug)
+    {
+        gtk_widget_destroy(plug);
+        plug = NULL;
+    }
+#endif
     return NPERR_NO_ERROR;
 }
 
 static NPError NPP_SetWindow(NPP npp, NPWindow *window)
 {
     (void)npp;
-    static HWND child;
+#ifdef _WIN32
     HWND parent = (HWND)window->window;
     report("window valid=%d width=%u height=%u type=%d", parent != NULL && IsWindow(parent), window->width, window->height, window->type);
     /* Comme Flash : une fenêtre à lui dans celle du navigateur. */
@@ -373,6 +448,31 @@ static NPError NPP_SetWindow(NPP npp, NPWindow *window)
         child = CreateWindowExA(0, "STATIC", "Greffon de test PommeFlash", WS_CHILD | WS_VISIBLE, 0, 0, (int)window->width, (int)window->height, parent, NULL, NULL, NULL);
     else if (child)
         MoveWindow(child, 0, 0, (int)window->width, (int)window->height, TRUE);
+#else
+    /* Comme Flash sous Linux : la fenêtre donnée est une prise XEmbed (GtkSocket) du navigateur,
+       décrite avec l'affichage X11 (ws_info) ; le greffon y branche un GtkPlug, avec la GTK 2 que
+       l'hôte a chargée (même processus : la prise l'adopte directement). */
+    NPSetWindowCallbackStruct *info = (NPSetWindowCallbackStruct *)window->ws_info;
+    Display *display = info ? (Display *)info->display : NULL;
+    Window parent = (Window)(uintptr_t)window->window;
+    XWindowAttributes attributes;
+    int valid = display && parent && XGetWindowAttributes(display, parent, &attributes);
+    report("window valid=%d width=%u height=%u type=%d", valid, window->width, window->height, window->type);
+    if (info)
+    {
+        void *shared = NULL;
+        browser->getvalue(instanceNpp, NPNVxDisplay, &shared);
+        report("ws-info type=%d display=%d visual=%d depth=%u", info->type, shared != NULL && shared == info->display,
+               info->visual != NULL, info->depth);
+    }
+    if (valid && !plug)
+    {
+        plug = gtk_plug_new((GdkNativeWindow)parent);
+        gtk_container_add(GTK_CONTAINER(plug), gtk_drawing_area_new());
+        gtk_widget_show_all(plug);
+        report("plug embedded=%d", gtk_plug_get_embedded(GTK_PLUG(plug)) ? 1 : 0);
+    }
+#endif
     return NPERR_NO_ERROR;
 }
 
@@ -450,7 +550,12 @@ static NPError NPP_GetValue(NPP npp, NPPVariable variable, void *value)
         *(const char **)value = "Pomme Test";
         return NPERR_NO_ERROR;
     }
-    if (variable == NPPVpluginScriptableNPObject)
+    if (variable == NPPVpluginDescriptionString)
+    {
+        *(const char **)value = "Greffon NPAPI de test de PommeFlashHost";
+        return NPERR_NO_ERROR;
+    }
+    if (variable == NPPVpluginScriptableNPObject && npp)
     {
         /* Une référence gardée par le greffon, une donnée au navigateur. */
         if (!scriptable)
@@ -469,10 +574,8 @@ static NPError NPP_SetValue(NPP npp, NPNVariable variable, void *value)
     return NPERR_GENERIC_ERROR;
 }
 
-NP_EXPORT NPError WINAPI NP_GetEntryPoints(NPPluginFuncs *funcs)
+static void fillPluginFuncs(NPPluginFuncs *funcs)
 {
-    if (!funcs || funcs->size < sizeof(NPPluginFuncs))
-        return 3; /* NPERR_INVALID_FUNCTABLE_ERROR */
     funcs->version = 29;
     funcs->newp = NPP_New;
     funcs->destroy = NPP_Destroy;
@@ -484,6 +587,14 @@ NP_EXPORT NPError WINAPI NP_GetEntryPoints(NPPluginFuncs *funcs)
     funcs->urlnotify = NPP_URLNotify;
     funcs->getvalue = NPP_GetValue;
     funcs->setvalue = NPP_SetValue;
+}
+
+#ifdef _WIN32
+NP_EXPORT NPError WINAPI NP_GetEntryPoints(NPPluginFuncs *funcs)
+{
+    if (!funcs || funcs->size < sizeof(NPPluginFuncs))
+        return 3; /* NPERR_INVALID_FUNCTABLE_ERROR */
+    fillPluginFuncs(funcs);
     return NPERR_NO_ERROR;
 }
 
@@ -496,6 +607,33 @@ NP_EXPORT NPError WINAPI NP_Initialize(NPNetscapeFuncs *funcs)
     browserVersion = funcs->version;
     return NPERR_NO_ERROR;
 }
+#else
+/* Linux : une seule entrée reçoit la table du navigateur et remplit celle du module. */
+NP_EXPORT NPError NP_Initialize(NPNetscapeFuncs *funcs, NPPluginFuncs *pluginFuncs)
+{
+    if (!funcs || !pluginFuncs || pluginFuncs->size < sizeof(NPPluginFuncs))
+        return 3;
+    browser = funcs;
+    browserSize = funcs->size;
+    browserVersion = funcs->version;
+    fillPluginFuncs(pluginFuncs);
+    /* Comme Flash : boîte à outils (GTK 2 attendu) et XEmbed demandés dès maintenant, sans instance. */
+    browser->getvalue(NULL, NPNVToolkit, &toolkit);
+    browser->getvalue(NULL, NPNVSupportsXEmbedBool, &xembed);
+    return NPERR_NO_ERROR;
+}
+
+NP_EXPORT const char *NP_GetMIMEDescription(void)
+{
+    return "application/x-shockwave-flash:swf:Shockwave Flash";
+}
+
+NP_EXPORT NPError NP_GetValue(void *instance, NPPVariable variable, void *value)
+{
+    (void)instance;
+    return NPP_GetValue(NULL, variable, value);
+}
+#endif
 
 NP_EXPORT NPError WINAPI NP_Shutdown(void)
 {

@@ -63,13 +63,26 @@ public sealed class HostProtocolTests
         Assert.Contains("arg wmode=window", reports);
         Assert.Contains("arg id=jeu", reports);
         Assert.Contains("window valid=1 width=400 height=300 type=1", reports);
+        if (HostRun.IsWindowsHost)
+        {
+            // Un clic dans le contenu lui donne le clavier.
+            Assert.Contains("click-focus=1", reports);
+        }
+        else
+        {
+            // Linux : GTK 2 et XEmbed annoncés dès NP_Initialize, affichage X11 donné avec la fenêtre.
+            Assert.Contains("toolkit=2 xembed=1", reports);
+            Assert.Contains(reports, r => r.StartsWith("ws-info type=1 display=1 visual=1 depth=", StringComparison.Ordinal));
+            Assert.Contains("plug embedded=1", reports);
+        }
         JsonElement ready = host.Events.First(e => e.GetProperty("event").GetString() == "ready");
         Assert.NotEqual(0, ready.GetProperty("window").GetInt64());
 
         // Questions sur la page.
-        // Identité de Basilisk, avec l'architecture de l'hôte.
+        // Identité de Basilisk, avec le système et l'architecture de l'hôte.
+        string system = !HostRun.IsWindowsHost ? "X11; Linux x86_64" : HostRun.Is32BitHost ? "WOW64" : "Win64; x64";
         Assert.Contains(reports, r => r.StartsWith("ua=Mozilla/5.0", StringComparison.Ordinal) && r.Contains("Goanna/", StringComparison.Ordinal) &&
-                                      r.Contains("Basilisk/", StringComparison.Ordinal) && r.Contains(HostRun.Is32BitHost ? "WOW64" : "Win64; x64", StringComparison.Ordinal));
+                                      r.Contains("Basilisk/", StringComparison.Ordinal) && r.Contains(system, StringComparison.Ordinal));
         Assert.Contains($"origin=http://127.0.0.1:{server.Port}", reports);
         Assert.Contains("javascript=1", reports);
         Assert.Contains("windowless=0", reports);
@@ -115,14 +128,17 @@ public sealed class HostProtocolTests
         Assert.Contains("async main=1 data=c0ffee", reports);
         Assert.Contains("timer ticks=3 main=1", reports);
 
-        // Diagnostic : fenêtres ouvertes par le module (comme une boîte de Flash), notées avec
-        // leur texte ; pages demandées avec une cible ; programmes Flash présents.
-        await host.WaitForAsync(h => h.Events.Any(e => IsLog(e, "Fenêtre ouverte par le module : « TEST dialogue »")), TimeSpan.FromSeconds(20));
-        Assert.Contains(host.Events, e => IsLog(e, "« Texte du dialogue de test »"));
+        // Diagnostic : pages demandées avec une cible ; sous Windows, fenêtres ouvertes par le
+        // module (comme une boîte de Flash), notées avec leur texte, et programmes Flash présents.
         Assert.Contains(host.Events, e => IsLog(e, "Page demandée par le contenu (cible _blank) : https://example.org/page"));
-        // La liste des processus est lue (structure de la bonne taille, en 64 comme en 32 bits).
-        string programs = host.Events.Where(e => IsLog(e, "Programmes Flash déjà en cours : ")).Select(e => e.GetProperty("message").GetString()!).Single();
-        Assert.Matches(@"\(([1-9]\d*) processus vus\)$", programs);
+        if (HostRun.IsWindowsHost)
+        {
+            await host.WaitForAsync(h => h.Events.Any(e => IsLog(e, "Fenêtre ouverte par le module : « TEST dialogue »")), TimeSpan.FromSeconds(20));
+            Assert.Contains(host.Events, e => IsLog(e, "« Texte du dialogue de test »"));
+            // La liste des processus est lue (structure de la bonne taille, en 64 comme en 32 bits).
+            string programs = host.Events.Where(e => IsLog(e, "Programmes Flash déjà en cours : ")).Select(e => e.GetProperty("message").GetString()!).Single();
+            Assert.Matches(@"\(([1-9]\d*) processus vus\)$", programs);
+        }
 
         // Appel de la page vers le contenu (ExternalInterface.addCallback) : CallFunction sur
         // l'objet scriptable du module, sur son fil, et sa réponse renvoyée à PommeBrowser.

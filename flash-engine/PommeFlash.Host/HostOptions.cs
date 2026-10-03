@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 
 namespace PommeFlash.Host
 {
@@ -34,14 +35,30 @@ namespace PommeFlash.Host
 
         /// <summary>
         /// Identité de navigateur donnée au module (NPN_UserAgent) et aux chargements : celle de
-        /// Basilisk, où les contenus fonctionnent, avec l'architecture de l'hôte (WOW64 pour un
-        /// hôte 32 bits sur Windows 64 bits, comme un Basilisk 32 bits).
+        /// Basilisk, où les contenus fonctionnent, avec le système et l'architecture de l'hôte
+        /// (WOW64 pour un hôte 32 bits sur Windows 64 bits, comme un Basilisk 32 bits).
         /// </summary>
         public static string BasiliskUserAgent()
         {
-            Version os = OperatingSystem.IsWindows() ? Environment.OSVersion.Version : new Version(10, 0);
-            string platform = Environment.Is64BitProcess ? "; Win64; x64" : Environment.Is64BitOperatingSystem ? "; WOW64" : string.Empty;
-            return $"Mozilla/5.0 (Windows NT {os.Major}.{os.Minor}{platform}; rv:140.0) Gecko/20100101 Goanna/6.9 Firefox/140.0 Basilisk/20250701";
+            string system;
+            if (OperatingSystem.IsWindows())
+            {
+                Version os = Environment.OSVersion.Version;
+                string platform = Environment.Is64BitProcess ? "; Win64; x64" : Environment.Is64BitOperatingSystem ? "; WOW64" : string.Empty;
+                system = $"Windows NT {os.Major}.{os.Minor}{platform}";
+            }
+            else
+            {
+                string machine = RuntimeInformation.OSArchitecture switch
+                {
+                    Architecture.X64 => "x86_64",
+                    Architecture.X86 => "i686",
+                    Architecture.Arm64 => "aarch64",
+                    _ => RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant()
+                };
+                system = "X11; Linux " + machine;
+            }
+            return $"Mozilla/5.0 ({system}; rv:140.0) Gecko/20100101 Goanna/6.9 Firefox/140.0 Basilisk/20250701";
         }
 
         public static HostOptions Parse(IReadOnlyList<string> args)
