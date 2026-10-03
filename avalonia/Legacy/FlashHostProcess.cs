@@ -164,10 +164,8 @@ namespace PommeBrowser.Legacy
             }
             if (isPrivate)
                 yield return "--private";
-            // Cookies de la page donnés au lecteur, et ceux qu'il reçoit gardés dans la page
-            // (WebView2 ; sous Linux, WebKitGTK viendra à l'étape suivante : l'hôte garde ses propres cookies).
-            if (OperatingSystem.IsWindows())
-                yield return "--share-cookies";
+            // Cookies de la page donnés au lecteur, et ceux qu'il reçoit gardés dans la page (WebView2, WebKitGTK).
+            yield return "--share-cookies";
             // Fenêtre cachée jusqu'à ce que l'onglet la loge.
             yield return "--hidden";
         }

@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.Versioning;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -11,7 +10,7 @@ using static MyHomelabBrowser.classes.Localization.Loc;
 namespace PommeBrowser.Views
 {
     /// <summary>
-    /// Moteur Flash intégré dans la page (Windows) : le contenu garde sa place. Le script de suivi
+    /// Moteur Flash intégré dans la page (Windows, Linux sous X11) : le contenu garde sa place. Le script de suivi
     /// remplace l'élément par un emplacement vide et en envoie la position ; la fenêtre du lecteur
     /// (PommeFlashHost) est logée par-dessus la page web, à cet endroit, et la suit (défilement,
     /// taille, mise en page). Seule la partie visible dans la zone de la page est affichée.
@@ -33,7 +32,6 @@ namespace PommeBrowser.Views
         bool CanPlaceInPage(FlashContent content)
             => Page == TabPage.Web && _engine != null && _web != null && LegacyView.IsSupported && IsTopDocument(content);
 
-        [SupportedOSPlatform("windows")]
         void OpenFlashInPage(FlashContent content, string module)
         {
             CloseFlashOverlay();
@@ -113,7 +111,7 @@ namespace PommeBrowser.Views
         /// <summary>Relance après un arrêt du lecteur : le script de suivi reprend l'emplacement laissé dans la page.</summary>
         void RelaunchFlashInPage(FlashContent content)
         {
-            if (!OperatingSystem.IsWindows() || HasFlashOverlay || !CanPlaceInPage(content))
+            if (HasFlashOverlay || !CanPlaceInPage(content))
                 return;
             if (NextFlashModule(null) is { } module)
                 OpenFlashInPage(content, module);
@@ -142,16 +140,9 @@ namespace PommeBrowser.Views
             if (json == "null")
             {
                 // Élément disparu ou dans un cadre : le contenu est lu à la place de la page, avec le même module.
-                if (OperatingSystem.IsWindows())
-                {
-                    string? module = (_overlayHost as FlashHostProcess)?.Module;
-                    CloseFlashOverlay();
-                    OpenInIntegratedFlash(content, module);
-                }
-                else
-                {
-                    CloseFlashOverlay();
-                }
+                string? module = (_overlayHost as FlashHostProcess)?.Module;
+                CloseFlashOverlay();
+                OpenInIntegratedFlash(content, module);
                 return;
             }
             if (FlashRect.Parse(json) is { } rect)

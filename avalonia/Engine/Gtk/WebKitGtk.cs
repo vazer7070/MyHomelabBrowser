@@ -29,6 +29,9 @@ namespace PommeBrowser.Engine.Gtk
 
         [DllImport(GLibLib)] public static extern void g_free(nint memory);
         [DllImport(GLibLib)] public static extern void g_error_free(nint error);
+        [DllImport(GLibLib)] public static extern void g_list_free(nint list);
+        [DllImport(GLibLib)] public static extern nint g_date_time_new_from_unix_utc(long seconds);
+        [DllImport(GLibLib)] public static extern void g_date_time_unref(nint dateTime);
         [DllImport(GLibLib)] public static extern nint g_bytes_new(byte* data, nuint size);
         [DllImport(GLibLib)] public static extern void g_bytes_unref(nint bytes);
         [DllImport(GLibLib)] public static extern void g_set_prgname([MarshalAs(UnmanagedType.LPUTF8Str)] string name);
@@ -172,6 +175,15 @@ namespace PommeBrowser.Engine.Gtk
         [DllImport(Soup)] public static extern nint soup_message_headers_get_one(nint headers, [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
         [DllImport(Soup)] public static extern nint soup_message_headers_new(int type);
         [DllImport(Soup)] public static extern void soup_message_headers_append(nint headers, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, [MarshalAs(UnmanagedType.LPUTF8Str)] string value);
+        [DllImport(Soup)] public static extern nint soup_cookie_new([MarshalAs(UnmanagedType.LPUTF8Str)] string name, [MarshalAs(UnmanagedType.LPUTF8Str)] string value, [MarshalAs(UnmanagedType.LPUTF8Str)] string domain, [MarshalAs(UnmanagedType.LPUTF8Str)] string path, int maxAge);
+        [DllImport(Soup)] public static extern void soup_cookie_free(nint cookie);
+        [DllImport(Soup)] public static extern void soup_cookie_set_expires(nint cookie, nint expires);
+        [DllImport(Soup)] public static extern void soup_cookie_set_secure(nint cookie, int secure);
+        [DllImport(Soup)] public static extern void soup_cookie_set_http_only(nint cookie, int httpOnly);
+        [DllImport(Soup)] public static extern void soup_cookie_set_same_site_policy(nint cookie, int policy);
+        [DllImport(Soup)] public static extern nint soup_cookie_get_name(nint cookie);
+        [DllImport(Soup)] public static extern nint soup_cookie_get_value(nint cookie);
+        [DllImport(Soup)] public static extern int soup_cookie_get_http_only(nint cookie);
 
         public const int PolicyNavigationAction = 0;
         public const int PolicyNewWindowAction = 1;
@@ -209,18 +221,29 @@ namespace PommeBrowser.Engine.Gtk
         [DllImport(WebKit)] public static extern void webkit_security_manager_register_uri_scheme_as_cors_enabled(nint manager, [MarshalAs(UnmanagedType.LPUTF8Str)] string scheme);
         [DllImport(WebKit)] public static extern void webkit_cookie_manager_set_persistent_storage(nint manager, [MarshalAs(UnmanagedType.LPUTF8Str)] string filename, int storage);
         [DllImport(WebKit)] public static extern void webkit_cookie_manager_set_accept_policy(nint manager, int policy);
+        [DllImport(WebKit)] public static extern void webkit_cookie_manager_get_cookies(nint manager, [MarshalAs(UnmanagedType.LPUTF8Str)] string uri, nint cancellable, nint callback, nint data);
+        [DllImport(WebKit)] public static extern nint webkit_cookie_manager_get_cookies_finish(nint manager, nint result, out nint error);
+        [DllImport(WebKit)] public static extern void webkit_cookie_manager_add_cookie(nint manager, nint cookie, nint cancellable, nint callback, nint data);
+        [DllImport(WebKit)] public static extern int webkit_cookie_manager_add_cookie_finish(nint manager, nint result, out nint error);
+        [DllImport(WebKit)] public static extern void webkit_cookie_manager_delete_cookie(nint manager, nint cookie, nint cancellable, nint callback, nint data);
+        [DllImport(WebKit)] public static extern int webkit_cookie_manager_delete_cookie_finish(nint manager, nint result, out nint error);
         [DllImport(WebKit)] public static extern void webkit_website_data_manager_set_itp_enabled(nint manager, int enabled);
         [DllImport(WebKit)] public static extern void webkit_website_data_manager_set_tls_errors_policy(nint manager, int policy);
         [DllImport(WebKit)] public static extern void webkit_website_data_manager_clear(nint manager, int types, long timeSpan, nint cancellable, nint callback, nint data);
         [DllImport(WebKit)] public static extern int webkit_website_data_manager_clear_finish(nint manager, nint result, out nint error);
 
         public const int CookieStorageSqlite = 1;
+        public const int SoupSameSiteNone = 0;
+        public const int SoupSameSiteLax = 1;
+        public const int SoupSameSiteStrict = 2;
         public const int CookiesAlways = 0;
         public const int CookiesNoThirdParty = 2;
         public const int WebsiteDataAll = (1 << 14) - 1;
 
         // Schéma d'adresse propre à PommeBrowser (Ruffle)
         [DllImport(WebKit)] public static extern nint webkit_uri_scheme_request_get_path(nint request);
+        [DllImport(WebKit)] public static extern nint webkit_uri_scheme_request_get_uri(nint request);
+        [DllImport(WebKit)] public static extern nint webkit_uri_scheme_request_get_web_view(nint request);
         [DllImport(WebKit)] public static extern nint webkit_uri_scheme_response_new(nint stream, long length);
         [DllImport(WebKit)] public static extern void webkit_uri_scheme_response_set_status(nint response, uint status, [MarshalAs(UnmanagedType.LPUTF8Str)] string? reason);
         [DllImport(WebKit)] public static extern void webkit_uri_scheme_response_set_content_type(nint response, [MarshalAs(UnmanagedType.LPUTF8Str)] string type);
