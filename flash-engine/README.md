@@ -214,5 +214,8 @@ Sans le réglage, sans module Flash ou sans description du contenu, Basilisk res
       celui d'un dossier de modules du système), le loge dans l'onglet à la place de la page
       (X11Dock, comme Basilisk : le clic lui donne le clavier) et le livre dans l'AppImage x86_64
       (`usr/lib/pommebrowser/flash/PommeFlashHost`). Il faut GTK 2 sur la machine (`libgtk2.0-0`).
-   c. Contenu à sa place dans la page sous X11 ; cookies partagés avec WebKitGTK (en attendant,
-      l'hôte garde ses propres cookies sous Linux).
+   c. **Contenu à sa place dans la page sous X11, cookies et appels de la page** (fait) : la
+      fenêtre de l'hôte est logée par-dessus la page WebKitGTK à la place du contenu (X11Dock :
+      place demandée, premier plan), les cookies passent par le gestionnaire de cookies de WebKit
+      (`--share-cookies`), et la page appelle le contenu (`addCallback`) par une requête synchrone
+      au schéma `pomme-flash://call/?r=…`, servie par PommeBrowser.

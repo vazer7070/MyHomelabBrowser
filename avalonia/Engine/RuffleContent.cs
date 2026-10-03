@@ -261,11 +261,18 @@ namespace PommeBrowser.Engine
         public const string FlashBridgeName = "pommeFlash";
 
         /// <summary>
+        /// Schéma d'adresse du pont sous WebKitGTK : la page appelle le contenu par une requête
+        /// synchrone « pomme-flash://call/?r=requête » (comme un greffon, elle attend la réponse).
+        /// </summary>
+        public const string FlashBridgeScheme = "pomme-flash";
+
+        /// <summary>
         /// Appels de la page vers le contenu lu par le moteur intégré (ExternalInterface.addCallback).
         /// Flash déclare ses fonctions par __flash__addCallback(élément, nom) : elles appellent
         /// élément.CallFunction(requête XML) et évaluent la réponse. L'élément du contenu (repéré par
         /// data-pomme-flash ou son identifiant) reçoit ce CallFunction, qui passe par l'objet
-        /// <see cref="FlashBridgeName"/> de PommeBrowser, appelé de façon synchrone comme un greffon.
+        /// <see cref="FlashBridgeName"/> de PommeBrowser (WebView2) ou par une requête synchrone au
+        /// schéma <see cref="FlashBridgeScheme"/> (WebKitGTK), appelé de façon synchrone comme un greffon.
         /// Sans réponse, l'appel rend undefined.
         /// </summary>
         public static string FlashBridgeScript(string? elementId) => """
@@ -273,7 +280,11 @@ namespace PommeBrowser.Engine
               const call = (request) => {
                 try {
                   const bridge = window.chrome && chrome.webview && chrome.webview.hostObjects && chrome.webview.hostObjects.sync.__BRIDGE__;
-                  return bridge ? bridge.CallFunction(String(request)) : undefined;
+                  if (bridge) return bridge.CallFunction(String(request));
+                  const xhr = new XMLHttpRequest();
+                  xhr.open('GET', '__SCHEME__://call/?r=' + encodeURIComponent(String(request)), false);
+                  xhr.send();
+                  return xhr.status === 200 ? xhr.responseText : undefined;
                 } catch (e) { return undefined; }
               };
               const equip = (element) => {
@@ -286,6 +297,7 @@ namespace PommeBrowser.Engine
               if (id) equip(document.getElementById(id));
             })();
             """.Replace("__BRIDGE__", FlashBridgeName, StringComparison.Ordinal)
+               .Replace("__SCHEME__", FlashBridgeScheme, StringComparison.Ordinal)
                .Replace("__ID__", JsonSerializer.Serialize(elementId ?? string.Empty), StringComparison.Ordinal);
 
         /// <summary>Fichier demandé par la page (nom seul) : contenu et type, ou null s'il n'existe pas.</summary>

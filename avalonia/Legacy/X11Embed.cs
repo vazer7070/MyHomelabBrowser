@@ -305,6 +305,7 @@ namespace PommeBrowser.Legacy
         bool _wantKeyboard;
         nint _topLevel;
         long _dockedAt;
+        (int X, int Y, int Width, int Height)? _placement;
 
         public X11Dock(X11Embed x) => _x = x;
 
@@ -314,6 +315,8 @@ namespace PommeBrowser.Legacy
         public Task<bool> DestroyAsync() => _x.Invoke(() => { Destroy(); return true; });
         public void PostKeyboard(bool page, nint topLevel) => _x.Post(() => SetKeyboard(page, topLevel));
         public Task<nint> FindClientWindowAsync(IReadOnlySet<int> pids) => _x.Invoke(() => _x.FindClientWindow(pids));
+        public void PostPlacement((int X, int Y, int Width, int Height)? placement) => _x.Post(() => SetPlacement(placement));
+        public void BringToFront(nint topLevel) => _x.Post(() => Raise(topLevel));
 
         public nint Host { get; private set; }
 
@@ -380,12 +383,57 @@ namespace PommeBrowser.Legacy
 
             _dockedAt = Environment.TickCount64;
             X.XReparentWindow(display, client, Host, 0, 0);
-            X.XMoveResizeWindow(display, client, 0, 0, _width, _height);
+            Fit();
             X.XMapWindow(display, client);
             X.XRaiseWindow(display, _shield);
             GrabShortcuts(client);
             X.XSync(display, false);
             return true;
+        }
+
+        /// <summary>
+        /// Position et taille de la fenêtre logée dans l'accueil (pixels), ou null pour qu'elle le
+        /// remplisse. Plus grande que l'accueil s'il le faut : il n'en montre que la partie qui le
+        /// recouvre (moteur Flash intégré à sa place dans la page). Gardée si l'accueil change de taille. Fil X11.
+        /// </summary>
+        void SetPlacement((int X, int Y, int Width, int Height)? placement)
+        {
+            if (_placement == placement)
+                return;
+            _placement = placement;
+            Fit();
+        }
+
+        /// <summary>Géométrie voulue pour la fenêtre logée, dans l'accueil.</summary>
+        (int X, int Y, int Width, int Height) Geometry()
+            => _placement is { } p ? (p.X, p.Y, Math.Max(1, p.Width), Math.Max(1, p.Height)) : (0, 0, _width, _height);
+
+        void Fit()
+        {
+            if (_client == 0)
+                return;
+            (int x, int y, int width, int height) = Geometry();
+            X.XMoveResizeWindow(_x.Display, _client, x, y, width, height);
+        }
+
+        /// <summary>
+        /// L'accueil passe devant les autres vues natives de la fenêtre de PommeBrowser (la page
+        /// web, qu'il recouvre) : sa fenêtre la plus haute sous celle de PommeBrowser remonte en tête. Fil X11.
+        /// </summary>
+        void Raise(nint topLevel)
+        {
+            if (Host == 0 || topLevel == 0)
+                return;
+            nint window = Host;
+            for (int i = 0; i < 64; i++)
+            {
+                nint parent = _x.Parent(window);
+                if (parent == 0 || parent == _x.Root || parent == topLevel)
+                    break;
+                window = parent;
+            }
+            X.XRaiseWindow(_x.Display, window);
+            X.XFlush(_x.Display);
         }
 
         void GrabShortcuts(nint client)
@@ -534,15 +582,17 @@ namespace PommeBrowser.Legacy
                     _width = Math.Max(1, *(int*)(ev + 56));
                     _height = Math.Max(1, *(int*)(ev + 60));
                     X.XResizeWindow(display, _shield, (uint)_width, (uint)_height);
-                    if (_client != 0)
-                        X.XMoveResizeWindow(display, _client, 0, 0, _width, _height);
+                    Fit();
                     break;
 
                 case X.ConfigureNotify when _client != 0 && *(nint*)(ev + 40) == _client:
-                    // Basilisk ne choisit pas sa taille : il remplit l'onglet.
-                    if (*(int*)(ev + 48) != 0 || *(int*)(ev + 52) != 0 || *(int*)(ev + 56) != _width || *(int*)(ev + 60) != _height)
-                        X.XMoveResizeWindow(display, _client, 0, 0, _width, _height);
+                {
+                    // Le programme logé ne choisit pas sa place : il remplit l'onglet, ou prend la place demandée.
+                    (int x, int y, int width, int height) = Geometry();
+                    if (*(int*)(ev + 48) != x || *(int*)(ev + 52) != y || *(int*)(ev + 56) != width || *(int*)(ev + 60) != height)
+                        X.XMoveResizeWindow(display, _client, x, y, width, height);
                     break;
+                }
 
                 case X.ButtonPress:
                 {

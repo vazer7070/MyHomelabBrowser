@@ -44,6 +44,8 @@ namespace PommeBrowser.Engine.Gtk
         static readonly nint NotFoundCallback = (nint)(delegate* unmanaged[Cdecl]<nint, nint, void>)&OnNotFound;
         static readonly nint ScriptMessageCallback = (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&OnScriptMessage;
         static readonly nint EvaluatedCallback = (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&OnEvaluated;
+        static readonly nint CookiesReadCallback = (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&OnCookiesRead;
+        static readonly nint CookieStoredCallback = (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&OnCookieStored;
         static readonly nint KeyPressCallback = (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, int>)&OnKeyPress;
         static readonly nint ButtonPressCallback = (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, int>)&OnButtonPress;
         static readonly nint WindowFocusInCallback = (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, int>)&OnWindowFocusIn;
@@ -834,14 +836,154 @@ namespace PommeBrowser.Engine.Gtk
 
         public void ShowDevTools() => OnView(view => webkit_web_inspector_show(webkit_web_view_get_inspector(view)));
 
-        /// <summary>Le moteur Flash intégré n'existe que sous Windows : pas de partage ici.</summary>
-        public Task<string?> GetCookieHeaderAsync(Uri url, bool includeHttpOnly) => Task.FromResult<string?>(null);
+        // ---------------------------------------------------------------
+        // Moteur Flash intégré : cookies de la page et appels de la page vers le contenu
+        // ---------------------------------------------------------------
 
-        public Task SetCookieAsync(PageCookie cookie) => Task.CompletedTask;
+        /// <summary>Réponse aux appels de la page vers le contenu Flash (fil de l'interface) ; null : aucun lecteur.</summary>
+        public Func<string, string?>? FlashBridge => _flashBridge;
 
-        public void SetFlashBridge(Func<string, string?>? callFunction)
+        volatile Func<string, string?>? _flashBridge;
+
+        /// <summary>Cookies de la page pour une adresse (en-tête Cookie), lus dans le gestionnaire de cookies de WebKit.</summary>
+        public Task<string?> GetCookieHeaderAsync(Uri url, bool includeHttpOnly)
         {
+            var query = new CookieQuery(includeHttpOnly);
+            GCHandle handle = GCHandle.Alloc(query);
+            Glib.Post(() =>
+            {
+                if (_disposed || _view == 0)
+                {
+                    handle.Free();
+                    query.Completion.TrySetResult(null);
+                    return;
+                }
+                nint manager = webkit_web_context_get_cookie_manager(webkit_web_view_get_context(_view));
+                webkit_cookie_manager_get_cookies(manager, url.AbsoluteUri, 0, CookiesReadCallback, GCHandle.ToIntPtr(handle));
+            });
+            return query.Completion.Task;
         }
+
+        sealed class CookieQuery
+        {
+            public CookieQuery(bool includeHttpOnly) => IncludeHttpOnly = includeHttpOnly;
+            public bool IncludeHttpOnly { get; }
+            public TaskCompletionSource<string?> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+        static void OnCookiesRead(nint manager, nint result, nint data)
+        {
+            GCHandle handle = GCHandle.FromIntPtr(data);
+            var query = (CookieQuery)handle.Target!;
+            handle.Free();
+            try
+            {
+                nint list = webkit_cookie_manager_get_cookies_finish(manager, result, out nint error);
+                if (error != 0)
+                {
+                    RuntimeLogBuffer.Append("[Flash] Cookies de la page illisibles : " + ErrorMessage(error));
+                    g_error_free(error);
+                    query.Completion.TrySetResult(null);
+                    return;
+                }
+                var cookies = new List<(string Name, string Value)>();
+                // GList : data, next, prev.
+                for (nint node = list; node != 0; node = *(nint*)(node + sizeof(nint)))
+                {
+                    nint cookie = *(nint*)node;
+                    if (query.IncludeHttpOnly || soup_cookie_get_http_only(cookie) == 0)
+                        cookies.Add((String(soup_cookie_get_name(cookie)) ?? string.Empty, String(soup_cookie_get_value(cookie)) ?? string.Empty));
+                    soup_cookie_free(cookie);
+                }
+                g_list_free(list);
+                query.Completion.TrySetResult(FlashCookies.Header(cookies));
+            }
+            catch (Exception ex)
+            {
+                RuntimeLogBuffer.Append("[Flash] Cookies de la page : " + ex.Message);
+                query.Completion.TrySetResult(null);
+            }
+        }
+
+        /// <summary>Cookie reçu par le lecteur Flash : enregistré dans le gestionnaire de cookies de WebKit (retiré s'il est expiré).</summary>
+        public Task SetCookieAsync(PageCookie cookie)
+        {
+            var stored = new CookieStore();
+            GCHandle handle = GCHandle.Alloc(stored);
+            Glib.Post(() =>
+            {
+                if (_disposed || _view == 0)
+                {
+                    handle.Free();
+                    stored.Completion.TrySetResult(false);
+                    return;
+                }
+                nint manager = webkit_web_context_get_cookie_manager(webkit_web_view_get_context(_view));
+                // Un domaine qui commence par un point vaut pour ses sous-domaines (cookie de domaine).
+                nint soup = soup_cookie_new(cookie.Name, cookie.Value, cookie.HostOnly ? cookie.Domain : "." + cookie.Domain, cookie.Path, -1);
+                if (cookie.Expires is { } expires)
+                {
+                    nint when = g_date_time_new_from_unix_utc(expires.ToUnixTimeSeconds());
+                    soup_cookie_set_expires(soup, when);
+                    g_date_time_unref(when);
+                }
+                soup_cookie_set_secure(soup, cookie.Secure ? 1 : 0);
+                soup_cookie_set_http_only(soup, cookie.HttpOnly ? 1 : 0);
+                soup_cookie_set_same_site_policy(soup, cookie.SameSite switch { "Strict" => SoupSameSiteStrict, "Lax" => SoupSameSiteLax, _ => SoupSameSiteNone });
+                stored.Cookie = soup;
+                stored.Deleting = cookie.IsExpired(DateTimeOffset.UtcNow);
+                if (stored.Deleting)
+                    webkit_cookie_manager_delete_cookie(manager, soup, 0, CookieStoredCallback, GCHandle.ToIntPtr(handle));
+                else
+                    webkit_cookie_manager_add_cookie(manager, soup, 0, CookieStoredCallback, GCHandle.ToIntPtr(handle));
+            });
+            return stored.Completion.Task;
+        }
+
+        sealed class CookieStore
+        {
+            public nint Cookie;
+            public bool Deleting;
+            public TaskCompletionSource<bool> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+        static void OnCookieStored(nint manager, nint result, nint data)
+        {
+            GCHandle handle = GCHandle.FromIntPtr(data);
+            var stored = (CookieStore)handle.Target!;
+            handle.Free();
+            try
+            {
+                int ok = stored.Deleting
+                    ? webkit_cookie_manager_delete_cookie_finish(manager, result, out nint error)
+                    : webkit_cookie_manager_add_cookie_finish(manager, result, out error);
+                if (error != 0)
+                {
+                    RuntimeLogBuffer.Append("[Flash] Cookie du lecteur non enregistré : " + ErrorMessage(error));
+                    g_error_free(error);
+                }
+                stored.Completion.TrySetResult(ok != 0);
+            }
+            catch (Exception ex)
+            {
+                RuntimeLogBuffer.Append("[Flash] Cookie du lecteur : " + ex.Message);
+                stored.Completion.TrySetResult(false);
+            }
+            finally
+            {
+                if (stored.Cookie != 0)
+                    soup_cookie_free(stored.Cookie);
+            }
+        }
+
+        /// <summary>
+        /// Appels de la page vers le contenu Flash : la page y accède par une requête synchrone au
+        /// schéma <see cref="RuffleContent.FlashBridgeScheme"/> (voir GtkEngine.ServeFlashBridge),
+        /// à laquelle <paramref name="callFunction"/> répond ; null quand le lecteur s'arrête.
+        /// </summary>
+        public void SetFlashBridge(Func<string, string?>? callFunction) => _flashBridge = callFunction;
 
         public Task<string?> EvaluateAsync(string script, bool isolated)
         {

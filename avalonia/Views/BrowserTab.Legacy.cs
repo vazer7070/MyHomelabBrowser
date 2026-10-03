@@ -79,8 +79,8 @@ namespace PommeBrowser.Views
             if (UsesIntegratedFlash)
             {
                 FlashContent content = _flashContent!;
-                // À sa place dans la page sous Windows (Linux : étape suivante), sinon à la place de la page.
-                if (OperatingSystem.IsWindows() && CanPlaceInPage(content) && NextFlashModule(null) is { } module)
+                // À sa place dans la page si possible, sinon à la place de la page.
+                if (CanPlaceInPage(content) && NextFlashModule(null) is { } module)
                     OpenFlashInPage(content, module);
                 else
                     OpenInIntegratedFlash(content);
