@@ -595,7 +595,9 @@ namespace PommeBrowser.Views.Pages
                 Hint(Tr("Adobe ne distribue plus Flash Player : PommeBrowser ne peut pas le fournir. « Rechercher le module Flash » trouve votre copie sur l'ordinateur, par exemple dans un Basilisk portable ; sinon, choisissez le fichier ({0}). Les dernières versions bloquent les contenus depuis le 12 janvier 2021 : prenez une version plus ancienne.", LegacyEngine.ExpectedModuleName)),
                 OperatingSystem.IsWindows()
                     ? Hint(Tr("Le moteur intégré lit les modules 32 et 64 bits et choisit seul : « Rechercher le module Flash » installe le meilleur de chaque, et le Flash Player installé dans Windows sert aussi tel quel. Si un module ne lit pas un contenu, l'autre prend le relais. Basilisk n'utilise que le module 64 bits."))
-                    : new Panel { IsVisible = false },
+                    : OperatingSystem.IsLinux()
+                        ? Hint(Tr("Sous Linux, le moteur intégré utilise libflashplayer.so (64 bits) : la copie installée ici, sinon celle d'un dossier de modules du système (/usr/lib/mozilla/plugins…). Il lui faut GTK 2 (paquet libgtk2.0-0) et X11 ou XWayland."))
+                        : new Panel { IsVisible = false },
                 Buttons(
                     search,
                     remove32,
@@ -657,10 +659,10 @@ namespace PommeBrowser.Views.Pages
             return panel;
         }
 
-        /// <summary>Moteur Flash intégré (Windows) : réglage expérimental, ou raison de son absence.</summary>
+        /// <summary>Moteur Flash intégré (Windows, Linux sous X11) : réglage expérimental, ou raison de son absence.</summary>
         Control IntegratedEngineOption()
         {
-            if (!OperatingSystem.IsWindows())
+            if (!OperatingSystem.IsWindows() && !(OperatingSystem.IsLinux() && LegacyView.IsSupported))
                 return new Panel { IsVisible = false };
 
             var panel = new StackPanel { Spacing = 4 };
@@ -677,7 +679,7 @@ namespace PommeBrowser.Views.Pages
         /// <summary>Modules que le moteur intégré essaiera, dans l'ordre, ou ce qui l'empêche de fonctionner.</summary>
         static string IntegratedModulesStatus()
         {
-            if (!OperatingSystem.IsWindows())
+            if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
                 return string.Empty;
             if (!FlashHostProcess.IsAvailable)
                 return Tr("Le moteur intégré n'est pas présent dans cette compilation.");
@@ -686,7 +688,11 @@ namespace PommeBrowser.Views.Pages
                 return Tr("Il utilise votre module Flash : ajoutez-le ci-dessous.");
             List<string> usable = modules.Where(FlashHostProcess.IsAvailableFor).ToList();
             if (usable.Count == 0)
-                return Tr("Le moteur intégré 32 bits n'est pas présent dans cette compilation : ajoutez un module Flash 64 bits.");
+            {
+                return OperatingSystem.IsWindows()
+                    ? Tr("Le moteur intégré 32 bits n'est pas présent dans cette compilation : ajoutez un module Flash 64 bits.")
+                    : Tr("Le moteur intégré n'est pas présent dans cette compilation.");
+            }
             return usable.Count == 1
                 ? Tr("Module utilisé : {0}", DescribeIntegratedModule(usable[0]))
                 : Tr("Modules utilisés : {0}, puis {1} si le premier ne lit pas un contenu.", DescribeIntegratedModule(usable[0]), DescribeIntegratedModule(usable[1]));
@@ -696,9 +702,11 @@ namespace PommeBrowser.Views.Pages
         {
             int bits = FlashModuleSearch.Is32Bit(path) ? 32 : 64;
             bool installed = path.StartsWith(LegacyEngine.PluginDirectory, StringComparison.OrdinalIgnoreCase);
-            return installed
-                ? Tr("{0} ({1} bits)", System.IO.Path.GetFileName(path), bits)
-                : Tr("{0} ({1} bits, Flash Player de Windows)", System.IO.Path.GetFileName(path), bits);
+            if (installed)
+                return Tr("{0} ({1} bits)", System.IO.Path.GetFileName(path), bits);
+            return OperatingSystem.IsWindows()
+                ? Tr("{0} ({1} bits, Flash Player de Windows)", System.IO.Path.GetFileName(path), bits)
+                : Tr("{0} (module du système, {1})", System.IO.Path.GetFileName(path), System.IO.Path.GetDirectoryName(path));
         }
 
         string BasiliskStatus()

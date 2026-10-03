@@ -86,41 +86,65 @@ namespace PommeBrowser.Legacy
         }
 
         /// <summary>
-        /// Modules du moteur intégré (Windows), dans l'ordre où les essayer : un par architecture,
-        /// la copie installée dans PommeBrowser, sinon le Flash Player installé dans Windows
-        /// (Macromed\Flash), utilisé en place. Une version sans le blocage de 2021 passe en premier,
-        /// puis le module 32 bits (celui des navigateurs d'époque) ; le suivant sert de secours
-        /// si le premier ne se charge pas.
+        /// Modules du moteur intégré (Windows, Linux), dans l'ordre où les essayer : un par
+        /// architecture, la copie installée dans PommeBrowser, sinon le Flash Player installé dans
+        /// le système (Windows : Macromed\Flash ; Linux : dossiers de modules des navigateurs),
+        /// utilisé en place. Une version sans le blocage de 2021 passe en premier, puis le module
+        /// 32 bits (celui des navigateurs d'époque ; Windows seulement, l'hôte de Linux est 64 bits) ;
+        /// le suivant sert de secours si le premier ne se charge pas.
         /// </summary>
         public static IReadOnlyList<string> IntegratedModules
         {
             get
             {
-                if (!OperatingSystem.IsWindows())
+                bool windows = OperatingSystem.IsWindows();
+                if (!windows && !OperatingSystem.IsLinux())
                     return Array.Empty<string>();
                 var candidates = new List<FlashModuleSearch.Module>();
                 foreach (string path in new[] { InstalledModule32, InstalledModule }.OfType<string>().Concat(SystemModules()))
                 {
-                    FlashModuleSearch.ModuleArchitecture architecture = FlashModuleSearch.ArchitectureOf(path, windows: true);
+                    FlashModuleSearch.ModuleArchitecture architecture = FlashModuleSearch.ArchitectureOf(path, windows);
                     bool is32Bit = architecture == FlashModuleSearch.ModuleArchitecture.X86;
-                    if (architecture != FlashModuleSearch.ModuleArchitecture.Unknown && !candidates.Any(c => c.Is32Bit == is32Bit))
-                        candidates.Add(new FlashModuleSearch.Module(path, FlashModuleSearch.VersionOf(path), is32Bit));
+                    if (architecture == FlashModuleSearch.ModuleArchitecture.Unknown || (!windows && is32Bit) || candidates.Any(c => c.Is32Bit == is32Bit))
+                        continue;
+                    candidates.Add(new FlashModuleSearch.Module(path, FlashModuleSearch.VersionOf(path), is32Bit));
                 }
                 return FlashModuleSearch.IntegratedEngineOrder(candidates).Select(m => m.Path).ToList();
             }
         }
 
-        /// <summary>Flash Player installé dans Windows pour Firefox : 64 bits dans System32, 32 bits dans SysWOW64.</summary>
+        /// <summary>
+        /// Flash Player installé dans le système : sous Windows, pour Firefox (64 bits dans
+        /// System32, 32 bits dans SysWOW64) ; sous Linux, dans les dossiers de modules des navigateurs.
+        /// </summary>
         static IEnumerable<string> SystemModules()
         {
-            foreach (string system in new[] { Environment.SystemDirectory, Environment.GetFolderPath(Environment.SpecialFolder.SystemX86) }.Distinct(StringComparer.OrdinalIgnoreCase))
+            if (OperatingSystem.IsWindows())
             {
-                if (string.IsNullOrEmpty(system))
-                    continue;
-                if (ModuleIn(Path.Combine(system, "Macromed", "Flash")) is { } module)
+                foreach (string system in new[] { Environment.SystemDirectory, Environment.GetFolderPath(Environment.SpecialFolder.SystemX86) }.Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    if (string.IsNullOrEmpty(system))
+                        continue;
+                    if (ModuleIn(Path.Combine(system, "Macromed", "Flash")) is { } module)
+                        yield return module;
+                }
+                yield break;
+            }
+            foreach (string directory in LinuxModuleDirectories(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)))
+            {
+                if (ModuleIn(directory) is { } module)
                     yield return module;
             }
         }
+
+        /// <summary>Dossiers où les navigateurs de Linux cherchent leurs modules (libflashplayer.so).</summary>
+        static string[] LinuxModuleDirectories(string home) => new[]
+        {
+            "/usr/lib/flashplugin-nonfree", "/usr/lib/adobe-flashplugin", "/usr/lib/flashplugin-installer",
+            "/usr/lib/mozilla/plugins", "/usr/lib64/mozilla/plugins", "/usr/lib/x86_64-linux-gnu/mozilla/plugins",
+            "/usr/local/lib/mozilla/plugins", "/usr/lib/browser-plugins", "/usr/lib64/browser-plugins",
+            Path.Combine(home, ".mozilla", "plugins")
+        };
 
         /// <summary>Retire le module 32 bits installé : le moteur intégré reprend l'autre module.</summary>
         public static string? RemoveModule32()
@@ -190,16 +214,8 @@ namespace PommeBrowser.Legacy
                 yield break;
             }
 
-            foreach (string directory in new[]
-            {
-                "/usr/lib/flashplugin-nonfree", "/usr/lib/adobe-flashplugin", "/usr/lib/flashplugin-installer",
-                "/usr/lib/mozilla/plugins", "/usr/lib64/mozilla/plugins", "/usr/lib/x86_64-linux-gnu/mozilla/plugins",
-                "/usr/local/lib/mozilla/plugins", "/usr/lib/browser-plugins", "/usr/lib64/browser-plugins",
-                Path.Combine(home, ".mozilla", "plugins")
-            })
-            {
+            foreach (string directory in LinuxModuleDirectories(home))
                 yield return new(directory, 0);
-            }
             foreach (string directory in pluginPath)
                 yield return new(directory, 0);
             foreach (string directory in new[] { LinuxPaths.DesktopDirectory(), LinuxPaths.DefaultDownloadDirectory(), LinuxPaths.DocumentsDirectory() })

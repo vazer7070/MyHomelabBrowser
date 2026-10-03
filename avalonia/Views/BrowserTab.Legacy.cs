@@ -32,17 +32,17 @@ namespace PommeBrowser.Views
         static readonly TimeSpan FlashCallTimeout = TimeSpan.FromSeconds(8);
 
         /// <summary>
-        /// Moteur intégré prêt pour le contenu de la page : Windows, réglage activé, et un module
-        /// Flash (32 ou 64 bits, voir LegacyEngine.IntegratedModules) dont l'hôte est livré.
+        /// Moteur intégré prêt pour le contenu de la page : Windows, ou Linux sous X11 (sa fenêtre
+        /// est logée dans l'onglet), réglage activé, et un module Flash (32 ou 64 bits, voir
+        /// LegacyEngine.IntegratedModules) dont l'hôte est livré.
         /// </summary>
-        bool UsesIntegratedFlash => OperatingSystem.IsWindows() && _app.Settings.FlashIntegratedEngine && _flashContent != null &&
-                                    NextFlashModule(null) != null;
+        bool UsesIntegratedFlash => (OperatingSystem.IsWindows() || (OperatingSystem.IsLinux() && LegacyView.IsSupported)) &&
+                                    _app.Settings.FlashIntegratedEngine && _flashContent != null && NextFlashModule(null) != null;
 
         /// <summary>
         /// Module du moteur intégré à essayer : le premier, ou celui qui suit <paramref name="failed"/>
         /// (null s'il n'y en a plus). Seuls comptent les modules dont l'hôte de l'architecture est livré.
         /// </summary>
-        [SupportedOSPlatform("windows")]
         static string? NextFlashModule(string? failed)
         {
             List<string> modules = LegacyEngine.IntegratedModules.Where(FlashHostProcess.IsAvailableFor).ToList();
@@ -53,7 +53,6 @@ namespace PommeBrowser.Views
         }
 
         /// <summary>Le module essayé n'a pas lu le contenu : l'autre prend le relais (journal, et message si l'onglet est affiché).</summary>
-        [SupportedOSPlatform("windows")]
         void AnnounceFlashRetry(string failed, string next)
         {
             RuntimeLogBuffer.Append($"[Flash] {System.IO.Path.GetFileName(failed)} n'a pas lu le contenu : essai avec {System.IO.Path.GetFileName(next)}.");
@@ -77,10 +76,11 @@ namespace PommeBrowser.Views
         /// </summary>
         public void OpenFlashFallback(Uri uri)
         {
-            if (OperatingSystem.IsWindows() && UsesIntegratedFlash)
+            if (UsesIntegratedFlash)
             {
                 FlashContent content = _flashContent!;
-                if (CanPlaceInPage(content) && NextFlashModule(null) is { } module)
+                // À sa place dans la page sous Windows (Linux : étape suivante), sinon à la place de la page.
+                if (OperatingSystem.IsWindows() && CanPlaceInPage(content) && NextFlashModule(null) is { } module)
                     OpenFlashInPage(content, module);
                 else
                     OpenInIntegratedFlash(content);
@@ -96,7 +96,6 @@ namespace PommeBrowser.Views
         /// Flash de l'utilisateur (<paramref name="module"/>, sinon le premier à essayer), et sa
         /// fenêtre est logée dans l'onglet. Si le module ne lit pas le contenu, le suivant est essayé.
         /// </summary>
-        [SupportedOSPlatform("windows")]
         void OpenInIntegratedFlash(FlashContent content, string? module = null)
         {
             module ??= NextFlashModule(null);
@@ -145,7 +144,6 @@ namespace PommeBrowser.Views
         }
 
         /// <summary>Le lecteur agit sur la page comme un greffon de navigateur : pages demandées, scripts, cookies.</summary>
-        [SupportedOSPlatform("windows")]
         void ConnectFlashHost(FlashHostProcess host, FlashContent content)
         {
             host.NavigateRequested += OnFlashNavigate;
@@ -170,7 +168,6 @@ namespace PommeBrowser.Views
         }
 
         /// <summary>Appel de la page vers le contenu, sur le fil de l'interface (la page attend la réponse).</summary>
-        [SupportedOSPlatform("windows")]
         string? CallFlash(FlashHostProcess host, FlashContent content, string request)
             => _flashBridgeHost == host && !host.HasExited && IsTopDocument(content) ? host.CallFunction(request, FlashCallTimeout) : null;
 
@@ -192,7 +189,6 @@ namespace PommeBrowser.Views
         /// aux requêtes d'un greffon. Seulement pour le site de la page : le lecteur exécute un
         /// module tiers, il n'a pas accès aux cookies des autres sites.
         /// </summary>
-        [SupportedOSPlatform("windows")]
         async void GiveFlashCookies(FlashHostProcess host, FlashContent content, int id, Uri url, bool httpOnly)
         {
             string? header = null;
@@ -260,7 +256,6 @@ namespace PommeBrowser.Views
         /// applique lui-même allowScriptAccess. Seulement pour un contenu du document principal :
         /// celui d'un cadre n'agit pas sur la page qui le contient (il reçoit un refus).
         /// </summary>
-        [SupportedOSPlatform("windows")]
         async void RunFlashScript(FlashHostProcess host, FlashContent content, int? id, string code)
         {
             string? value = null;
@@ -397,11 +392,7 @@ namespace PommeBrowser.Views
                     Tr("Le contenu de {0} ne s'affiche plus : le module Flash s'est fermé ou a planté.", content.Swf.Host),
                     new (string, bool, Action)[]
                     {
-                        (Tr("Relancer"), true, () =>
-                        {
-                            if (OperatingSystem.IsWindows())
-                                OpenInIntegratedFlash(content);
-                        }),
+                        (Tr("Relancer"), true, () => OpenInIntegratedFlash(content)),
                         (Tr("Lire avec Ruffle"), false, () => BackToRuffle(target))
                     }));
                 return;

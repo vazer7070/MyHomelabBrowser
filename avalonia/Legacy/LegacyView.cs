@@ -102,7 +102,11 @@ namespace PommeBrowser.Legacy
         Task<nint> FindWindowAsync(ILegacyBrowser browser)
         {
             if (OperatingSystem.IsLinux() && _x11 != null)
-                return _x11.FindClientWindowAsync(ProcessTree(browser.ProcessIds));
+            {
+                // Fenêtre annoncée par le programme (moteur Flash intégré) ; sinon cherchée parmi les siennes (Basilisk).
+                nint announced = browser.FindWindow();
+                return announced != 0 ? Task.FromResult(announced) : _x11.FindClientWindowAsync(ProcessTree(browser.ProcessIds));
+            }
             return Task.Run(browser.FindWindow);
         }
 

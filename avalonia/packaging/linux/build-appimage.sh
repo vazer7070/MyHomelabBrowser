@@ -95,6 +95,22 @@ build() {
     "$ROOT/legacy-engine/fetch-engine.sh" linux-x86_64 "$appdir/usr/lib/pommebrowser/legacy"
   fi
 
+  # Moteur Flash intégré (PommeFlashHost, voir flash-engine/) : hôte NPAPI de Linux, x86_64
+  # seulement, repris d'une publication déjà faite (POMMEFLASH_HOST_DIR, comme dans la CI) ou
+  # compilé ici en code natif (NativeAOT, clang requis).
+  if [ "$arch" = x86_64 ]; then
+    local flash="$appdir/usr/lib/pommebrowser/flash"
+    if [ -n "${POMMEFLASH_HOST_DIR:-}" ] && [ -x "$POMMEFLASH_HOST_DIR/PommeFlashHost" ]; then
+      install -D -m 0755 "$POMMEFLASH_HOST_DIR/PommeFlashHost" "$flash/PommeFlashHost"
+    elif command -v clang >/dev/null 2>&1; then
+      echo "Publication de PommeFlashHost (linux-x64, NativeAOT)…"
+      dotnet publish "$ROOT/flash-engine/PommeFlash.Host/PommeFlash.Host.csproj" \
+        --configuration Release --runtime linux-x64 -p:PublishAot=true -p:DebugType=none --output "$flash"
+    else
+      echo "clang absent : le moteur Flash intégré (PommeFlashHost) n'est pas inclus dans l'AppImage." >&2
+    fi
+  fi
+
   install -m 0755 "$PACKAGING/AppRun" "$appdir/AppRun"
   install -m 0644 "$DESKTOP/$APP_ID.desktop" "$appdir/$APP_ID.desktop"
   install -m 0644 "$DESKTOP/$APP_ID.desktop" "$appdir/usr/share/applications/$APP_ID.desktop"
