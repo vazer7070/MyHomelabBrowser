@@ -70,6 +70,7 @@ namespace PommeFlash.Host
                 (int width, int height) = HostWindow.ClientSize(HostWindow.PluginWindow);
                 _instance.SetWindow(HostWindow.PluginWindow, width, height);
                 _instance.StartSource();
+                WindowWatch.Start();
             }
             catch (Exception ex)
             {
@@ -94,6 +95,12 @@ namespace PommeFlash.Host
 
         static void OnCommand(string command)
         {
+            // « call <id> {"request":"<invoke …>"} » : appel de la page vers le contenu.
+            if (command.StartsWith("call ", StringComparison.Ordinal))
+            {
+                CallFromPage(command);
+                return;
+            }
             switch (command)
             {
                 case "close":
@@ -103,6 +110,25 @@ namespace PommeFlash.Host
                     HostChannel.Log("Commande inconnue : " + command);
                     break;
             }
+        }
+
+        static void CallFromPage(string command)
+        {
+            string[] parts = command.Split(' ', 3);
+            if (parts.Length < 3 || !int.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int id))
+                return;
+            string? request = null;
+            try
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(parts[2]);
+                if (document.RootElement.TryGetProperty("request", out System.Text.Json.JsonElement value) && value.ValueKind == System.Text.Json.JsonValueKind.String)
+                    request = value.GetString();
+            }
+            catch (System.Text.Json.JsonException)
+            {
+            }
+            (bool ok, string? result) = request != null && _instance != null ? _instance.CallFromPage(request) : (false, null);
+            HostChannel.Send("called", ("id", id), ("ok", ok), ("value", result));
         }
 
         /// <summary>Noms des flashvars (« a=1&amp;b=2 » : a, b), 40 au plus.</summary>

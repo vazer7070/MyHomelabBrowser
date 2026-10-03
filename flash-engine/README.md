@@ -54,13 +54,16 @@ Lancement :
 ```
 PommeFlashHost.exe --plugin <NPSWF64_*.dll> --swf <adresse> --page <adresse de la page>
     [--flashvars <…>] [--width N] [--height N] [--id <…>] [--param nom=valeur]…
-    [--user-agent <…>] [--private] [--hidden]
+    [--user-agent <…>] [--private] [--share-cookies] [--hidden]
 ```
 
 Sortie standard, un événement JSON par ligne : `ready` (fenêtre à loger), `status`,
 `navigate` (url, cible), `script` (adresse `javascript:`, sans réponse), `eval` (id, code : script
-de la page dont le module attend le résultat), `audio`, `log` (niveaux info, error, trace), `exit`.
-Entrée standard : `close`, et `result <id> {"ok":true,"value":…}` en réponse à `eval`.
+de la page dont le module attend le résultat), `cookies` (id, url, http : cookies de la page pour
+une adresse), `set-cookie` (url, cookie, http : cookie à garder dans la page), `audio`, `log`
+(niveaux info, error, trace), `called` (id, ok, value : réponse à un appel de la page), `exit`.
+Entrée standard : `close`, `result <id> {"ok":true,"value":…}` en réponse à `eval` et `cookies`,
+et `call <id> {"request":"<invoke …>"}` (appel de la page vers le contenu).
 
 **Scripts de la page** (`ExternalInterface.call`, `NPN_Evaluate`) : le module attend le résultat,
 comme dans un navigateur. L'hôte envoie `eval` puis attend la réponse (20 s au plus) en traitant les
@@ -69,10 +72,41 @@ pendant ce temps, et les deux processus s'attendraient sinon l'un l'autre. Pomme
 script dans la page (document principal seulement : un contenu venu d'un cadre reçoit un refus) ;
 le module applique lui-même `allowScriptAccess`.
 
+**Appels de la page vers le contenu** (`ExternalInterface.addCallback`) : Flash déclare ses
+fonctions dans la page par `__flash__addCallback(élément, nom)` ; elles appellent
+`élément.CallFunction(<invoke …>)` et évaluent la réponse. PommeBrowser donne `CallFunction` à
+l'élément du contenu (`RuffleContent.FlashBridgeScript`, et à l'emplacement qui le remplace dans la
+page) : il passe par l'objet WebView2 `pommeFlash` (`AddHostObjectToScript`, document principal
+seulement), appelé de façon synchrone, puis par la commande `call` jusqu'à l'objet scriptable du
+module (`NPPVpluginScriptableNPObject`, méthode `CallFunction`). La page attend la réponse
+(8 s au plus) ; PommeBrowser ne traite pendant ce temps que les messages que Windows envoie
+d'autres processus. Pour éviter que chacun attende l'autre : un script demandé par le contenu
+pendant un appel est refusé aussitôt, et un appel de la page est refusé tant que le contenu attend
+un script de la page.
+
+**Cookies partagés avec la page** (`--share-cookies`, `PageCookieHandler.cs`) : comme dans un
+navigateur, chaque chargement du module porte les cookies de la page pour son adresse, HttpOnly
+compris, et ceux que les réponses déposent (`Set-Cookie`) sont gardés dans la page. Les
+redirections sont suivies par l'hôte, étape par étape, pour que chacune porte ses propres cookies.
+`NPN_GetValueForURL` donne ce qu'un script verrait (sans HttpOnly), `NPN_SetValueForURL` pose un
+cookie comme un script. PommeBrowser (`FlashCookies.cs`) ne partage que le site de la page (même
+domaine enregistrable) : le lecteur exécute un module tiers, il n'a pas accès aux cookies des autres
+sites. Chaque cookie reçu est vérifié (domaine, Secure, HttpOnly, préfixes `__Secure-` et
+`__Host-`) avant d'aller dans le profil WebView2 de l'onglet, navigation privée comprise. Sans
+l'option, l'hôte a ses propres cookies, vides au départ.
+
 **Journal** : version du module, contenu, noms des flashvars (pas leurs valeurs), puis une trace de
 chaque fichier chargé (et de la réponse), de chaque script demandé à la page et de ce que l'hôte ne
 fournit pas (valeurs `NPN_GetValue`, membres des objets de la page) ; 300 traces au plus. Page
-**Diagnostic** de PommeBrowser, lignes `[Flash]`.
+**Diagnostic** de PommeBrowser, lignes `[Flash]`. L'hôte y note aussi (`WindowWatch.cs`) chaque
+fenêtre que le module ouvre, avec son titre et son texte (boîte de dialogue de Flash, message de
+mise à jour), les programmes qu'il lance (FlashUtil…) et ceux de Flash déjà présents (service
+d'aide de la version chinoise), ainsi que les pages demandées avec une cible : on sait alors si un
+message vient de Flash lui-même ou du contenu, qui dessine les siens dans sa fenêtre.
+
+**Comme Basilisk** : le module reçoit l'identité de navigateur de Basilisk (`NPN_UserAgent`,
+`WOW64` pour l'hôte 32 bits) et le facteur d'échelle du contenu (`NPNVcontentsScaleFactor`, 1 :
+l'hôte n'est pas adapté aux DPI, Windows met ses fenêtres à l'échelle).
 
 ## Tests
 
@@ -133,7 +167,8 @@ Sans le réglage, sans module Flash ou sans description du contenu, Basilisk res
 
 1. **Hôte NPAPI sous Windows** (fait) : le contenu principal est lu dans une fenêtre logée dans l'onglet.
 2. **Contenu à sa place dans la page** (fait) : suivi du défilement, des dimensions et du zoom.
-3. Cookies et session partagés avec la page.
-4. `ExternalInterface` : appels entre les scripts de la page et Flash. **Flash → page fait**
-   (`ExternalInterface.call`, adresses `javascript:`) ; reste page → Flash (`addCallback`).
+3. **Cookies et session partagés avec la page** (fait) : chargements, redirections,
+   `NPN_GetValueForURL` et `NPN_SetValueForURL`, limités au site de la page.
+4. **`ExternalInterface`** (fait) : appels entre les scripts de la page et Flash, dans les deux
+   sens (`ExternalInterface.call` et adresses `javascript:`, `ExternalInterface.addCallback`).
 5. Linux (`libflashplayer.so`, GTK 2 / XEmbed).

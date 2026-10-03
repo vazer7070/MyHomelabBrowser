@@ -62,8 +62,7 @@ namespace PommeBrowser.Views
             _overlayDocked = false;
 
             host.SetBackground(!IsSelected);
-            host.NavigateRequested += OnFlashNavigate;
-            host.ScriptRequested += (id, code) => RunFlashScript(host, content, id, code);
+            ConnectFlashHost(host, content);
             host.Exited += () =>
             {
                 if (_overlayHost != host)

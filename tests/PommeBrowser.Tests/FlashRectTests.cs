@@ -121,5 +121,30 @@ public sealed class FlashRectTests
         Assert.Contains("'rect:null'", script);
         Assert.DoesNotContain("__POST__", script);
         Assert.DoesNotContain("__RECT__", script);
+        // Les fonctions déclarées par le contenu suivent l'élément remplacé par l'emplacement.
+        Assert.Contains("window.__pommeFlashEquip(hole)", script);
+    }
+
+    [Fact]
+    public void The_bridge_script_gives_call_function_to_the_element_of_the_content()
+    {
+        string script = RuffleContent.FlashBridgeScript("EmpireClient");
+
+        Assert.Contains("chrome.webview.hostObjects.sync." + RuffleContent.FlashBridgeName, script);
+        Assert.Contains("'CallFunction'", script);
+        Assert.Contains("[data-pomme-flash]", script);
+        Assert.Contains("const id = \"EmpireClient\";", script);
+        Assert.DoesNotContain("__BRIDGE__", script);
+        Assert.DoesNotContain("__ID__", script);
+    }
+
+    [Fact]
+    public void The_identifier_of_the_element_is_a_safe_javascript_string()
+    {
+        string script = RuffleContent.FlashBridgeScript("a\"b</script>'c");
+
+        Assert.DoesNotContain("a\"b", script);
+        Assert.DoesNotContain("</script>", script);
+        Assert.Contains("const id = \"\";", RuffleContent.FlashBridgeScript(null));
     }
 }

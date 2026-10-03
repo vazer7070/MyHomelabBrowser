@@ -17,6 +17,7 @@ static NPNetscapeFuncs *browser;
 static uint16_t browserSize, browserVersion;
 static DWORD mainThread;
 static NPP instanceNpp;
+static HWND dialog;
 static int notifications, timerTicks, asyncDone, streamsDone, finished;
 static uint32_t timerId;
 
@@ -68,6 +69,49 @@ static void testDeallocate(NPObject *obj)
 }
 
 static NPClass testClass = { .structVersion = 3, .allocate = testAllocate, .deallocate = testDeallocate };
+
+/* ------------------------------------------------------------------ */
+/* Objet scriptable (NPPVpluginScriptableNPObject), comme celui de     */
+/* Flash : la page l'appelle par CallFunction (addCallback).           */
+/* ------------------------------------------------------------------ */
+
+static NPObject *scriptable;
+
+static void scriptableDeallocate(NPObject *obj)
+{
+    browser->memfree(obj);
+}
+
+static bool scriptableHasMethod(NPObject *obj, void *name)
+{
+    (void)obj;
+    return name == browser->getstringidentifier("CallFunction");
+}
+
+/* Réponse : « retour:<requête> », sur le fil du module. */
+static bool scriptableInvoke(NPObject *obj, void *name, const NPVariant *args, uint32_t count, NPVariant *result)
+{
+    (void)obj;
+    if (name != browser->getstringidentifier("CallFunction") || count < 1 || args[0].type != NPVariantType_String)
+        return false;
+    const NPString *request = &args[0].value.stringValue;
+    report("call main=%d request=%.*s", GetCurrentThreadId() == mainThread, (int)request->UTF8Length, request->UTF8Characters);
+    static const char prefix[] = "retour:";
+    uint32_t length = (uint32_t)(sizeof(prefix) - 1) + request->UTF8Length;
+    char *text = (char *)browser->memalloc(length + 1);
+    memcpy(text, prefix, sizeof(prefix) - 1);
+    memcpy(text + sizeof(prefix) - 1, request->UTF8Characters, request->UTF8Length);
+    text[length] = 0;
+    result->type = NPVariantType_String;
+    result->value.stringValue.UTF8Characters = text;
+    result->value.stringValue.UTF8Length = length;
+    return true;
+}
+
+static NPClass scriptableClass = {
+    .structVersion = 3, .allocate = testAllocate, .deallocate = scriptableDeallocate,
+    .hasMethod = (void *)scriptableHasMethod, .invoke = (void *)scriptableInvoke
+};
 
 /* ------------------------------------------------------------------ */
 /* Scripts et objets de la page                                        */
@@ -219,10 +263,33 @@ static void evaluateScript(const char *script, const char *key)
 }
 
 /* Contenu principal reçu : le reste du scénario. */
-static void continueScenario(void)
+typedef NPError (*GetValueForUrlFunc)(NPP npp, int variable, const char *url, char **value, uint32_t *length);
+typedef NPError (*SetValueForUrlFunc)(NPP npp, int variable, const char *url, const char *value, uint32_t length);
+
+/* Cookies de la page (NPN_GetValueForURL, NPNURLVCookie = 501), puis un cookie posé par le greffon. */
+static void checkCookies(const char *url)
+{
+    char *value = NULL;
+    uint32_t length = 0;
+    NPError error = ((GetValueForUrlFunc)browser->getvalueforurl)(instanceNpp, 501, url, &value, &length);
+    if (error == NPERR_NO_ERROR && value)
+    {
+        report("url-cookie=%.*s", (int)length, value);
+        browser->memfree(value);
+    }
+    else
+    {
+        report("url-cookie-error=%d", error);
+    }
+    const char *cookie = "pose=1; Path=/";
+    report("set-cookie=%d", ((SetValueForUrlFunc)browser->setvalueforurl)(instanceNpp, 501, url, cookie, (uint32_t)strlen(cookie)));
+}
+
+static void continueScenario(const char *movieUrl)
 {
     evaluateScript("try { __flash__toXML(pommeAdd(2,3)) ; } catch (e) { \"<undefined/>\"; }", "script");
     evaluateScript("pommeRefuse()", "script-refused");
+    checkCookies(movieUrl);
     browser->geturlnotify(instanceNpp, "data.txt", NULL, (void *)0x1234);
     browser->geturlnotify(instanceNpp, "missing.txt", NULL, (void *)0x5678);
     const char *post = "Content-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello";
@@ -267,6 +334,13 @@ static NPError NPP_New(NPMIMEType type, NPP npp, uint16_t mode, int16_t argc, ch
     inspectPage();
     checkIdentifiers();
     checkObjects();
+
+    /* Comme une boîte de dialogue de Flash : une fenêtre à part, avec un texte, que l'hôte note
+       dans son journal. Hors de l'écran et sans prendre le clavier. */
+    dialog = CreateWindowExA(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, "STATIC", "TEST dialogue", WS_POPUP | WS_VISIBLE,
+                             -3000, -3000, 240, 80, NULL, NULL, NULL, NULL);
+    if (dialog)
+        CreateWindowExA(0, "STATIC", "Texte du dialogue de test", WS_CHILD | WS_VISIBLE, 0, 0, 240, 40, dialog, NULL, NULL, NULL);
     return NPERR_NO_ERROR;
 }
 
@@ -275,6 +349,16 @@ static NPError NPP_Destroy(NPP npp, NPSavedData **save)
     (void)npp;
     (void)save;
     report("destroy");
+    if (scriptable)
+    {
+        browser->releaseobject(scriptable);
+        scriptable = NULL;
+    }
+    if (dialog)
+    {
+        DestroyWindow(dialog);
+        dialog = NULL;
+    }
     return NPERR_NO_ERROR;
 }
 
@@ -346,7 +430,7 @@ static NPError NPP_DestroyStream(NPP npp, NPStream *stream, NPReason reason)
     stream->pdata = NULL;
     streamsDone++;
     if (isMovie)
-        continueScenario();
+        continueScenario(stream->url);
     checkFinished();
     return NPERR_NO_ERROR;
 }
@@ -361,10 +445,17 @@ static void NPP_URLNotify(NPP npp, const char *url, NPReason reason, void *notif
 
 static NPError NPP_GetValue(NPP npp, NPPVariable variable, void *value)
 {
-    (void)npp;
     if (variable == NPPVpluginNameString)
     {
         *(const char **)value = "Pomme Test";
+        return NPERR_NO_ERROR;
+    }
+    if (variable == NPPVpluginScriptableNPObject)
+    {
+        /* Une référence gardée par le greffon, une donnée au navigateur. */
+        if (!scriptable)
+            scriptable = browser->createobject(npp, &scriptableClass);
+        *(NPObject **)value = browser->retainobject(scriptable);
         return NPERR_NO_ERROR;
     }
     return NPERR_GENERIC_ERROR;

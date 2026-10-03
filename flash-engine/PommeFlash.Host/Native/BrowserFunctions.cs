@@ -366,7 +366,8 @@ namespace PommeFlash.Host.Native
             => Guard("NPN_GetValueForURL", () => Instance(npp)?.GetValueForUrl((NPNURLVariable)variable, NpMemory.ReadUtf8(url), value, length) ?? Np.InvalidInstanceError);
 
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-        static short SetValueForUrl(nint npp, int variable, nint url, nint value, uint length) => Np.GenericError;
+        static short SetValueForUrl(nint npp, int variable, nint url, nint value, uint length)
+            => Guard("NPN_SetValueForURL", () => Instance(npp)?.SetValueForUrl((NPNURLVariable)variable, NpMemory.ReadUtf8(url), NpMemory.ReadUtf8(value, length)) ?? Np.InvalidInstanceError);
 
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         static short GetAuthenticationInfo(nint npp, nint protocol, nint host, int port, nint scheme, nint realm,

@@ -92,6 +92,7 @@
     <Compile Include="..\..\avalonia\Engine\UserScripts.cs" Link="Avalonia\UserScripts.cs" />
     <Compile Include="..\..\avalonia\Legacy\FlashModuleSearch.cs" Link="Avalonia\FlashModuleSearch.cs" />
     <Compile Include="..\..\avalonia\Engine\FlashContent.cs" Link="Avalonia\FlashContent.cs" />
+    <Compile Include="..\..\avalonia\Engine\FlashCookies.cs" Link="Avalonia\FlashCookies.cs" />
     <Compile Include="..\..\avalonia\Engine\RuffleContent.cs" Link="Avalonia\RuffleContent.cs" />
   </ItemGroup>
 

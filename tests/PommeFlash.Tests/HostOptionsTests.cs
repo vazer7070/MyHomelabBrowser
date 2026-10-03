@@ -39,6 +39,19 @@ public sealed class HostOptionsTests : IDisposable
     }
 
     [Fact]
+    public void The_module_sees_the_identity_of_Basilisk_unless_another_is_given()
+    {
+        string agent = Parse().UserAgent;
+        Assert.StartsWith("Mozilla/5.0 (Windows NT ", agent, StringComparison.Ordinal);
+        Assert.Contains("Gecko/20100101 Goanna/", agent, StringComparison.Ordinal);
+        Assert.Contains(" Firefox/", agent, StringComparison.Ordinal);
+        Assert.Contains(" Basilisk/", agent, StringComparison.Ordinal);
+        Assert.Contains(Environment.Is64BitProcess ? "; Win64; x64;" : "; WOW64;", agent, StringComparison.Ordinal);
+
+        Assert.Equal("Autre/1.0", Parse("--user-agent", "Autre/1.0").UserAgent);
+    }
+
+    [Fact]
     public void Element_attributes_and_parameters_are_given_like_a_browser()
     {
         HostOptions options = Parse("--flashvars", "sClientAbsoluteUrl=", "--id", "EmpireClient",

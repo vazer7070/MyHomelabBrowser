@@ -184,6 +184,7 @@ namespace PommeFlash.Host.Native
         SupportsAdvancedKeyHandling = 21,
         DocumentOrigin = 22,
         CSSZoomFactor = 23,
+        ContentsScaleFactor = 1001,
         SupportsAsyncBitmapSurfaceBool = 2007,
         SupportsAsyncWindowsDXGISurfaceBool = 2008,
         PreferredDXGIAdapter = 2009,
