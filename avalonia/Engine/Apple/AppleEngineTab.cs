@@ -452,6 +452,10 @@ namespace PommeBrowser.Engine.Apple
 
         public Task SetCookieAsync(PageCookie cookie) => Task.CompletedTask;
 
+        public void SetFlashBridge(Func<string, string?>? callFunction)
+        {
+        }
+
         public unsafe Task<string?> EvaluateAsync(string script, bool isolated)
         {
             var completion = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);

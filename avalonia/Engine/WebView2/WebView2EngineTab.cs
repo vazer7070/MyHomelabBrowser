@@ -713,6 +713,33 @@ namespace PommeBrowser.Engine.WebView2
             return Task.CompletedTask;
         }
 
+        /// <summary>
+        /// Objet du pont vers le contenu Flash, offert au document principal seulement
+        /// (AddHostObjectToScript) ; la page l'appelle de façon synchrone.
+        /// </summary>
+        public void SetFlashBridge(Func<string, string?>? callFunction)
+        {
+            if (_disposed)
+                return;
+            try
+            {
+                // Retrait sans effet si l'objet n'était pas offert (selon la version, ArgumentException).
+                try
+                {
+                    _core.RemoveHostObjectFromScript(RuffleContent.FlashBridgeName);
+                }
+                catch (ArgumentException)
+                {
+                }
+                if (callFunction != null)
+                    _core.AddHostObjectToScript(RuffleContent.FlashBridgeName, new FlashBridgeObject(callFunction));
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or COMException or ArgumentException)
+            {
+                RuntimeLogBuffer.Append("[Flash] Appels de la page vers le contenu indisponibles : " + ex.Message);
+            }
+        }
+
         /// <summary>WebView2 n'a pas de monde isolé : les scripts de PommeBrowser tournent dans celui de la page.</summary>
         public async Task<string?> EvaluateAsync(string script, bool isolated)
         {

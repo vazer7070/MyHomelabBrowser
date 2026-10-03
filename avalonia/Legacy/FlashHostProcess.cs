@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -32,6 +33,11 @@ namespace PommeBrowser.Legacy
         // Écritures sur l'entrée de l'hôte (réponses aux scripts, fermeture) : une à la fois.
         readonly SemaphoreSlim _input = new(1, 1);
         Task _reading = Task.CompletedTask;
+        // Scripts de la page que l'hôte attend (eval), et appels de la page vers le contenu en cours.
+        readonly ConcurrentDictionary<int, byte> _pendingScripts = new();
+        readonly Dictionary<int, CallSlot> _calls = new();
+        int _nextCall;
+        volatile bool _calling;
         volatile bool _ready;
         nint _window;
         bool _closed;
@@ -211,6 +217,15 @@ namespace PommeBrowser.Legacy
                         break;
                     case "eval" when root.TryGetProperty("id", out JsonElement number) && number.TryGetInt32(out int id):
                         string evaluated = Text(root, "code");
+                        if (_calling)
+                        {
+                            // La page attend la réponse du contenu : elle ne peut pas exécuter de script
+                            // maintenant. Refus immédiat, sans quoi chacun attendrait l'autre.
+                            Reply(id, false, null);
+                            RuntimeLogBuffer.Append("[Flash] Script du contenu refusé pendant un appel de la page vers le contenu.");
+                            break;
+                        }
+                        _pendingScripts[id] = 0;
                         Dispatcher.UIThread.Post(() =>
                         {
                             if (ScriptRequested is { } handler)
@@ -233,6 +248,17 @@ namespace PommeBrowser.Legacy
                             else
                                 Reply(cookieQuestion, false, null);
                         });
+                        break;
+                    case "called" when root.TryGetProperty("id", out JsonElement callId) && callId.TryGetInt32(out int answered):
+                        lock (_calls)
+                        {
+                            if (_calls.TryGetValue(answered, out CallSlot? slot))
+                            {
+                                slot.Ok = root.TryGetProperty("ok", out JsonElement callOk) && callOk.ValueKind == JsonValueKind.True;
+                                slot.Value = root.TryGetProperty("value", out JsonElement callValue) && callValue.ValueKind == JsonValueKind.String ? callValue.GetString() : null;
+                                slot.Done.Set();
+                            }
+                        }
                         break;
                     case "set-cookie" when Uri.TryCreate(Text(root, "url"), UriKind.Absolute, out Uri? receivedFrom):
                         string received = Text(root, "cookie");
@@ -261,6 +287,7 @@ namespace PommeBrowser.Legacy
         /// <summary>Réponse à une question de l'hôte (script de la page, cookies) : « result &lt;id&gt; {"ok":…,"value":…} ».</summary>
         public void Reply(int id, bool ok, string? value)
         {
+            _pendingScripts.TryRemove(id, out _);
             using var buffer = new MemoryStream();
             using (var writer = new Utf8JsonWriter(buffer))
             {
@@ -296,6 +323,134 @@ namespace PommeBrowser.Legacy
                 _input.Release();
             }
         }
+
+        sealed class CallSlot
+        {
+            public readonly ManualResetEvent Done = new(false);
+            public bool Ok;
+            public string? Value;
+        }
+
+        /// <summary>
+        /// Appel de la page vers le contenu (CallFunction d'une fonction déclarée par
+        /// ExternalInterface.addCallback), sur le fil de l'interface et de façon synchrone, comme
+        /// un greffon de navigateur : la page attend la réponse (code JavaScript à évaluer).
+        /// Pendant l'attente, seuls les messages que Windows envoie d'autres processus sont traités
+        /// (la fenêtre du lecteur est logée dans celle de PommeBrowser). Null si l'hôte refuse,
+        /// ne répond pas à temps, ou attend lui-même un script de la page (chacun attendrait l'autre).
+        /// </summary>
+        public string? CallFunction(string request, TimeSpan timeout)
+        {
+            if (HasExited)
+                return null;
+            if (!_pendingScripts.IsEmpty)
+            {
+                RuntimeLogBuffer.Append("[Flash] Appel de la page vers le contenu refusé : le contenu attend un script de la page.");
+                return null;
+            }
+
+            int id = Interlocked.Increment(ref _nextCall);
+            var slot = new CallSlot();
+            lock (_calls)
+                _calls[id] = slot;
+            _calling = true;
+            try
+            {
+                using var buffer = new MemoryStream();
+                using (var writer = new Utf8JsonWriter(buffer))
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("request", request);
+                    writer.WriteEndObject();
+                }
+                string line = "call " + id.ToString(CultureInfo.InvariantCulture) + " " + Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
+                if (!WriteLine(line, timeout))
+                    return null;
+                if (!WaitPumpingSentMessages(slot.Done, timeout))
+                {
+                    RuntimeLogBuffer.Append($"[Flash] Le contenu n'a pas répondu à un appel de la page après {timeout.TotalSeconds:0} s.");
+                    return null;
+                }
+                return slot.Ok ? slot.Value : null;
+            }
+            finally
+            {
+                _calling = false;
+                lock (_calls)
+                    _calls.Remove(id);
+                slot.Done.Dispose();
+            }
+        }
+
+        /// <summary>Une ligne pour l'hôte, sans quitter le fil appelant ; faux s'il ne lit plus son entrée.</summary>
+        bool WriteLine(string line, TimeSpan timeout)
+        {
+            if (!_input.Wait(timeout))
+                return false;
+            try
+            {
+                if (_process.HasExited)
+                    return false;
+                _process.StandardInput.WriteLine(line);
+                _process.StandardInput.Flush();
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException or InvalidOperationException or ObjectDisposedException)
+            {
+                return false;
+            }
+            finally
+            {
+                _input.Release();
+            }
+        }
+
+        /// <summary>
+        /// Attente sur le fil de l'interface : les messages envoyés (SendMessage) par d'autres fils ou
+        /// processus sont traités, ceux de l'application restent en file.
+        /// </summary>
+        static bool WaitPumpingSentMessages(WaitHandle signal, TimeSpan timeout)
+        {
+            nint[] handles = { signal.SafeWaitHandle.DangerousGetHandle() };
+            var clock = Stopwatch.StartNew();
+            while (true)
+            {
+                long remaining = (long)(timeout - clock.Elapsed).TotalMilliseconds;
+                if (remaining <= 0)
+                    return signal.WaitOne(0);
+                uint result = MsgWaitForMultipleObjectsEx(1, handles, (uint)remaining, QsSendMessage, 0);
+                if (result == WaitObject0)
+                    return true;
+                if (result != WaitObject0 + 1)
+                    return signal.WaitOne(0);
+                PeekMessageW(out _, 0, 0, 0, PmNoRemove | PmQsSendMessage);
+            }
+        }
+
+        const uint QsSendMessage = 0x0040;
+        const uint PmNoRemove = 0x0000;
+        const uint PmQsSendMessage = QsSendMessage << 16;
+        const uint WaitObject0 = 0;
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct Msg
+        {
+            public nint Hwnd;
+            public uint Message;
+            public nuint WParam;
+            public nint LParam;
+            public uint Time;
+            public int X;
+            public int Y;
+            public uint Private;
+        }
+
+        [DllImport("user32.dll")]
+        static extern uint MsgWaitForMultipleObjectsEx(uint count, nint[] handles, uint milliseconds, uint wakeMask, uint flags);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool PeekMessageW(out Msg message, nint hwnd, uint min, uint max, uint remove);
 
         public bool HasExited => _exited || _process.HasExited;
 

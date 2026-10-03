@@ -24,6 +24,8 @@ namespace PommeFlash.Host
         readonly CookieContainer _cookies = new();
         readonly HttpClient _http;
         GCHandle _self;
+        // Objet scriptable du module (NPPVpluginScriptableNPObject), lu au premier appel de la page.
+        nint _scriptable;
         uint _nextTimer = 1000;
         NpObjectRef _windowObject;
         NpObjectRef _elementObject;
@@ -142,6 +144,12 @@ namespace PommeFlash.Host
                 stream.Close(Np.ReasonUserBreak);
             foreach (uint id in _timers.Keys.ToList())
                 UnscheduleTimer(id);
+            // Rendu avant NPP_Destroy, comme le fait un navigateur.
+            if (_scriptable != 0)
+            {
+                NpObjects.Release(_scriptable);
+                _scriptable = 0;
+            }
 
             _library.Destroy(_npp);
             IsAlive = false;
@@ -352,6 +360,51 @@ namespace PommeFlash.Host
             catch (CookieException)
             {
                 return Np.InvalidParam;
+            }
+        }
+
+        /// <summary>
+        /// Appel de la page vers le contenu (fonction déclarée par ExternalInterface.addCallback) :
+        /// la page appelle CallFunction avec la requête XML (&lt;invoke name="…"&gt;…) sur l'objet
+        /// scriptable du module, qui répond par du code JavaScript à évaluer dans la page.
+        /// </summary>
+        public (bool Ok, string? Value) CallFromPage(string request)
+        {
+            if (!IsAlive)
+                return (false, null);
+            if (_scriptable == 0)
+            {
+                nint scriptable = 0;
+                if (_library.GetValue(_npp, NPPVariable.PluginScriptableNPObject, &scriptable) != Np.NoError || scriptable == 0)
+                {
+                    HostChannel.Trace("call:none", "Le contenu n'offre pas d'objet scriptable : appels de la page refusés.");
+                    return (false, null);
+                }
+                _scriptable = scriptable;
+            }
+
+            HostChannel.Trace("call:" + HostChannel.Excerpt(request, 80), "Appel de la page vers le contenu : " + HostChannel.Excerpt(request, 160));
+            NPVariant argument;
+            NpVariants.Write(&argument, request);
+            NPVariant result = default;
+            try
+            {
+                if (!NpObjects.Invoke(_scriptable, NpIdentifiers.FromString("CallFunction"), &argument, 1, &result))
+                    return (false, null);
+                object? value = NpVariants.Read(&result);
+                return (true, value switch
+                {
+                    string text => text,
+                    bool flag => flag ? "true" : "false",
+                    int number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    double number => number.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+                    _ => null
+                });
+            }
+            finally
+            {
+                NpVariants.Release(&argument);
+                NpVariants.Release(&result);
             }
         }
 

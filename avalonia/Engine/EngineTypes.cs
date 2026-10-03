@@ -228,6 +228,13 @@ namespace PommeBrowser.Engine
         Task SetCookieAsync(PageCookie cookie);
 
         /// <summary>
+        /// Appels synchrones de la page vers le contenu du moteur Flash intégré : objet
+        /// <see cref="RuffleContent.FlashBridgeName"/> dont la méthode CallFunction(requête) rend la
+        /// réponse du contenu. Null : retiré. Sans effet hors du moteur Windows.
+        /// </summary>
+        void SetFlashBridge(Func<string, string?>? callFunction);
+
+        /// <summary>
         /// Script injecté à chaque chargement, dans le monde isolé de PommeBrowser ; avec
         /// <paramref name="pageWorld"/>, dans celui de la page (pour ce qui doit la modifier avant ses scripts).
         /// </summary>

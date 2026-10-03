@@ -124,6 +124,17 @@ public sealed class HostProtocolTests
         string programs = host.Events.Where(e => IsLog(e, "Programmes Flash déjà en cours : ")).Select(e => e.GetProperty("message").GetString()!).Single();
         Assert.Matches(@"\(([1-9]\d*) processus vus\)$", programs);
 
+        // Appel de la page vers le contenu (ExternalInterface.addCallback) : CallFunction sur
+        // l'objet scriptable du module, sur son fil, et sa réponse renvoyée à PommeBrowser.
+        string request = "<invoke name=\"jeu\" returntype=\"javascript\"><arguments><string>été</string></arguments></invoke>";
+        await host.SendAsync("call 7 " + JsonSerializer.Serialize(new { request }));
+        await host.WaitForAsync(h => h.Events.Any(e => e.GetProperty("event").GetString() == "called"), TimeSpan.FromSeconds(20));
+        JsonElement called = host.Events.Single(e => e.GetProperty("event").GetString() == "called");
+        Assert.Equal(7, called.GetProperty("id").GetInt32());
+        Assert.True(called.GetProperty("ok").GetBoolean());
+        Assert.Equal("retour:" + request, called.GetProperty("value").GetString());
+        Assert.Contains("call main=1 request=" + request, host.Reports);
+
         // Fin demandée par PommeBrowser : instance détruite, sortie normale.
         await host.SendAsync("close");
         Assert.Equal(0, await host.WaitForExitAsync(TimeSpan.FromSeconds(30)));

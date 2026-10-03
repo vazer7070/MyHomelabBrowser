@@ -71,6 +71,49 @@ static void testDeallocate(NPObject *obj)
 static NPClass testClass = { .structVersion = 3, .allocate = testAllocate, .deallocate = testDeallocate };
 
 /* ------------------------------------------------------------------ */
+/* Objet scriptable (NPPVpluginScriptableNPObject), comme celui de     */
+/* Flash : la page l'appelle par CallFunction (addCallback).           */
+/* ------------------------------------------------------------------ */
+
+static NPObject *scriptable;
+
+static void scriptableDeallocate(NPObject *obj)
+{
+    browser->memfree(obj);
+}
+
+static bool scriptableHasMethod(NPObject *obj, void *name)
+{
+    (void)obj;
+    return name == browser->getstringidentifier("CallFunction");
+}
+
+/* Réponse : « retour:<requête> », sur le fil du module. */
+static bool scriptableInvoke(NPObject *obj, void *name, const NPVariant *args, uint32_t count, NPVariant *result)
+{
+    (void)obj;
+    if (name != browser->getstringidentifier("CallFunction") || count < 1 || args[0].type != NPVariantType_String)
+        return false;
+    const NPString *request = &args[0].value.stringValue;
+    report("call main=%d request=%.*s", GetCurrentThreadId() == mainThread, (int)request->UTF8Length, request->UTF8Characters);
+    static const char prefix[] = "retour:";
+    uint32_t length = (uint32_t)(sizeof(prefix) - 1) + request->UTF8Length;
+    char *text = (char *)browser->memalloc(length + 1);
+    memcpy(text, prefix, sizeof(prefix) - 1);
+    memcpy(text + sizeof(prefix) - 1, request->UTF8Characters, request->UTF8Length);
+    text[length] = 0;
+    result->type = NPVariantType_String;
+    result->value.stringValue.UTF8Characters = text;
+    result->value.stringValue.UTF8Length = length;
+    return true;
+}
+
+static NPClass scriptableClass = {
+    .structVersion = 3, .allocate = testAllocate, .deallocate = scriptableDeallocate,
+    .hasMethod = (void *)scriptableHasMethod, .invoke = (void *)scriptableInvoke
+};
+
+/* ------------------------------------------------------------------ */
 /* Scripts et objets de la page                                        */
 /* ------------------------------------------------------------------ */
 
@@ -306,6 +349,11 @@ static NPError NPP_Destroy(NPP npp, NPSavedData **save)
     (void)npp;
     (void)save;
     report("destroy");
+    if (scriptable)
+    {
+        browser->releaseobject(scriptable);
+        scriptable = NULL;
+    }
     if (dialog)
     {
         DestroyWindow(dialog);
@@ -397,10 +445,17 @@ static void NPP_URLNotify(NPP npp, const char *url, NPReason reason, void *notif
 
 static NPError NPP_GetValue(NPP npp, NPPVariable variable, void *value)
 {
-    (void)npp;
     if (variable == NPPVpluginNameString)
     {
         *(const char **)value = "Pomme Test";
+        return NPERR_NO_ERROR;
+    }
+    if (variable == NPPVpluginScriptableNPObject)
+    {
+        /* Une référence gardée par le greffon, une donnée au navigateur. */
+        if (!scriptable)
+            scriptable = browser->createobject(npp, &scriptableClass);
+        *(NPObject **)value = browser->retainobject(scriptable);
         return NPERR_NO_ERROR;
     }
     return NPERR_GENERIC_ERROR;

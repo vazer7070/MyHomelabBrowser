@@ -61,8 +61,9 @@ Sortie standard, un événement JSON par ligne : `ready` (fenêtre à loger), `s
 `navigate` (url, cible), `script` (adresse `javascript:`, sans réponse), `eval` (id, code : script
 de la page dont le module attend le résultat), `cookies` (id, url, http : cookies de la page pour
 une adresse), `set-cookie` (url, cookie, http : cookie à garder dans la page), `audio`, `log`
-(niveaux info, error, trace), `exit`. Entrée standard : `close`, et
-`result <id> {"ok":true,"value":…}` en réponse à `eval` et `cookies`.
+(niveaux info, error, trace), `called` (id, ok, value : réponse à un appel de la page), `exit`.
+Entrée standard : `close`, `result <id> {"ok":true,"value":…}` en réponse à `eval` et `cookies`,
+et `call <id> {"request":"<invoke …>"}` (appel de la page vers le contenu).
 
 **Scripts de la page** (`ExternalInterface.call`, `NPN_Evaluate`) : le module attend le résultat,
 comme dans un navigateur. L'hôte envoie `eval` puis attend la réponse (20 s au plus) en traitant les
@@ -70,6 +71,18 @@ messages que Windows lui envoie d'autres fils : PommeBrowser place et affiche la
 pendant ce temps, et les deux processus s'attendraient sinon l'un l'autre. PommeBrowser exécute le
 script dans la page (document principal seulement : un contenu venu d'un cadre reçoit un refus) ;
 le module applique lui-même `allowScriptAccess`.
+
+**Appels de la page vers le contenu** (`ExternalInterface.addCallback`) : Flash déclare ses
+fonctions dans la page par `__flash__addCallback(élément, nom)` ; elles appellent
+`élément.CallFunction(<invoke …>)` et évaluent la réponse. PommeBrowser donne `CallFunction` à
+l'élément du contenu (`RuffleContent.FlashBridgeScript`, et à l'emplacement qui le remplace dans la
+page) : il passe par l'objet WebView2 `pommeFlash` (`AddHostObjectToScript`, document principal
+seulement), appelé de façon synchrone, puis par la commande `call` jusqu'à l'objet scriptable du
+module (`NPPVpluginScriptableNPObject`, méthode `CallFunction`). La page attend la réponse
+(8 s au plus) ; PommeBrowser ne traite pendant ce temps que les messages que Windows envoie
+d'autres processus. Pour éviter que chacun attende l'autre : un script demandé par le contenu
+pendant un appel est refusé aussitôt, et un appel de la page est refusé tant que le contenu attend
+un script de la page.
 
 **Cookies partagés avec la page** (`--share-cookies`, `PageCookieHandler.cs`) : comme dans un
 navigateur, chaque chargement du module porte les cookies de la page pour son adresse, HttpOnly
@@ -156,6 +169,6 @@ Sans le réglage, sans module Flash ou sans description du contenu, Basilisk res
 2. **Contenu à sa place dans la page** (fait) : suivi du défilement, des dimensions et du zoom.
 3. **Cookies et session partagés avec la page** (fait) : chargements, redirections,
    `NPN_GetValueForURL` et `NPN_SetValueForURL`, limités au site de la page.
-4. `ExternalInterface` : appels entre les scripts de la page et Flash. **Flash → page fait**
-   (`ExternalInterface.call`, adresses `javascript:`) ; reste page → Flash (`addCallback`).
+4. **`ExternalInterface`** (fait) : appels entre les scripts de la page et Flash, dans les deux
+   sens (`ExternalInterface.call` et adresses `javascript:`, `ExternalInterface.addCallback`).
 5. Linux (`libflashplayer.so`, GTK 2 / XEmbed).

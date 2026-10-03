@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Flash;
 using PommeBrowser.Linux.Core;
@@ -222,6 +223,14 @@ namespace PommeBrowser.Engine
                 hole.style.height = length('height', box.height);
                 hole.style.display = style.display === 'inline' ? 'inline-block' : style.display;
                 hole.style.background = '#000';
+                // Fonctions déclarées par le contenu (ExternalInterface.addCallback) : gardées.
+                if (window.__pommeFlashEquip) {
+                  window.__pommeFlashEquip(target);
+                  window.__pommeFlashEquip(hole);
+                  for (const name of Object.keys(target)) {
+                    if (typeof target[name] === 'function' && !(name in hole)) hole[name] = target[name];
+                  }
+                }
                 target.replaceWith(hole);
               }
               let last = '';
@@ -247,6 +256,37 @@ namespace PommeBrowser.Engine
               send(true);
             })();
             """.Replace("__POST__", post, StringComparison.Ordinal).Replace("__RECT__", RectPrefix, StringComparison.Ordinal);
+
+        /// <summary>Nom de l'objet de PommeBrowser par lequel la page appelle le contenu du moteur intégré.</summary>
+        public const string FlashBridgeName = "pommeFlash";
+
+        /// <summary>
+        /// Appels de la page vers le contenu lu par le moteur intégré (ExternalInterface.addCallback).
+        /// Flash déclare ses fonctions par __flash__addCallback(élément, nom) : elles appellent
+        /// élément.CallFunction(requête XML) et évaluent la réponse. L'élément du contenu (repéré par
+        /// data-pomme-flash ou son identifiant) reçoit ce CallFunction, qui passe par l'objet
+        /// <see cref="FlashBridgeName"/> de PommeBrowser, appelé de façon synchrone comme un greffon.
+        /// Sans réponse, l'appel rend undefined.
+        /// </summary>
+        public static string FlashBridgeScript(string? elementId) => """
+            (() => {
+              const call = (request) => {
+                try {
+                  const bridge = window.chrome && chrome.webview && chrome.webview.hostObjects && chrome.webview.hostObjects.sync.__BRIDGE__;
+                  return bridge ? bridge.CallFunction(String(request)) : undefined;
+                } catch (e) { return undefined; }
+              };
+              const equip = (element) => {
+                if (!element || element.CallFunction === call) return;
+                try { Object.defineProperty(element, 'CallFunction', { value: call, configurable: true, writable: true }); } catch (e) { }
+              };
+              window.__pommeFlashEquip = equip;
+              document.querySelectorAll('[data-pomme-flash]').forEach(equip);
+              const id = __ID__;
+              if (id) equip(document.getElementById(id));
+            })();
+            """.Replace("__BRIDGE__", FlashBridgeName, StringComparison.Ordinal)
+               .Replace("__ID__", JsonSerializer.Serialize(elementId ?? string.Empty), StringComparison.Ordinal);
 
         /// <summary>Fichier demandé par la page (nom seul) : contenu et type, ou null s'il n'existe pas.</summary>
         public static (byte[] Data, string ContentType)? Read(string name, string baseUrl)

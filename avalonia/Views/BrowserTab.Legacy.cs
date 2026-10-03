@@ -25,6 +25,11 @@ namespace PommeBrowser.Views
         Uri? _legacyUri;
         // Contenu lu par le moteur intégré (null : Basilisk).
         FlashContent? _integrated;
+        // Lecteur que la page appelle (ExternalInterface.addCallback), le plus récent de l'onglet.
+        ILegacyBrowser? _flashBridgeHost;
+
+        /// <summary>Attente d'un appel de la page vers le contenu : l'interface reste figée pendant ce temps.</summary>
+        static readonly TimeSpan FlashCallTimeout = TimeSpan.FromSeconds(8);
 
         /// <summary>
         /// Moteur intégré prêt pour le contenu de la page : Windows, réglage activé, et un module
@@ -147,6 +152,39 @@ namespace PommeBrowser.Views
             host.ScriptRequested += (id, code) => RunFlashScript(host, content, id, code);
             host.CookiesRequested += (id, url, httpOnly) => GiveFlashCookies(host, content, id, url, httpOnly);
             host.CookieReceived += (url, cookie, fromHttp) => KeepFlashCookie(content, url, cookie, fromHttp);
+
+            // Appels de la page vers le contenu : l'élément du contenu reçoit CallFunction.
+            if (_engine is { } engine)
+            {
+                _flashBridgeHost = host;
+                engine.SetFlashBridge(request => CallFlash(host, content, request));
+                InstallFlashBridge(engine, content);
+                host.Exited += () =>
+                {
+                    if (_flashBridgeHost != host)
+                        return;
+                    _flashBridgeHost = null;
+                    _engine?.SetFlashBridge(null);
+                };
+            }
+        }
+
+        /// <summary>Appel de la page vers le contenu, sur le fil de l'interface (la page attend la réponse).</summary>
+        [SupportedOSPlatform("windows")]
+        string? CallFlash(FlashHostProcess host, FlashContent content, string request)
+            => _flashBridgeHost == host && !host.HasExited && IsTopDocument(content) ? host.CallFunction(request, FlashCallTimeout) : null;
+
+        async void InstallFlashBridge(IEngineTab engine, FlashContent content)
+        {
+            try
+            {
+                await engine.EvaluateAsync(RuffleContent.FlashBridgeScript(content.Id), isolated: false);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or
+                                           System.Runtime.InteropServices.COMException or System.Threading.Tasks.TaskCanceledException)
+            {
+                RuntimeLogBuffer.Append("[Flash] Appels de la page vers le contenu indisponibles : " + ex.Message);
+            }
         }
 
         /// <summary>
