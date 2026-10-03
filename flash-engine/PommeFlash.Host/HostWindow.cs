@@ -117,6 +117,17 @@ namespace PommeFlash.Host
                         if (PluginWindow != 0)
                             Win32.SetFocus(PluginWindow);
                         return 0;
+                    case Win32.WM_MOUSEACTIVATE:
+                        // Clic dans le contenu : le clavier lui va, comme Firefox le faisait pour ses
+                        // modules (Flash compte sur le navigateur ; sans cela, les touches restent à
+                        // la page). Puis Windows active la fenêtre de PommeBrowser s'il le faut.
+                        FocusPlugin();
+                        break;
+                    case Win32.WM_PARENTNOTIFY:
+                        // Même clic, signalé à chaque parent : au cas où le module garde WM_MOUSEACTIVATE.
+                        if ((uint)(wParam & 0xFFFF) is Win32.WM_LBUTTONDOWN or Win32.WM_RBUTTONDOWN or Win32.WM_MBUTTONDOWN or Win32.WM_XBUTTONDOWN)
+                            FocusPlugin();
+                        break;
                     case Win32.WM_CLOSE:
                         if (_closeRequested != null)
                             _closeRequested();
@@ -133,6 +144,14 @@ namespace PommeFlash.Host
                 HostChannel.Error("Fenêtre : " + ex.Message);
             }
             return Win32.DefWindowProcW(hwnd, message, wParam, lParam);
+        }
+
+        /// <summary>Clavier à la fenêtre du module (puis à celle qu'il y a créée), s'il ne l'a pas déjà.</summary>
+        static void FocusPlugin()
+        {
+            nint focus = Win32.GetFocus();
+            if (PluginWindow != 0 && focus != PluginWindow && !Win32.IsChild(PluginWindow, focus))
+                Win32.SetFocus(PluginWindow);
         }
 
         /// <summary>Fenêtre du module : le clavier va à la fenêtre qu'il y a créée.</summary>

@@ -63,6 +63,8 @@ public sealed class HostProtocolTests
         Assert.Contains("arg wmode=window", reports);
         Assert.Contains("arg id=jeu", reports);
         Assert.Contains("window valid=1 width=400 height=300 type=1", reports);
+        // Un clic dans le contenu lui donne le clavier.
+        Assert.Contains("click-focus=1", reports);
         JsonElement ready = host.Events.First(e => e.GetProperty("event").GetString() == "ready");
         Assert.NotEqual(0, ready.GetProperty("window").GetInt64());
 

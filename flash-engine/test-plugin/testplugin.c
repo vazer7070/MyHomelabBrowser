@@ -18,6 +18,7 @@ static uint16_t browserSize, browserVersion;
 static DWORD mainThread;
 static NPP instanceNpp;
 static HWND dialog;
+static HWND child;
 static int notifications, timerTicks, asyncDone, streamsDone, finished;
 static uint32_t timerId;
 
@@ -285,8 +286,18 @@ static void checkCookies(const char *url)
     report("set-cookie=%d", ((SetValueForUrlFunc)browser->setvalueforurl)(instanceNpp, 501, url, cookie, (uint32_t)strlen(cookie)));
 }
 
+/* Clic dans la fenêtre du greffon, tel que Windows le signale (WM_MOUSEACTIVATE, remonté aux
+   parents) : l'hôte doit lui donner le clavier, comme un navigateur. */
+static void checkClickFocus(void)
+{
+    SetFocus(NULL);
+    SendMessageA(child, WM_MOUSEACTIVATE, (WPARAM)GetAncestor(child, GA_ROOT), MAKELONG(HTCLIENT, WM_LBUTTONDOWN));
+    report("click-focus=%d", child != NULL && GetFocus() == child);
+}
+
 static void continueScenario(const char *movieUrl)
 {
+    checkClickFocus();
     evaluateScript("try { __flash__toXML(pommeAdd(2,3)) ; } catch (e) { \"<undefined/>\"; }", "script");
     evaluateScript("pommeRefuse()", "script-refused");
     checkCookies(movieUrl);
@@ -365,7 +376,6 @@ static NPError NPP_Destroy(NPP npp, NPSavedData **save)
 static NPError NPP_SetWindow(NPP npp, NPWindow *window)
 {
     (void)npp;
-    static HWND child;
     HWND parent = (HWND)window->window;
     report("window valid=%d width=%u height=%u type=%d", parent != NULL && IsWindow(parent), window->width, window->height, window->type);
     /* Comme Flash : une fenêtre à lui dans celle du navigateur. */

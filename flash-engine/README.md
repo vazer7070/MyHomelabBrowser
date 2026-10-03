@@ -46,6 +46,9 @@ PommeBrowser ──(ligne de commande, stdin/stdout JSON)──► PommeFlashHos
   PommeBrowser loge dans l'onglet comme il le faisait pour Basilisk. Les modes `direct` et `gpu`
   demandés par la page sont gardés (fenêtrés sous Windows, ils donnent accès à Stage3D, dont
   beaucoup de jeux ont besoin) ; `opaque` et `transparent`, sans fenêtre, deviennent `window`.
+  Un clic dans le contenu lui donne le clavier (`WM_MOUSEACTIVATE`, comme Firefox le faisait
+  pour ses modules : Flash compte sur le navigateur), et PommeBrowser le reprend quand un de ses
+  champs a le focus.
 
 ## Échanges avec PommeBrowser
 
