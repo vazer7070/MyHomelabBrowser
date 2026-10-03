@@ -18,12 +18,11 @@ using PommeBrowser.Engine;
 namespace PommeBrowser.Legacy
 {
     /// <summary>
-    /// Moteur Flash intégré : PommeFlashHost.exe (voir flash-engine/), qui charge le module Flash
-    /// de l'utilisateur et affiche le contenu dans une fenêtre que l'onglet loge comme celle de
+    /// Moteur Flash intégré : PommeFlashHost (voir flash-engine/), qui charge le module Flash de
+    /// l'utilisateur et affiche le contenu dans une fenêtre que l'onglet loge comme celle de
     /// Basilisk. Échanges : événements JSON sur sa sortie standard, commandes sur son entrée.
-    /// Le processus est enfermé dans un job Windows : il ne survit jamais à PommeBrowser.
+    /// Il ne survit jamais à PommeBrowser : job Windows, ou PR_SET_PDEATHSIG sous Linux (dans l'hôte).
     /// </summary>
-    [SupportedOSPlatform("windows")]
     sealed class FlashHostProcess : ILegacyBrowser
     {
         static readonly List<FlashHostProcess> Running = new();
@@ -60,21 +59,25 @@ namespace PommeBrowser.Legacy
 
         /// <summary>
         /// Hôte livré avec PommeBrowser pour ce module : un processus ne charge que les modules de
-        /// son architecture, lue dans le fichier (flash\PommeFlashHost.exe en 64 bits,
-        /// flash\x86\PommeFlashHost.exe en 32 bits).
+        /// son architecture, lue dans le fichier (Windows : flash\PommeFlashHost.exe en 64 bits,
+        /// flash\x86\PommeFlashHost.exe en 32 bits ; Linux : flash/PommeFlashHost, 64 bits).
         /// </summary>
         public static string ExecutablePath(string module) => ExecutablePath(FlashModuleSearch.Is32Bit(module));
 
         static string ExecutablePath(bool is32Bit)
-            => is32Bit
-                ? Path.Combine(AppContext.BaseDirectory, "flash", "x86", "PommeFlashHost.exe")
-                : Path.Combine(AppContext.BaseDirectory, "flash", "PommeFlashHost.exe");
+        {
+            string flash = Path.Combine(AppContext.BaseDirectory, "flash");
+            if (!OperatingSystem.IsWindows())
+                return Path.Combine(flash, "PommeFlashHost");
+            return is32Bit ? Path.Combine(flash, "x86", "PommeFlashHost.exe") : Path.Combine(flash, "PommeFlashHost.exe");
+        }
 
         /// <summary>Un hôte est livré dans cette compilation (au moins en 64 bits).</summary>
-        public static bool IsAvailable => File.Exists(Path.Combine(AppContext.BaseDirectory, "flash", "PommeFlashHost.exe"));
+        public static bool IsAvailable => File.Exists(ExecutablePath(false));
 
-        /// <summary>L'hôte de l'architecture de ce module est livré.</summary>
-        public static bool IsAvailableFor(string module) => File.Exists(ExecutablePath(module));
+        /// <summary>L'hôte de l'architecture de ce module est livré (Linux : 64 bits seulement).</summary>
+        public static bool IsAvailableFor(string module)
+            => (OperatingSystem.IsWindows() || !FlashModuleSearch.Is32Bit(module)) && File.Exists(ExecutablePath(module));
 
         public event Action? Exited;
 
@@ -117,7 +120,8 @@ namespace PommeBrowser.Legacy
                 start.ArgumentList.Add(argument);
 
             Process process = Process.Start(start) ?? throw new InvalidOperationException("PommeFlashHost ne démarre pas.");
-            AssignToJob(process);
+            if (OperatingSystem.IsWindows())
+                AssignToJob(process);
 
             var host = new FlashHostProcess(process, module);
             lock (Running)
@@ -160,8 +164,10 @@ namespace PommeBrowser.Legacy
             }
             if (isPrivate)
                 yield return "--private";
-            // Cookies de la page donnés au lecteur, et ceux qu'il reçoit gardés dans la page.
-            yield return "--share-cookies";
+            // Cookies de la page donnés au lecteur, et ceux qu'il reçoit gardés dans la page
+            // (WebView2 ; sous Linux, WebKitGTK viendra à l'étape suivante : l'hôte garde ses propres cookies).
+            if (OperatingSystem.IsWindows())
+                yield return "--share-cookies";
             // Fenêtre cachée jusqu'à ce que l'onglet la loge.
             yield return "--hidden";
         }
@@ -366,7 +372,8 @@ namespace PommeBrowser.Legacy
                 string line = "call " + id.ToString(CultureInfo.InvariantCulture) + " " + Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
                 if (!WriteLine(line, timeout))
                     return null;
-                if (!WaitPumpingSentMessages(slot.Done, timeout))
+                bool answered = OperatingSystem.IsWindows() ? WaitPumpingSentMessages(slot.Done, timeout) : slot.Done.WaitOne(timeout);
+                if (!answered)
                 {
                     RuntimeLogBuffer.Append($"[Flash] Le contenu n'a pas répondu à un appel de la page après {timeout.TotalSeconds:0} s.");
                     return null;
@@ -409,6 +416,7 @@ namespace PommeBrowser.Legacy
         /// Attente sur le fil de l'interface : les messages envoyés (SendMessage) par d'autres fils ou
         /// processus sont traités, ceux de l'application restent en file.
         /// </summary>
+        [SupportedOSPlatform("windows")]
         static bool WaitPumpingSentMessages(WaitHandle signal, TimeSpan timeout)
         {
             nint[] handles = { signal.SafeWaitHandle.DangerousGetHandle() };
@@ -535,6 +543,7 @@ namespace PommeBrowser.Legacy
         // Job Windows : les hôtes disparaissent avec PommeBrowser
         // ---------------------------------------------------------------
 
+        [SupportedOSPlatform("windows")]
         static void AssignToJob(Process process)
         {
             try

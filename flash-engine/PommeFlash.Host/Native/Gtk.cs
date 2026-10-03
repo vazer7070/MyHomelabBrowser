@@ -19,7 +19,12 @@ namespace PommeFlash.Host.Native
         const string LibC = "libc.so.6";
 
         public const int WindowToplevel = 0;
+        public const int WindowPopup = 1;
         public const int StateNormal = 0;
+        public const int ButtonPress = 4;
+        public const int ButtonPressMask = 1 << 8;
+        public const int RevertToParent = 2;
+        public const int IsViewable = 2;
         public const int PriorityDefault = 0;
         public const int LcNumeric = 1;
         public const int PrSetPdeathsig = 1;
@@ -41,6 +46,48 @@ namespace PommeFlash.Host.Native
             public int y;
             public int width;
             public int height;
+        }
+
+        /// <summary>Événement X11 de bouton (XButtonEvent), lu par le filtre d'événements de GDK.</summary>
+        [StructLayout(LayoutKind.Sequential)]
+        public struct XButtonEvent
+        {
+            public int type;
+            public nuint serial;
+            public int send_event;
+            public nint display;
+            public nint window;
+            public nint root;
+            public nint subwindow;
+            public nuint time;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct XWindowAttributes
+        {
+            public int x;
+            public int y;
+            public int width;
+            public int height;
+            public int border_width;
+            public int depth;
+            public nint visual;
+            public nint root;
+            public int @class;
+            public int bit_gravity;
+            public int win_gravity;
+            public int backing_store;
+            public nuint backing_planes;
+            public nuint backing_pixel;
+            public int save_under;
+            public nuint colormap;
+            public int map_installed;
+            public int map_state;
+            public nint all_event_masks;
+            public nint your_event_mask;
+            public nint do_not_propagate_mask;
+            public int override_redirect;
+            public nint screen;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -76,6 +123,27 @@ namespace PommeFlash.Host.Native
         public static partial nint XSetErrorHandler(nint handler);
 
         [LibraryImport(LibX11)]
+        public static partial int XGetInputFocus(nint display, nint* focus, int* revertTo);
+
+        [LibraryImport(LibX11)]
+        public static partial int XSetInputFocus(nint display, nint window, int revertTo, nuint time);
+
+        [LibraryImport(LibX11)]
+        public static partial int XQueryTree(nint display, nint window, nint* root, nint* parent, nint** children, uint* count);
+
+        [LibraryImport(LibX11)]
+        public static partial int XGetWindowAttributes(nint display, nint window, XWindowAttributes* attributes);
+
+        [LibraryImport(LibX11)]
+        public static partial int XSync(nint display, int discard);
+
+        [LibraryImport(LibX11)]
+        public static partial int XSynchronize(nint display, int onoff);
+
+        [LibraryImport(LibX11)]
+        public static partial int XFree(nint data);
+
+        [LibraryImport(LibX11)]
         public static partial int XGetErrorText(nint display, int code, byte* buffer, int length);
 
         // --- GTK 2 et GDK ---
@@ -91,6 +159,25 @@ namespace PommeFlash.Host.Native
 
         [LibraryImport(LibGtk)]
         public static partial void gtk_window_set_default_size(nint window, int width, int height);
+
+        [LibraryImport(LibGtk)]
+        public static partial void gtk_window_move(nint window, int x, int y);
+
+        [LibraryImport(LibGtk)]
+        public static partial void gtk_widget_set_size_request(nint widget, int width, int height);
+
+        [LibraryImport(LibGtk)]
+        public static partial void gtk_widget_grab_focus(nint widget);
+
+        [LibraryImport(LibGtk)]
+        public static partial void gtk_widget_add_events(nint widget, int events);
+
+        [LibraryImport(LibGtk)]
+        [return: MarshalAs(UnmanagedType.I4)]
+        public static partial bool gtk_widget_event(nint widget, nint gdkEvent);
+
+        [LibraryImport(LibGtk)]
+        public static partial nint gtk_container_get_children(nint container);
 
         [LibraryImport(LibGtk)]
         public static partial nint gtk_socket_new();
@@ -137,6 +224,21 @@ namespace PommeFlash.Host.Native
         [LibraryImport(LibGdk)]
         public static partial void gdk_window_resize(nint window, int width, int height);
 
+        [LibraryImport(LibGdk)]
+        public static partial int gdk_screen_width();
+
+        [LibraryImport(LibGdk)]
+        public static partial int gdk_screen_height();
+
+        [LibraryImport(LibGdk)]
+        public static partial void gdk_window_add_filter(nint window, nint filter, nint data);
+
+        [LibraryImport(LibGdk)]
+        public static partial void gdk_error_trap_push();
+
+        [LibraryImport(LibGdk)]
+        public static partial int gdk_error_trap_pop();
+
         // --- GObject et GLib ---
 
         [LibraryImport(LibGObject, StringMarshalling = StringMarshalling.Utf8)]
@@ -151,6 +253,9 @@ namespace PommeFlash.Host.Native
         [LibraryImport(LibGLib)]
         [return: MarshalAs(UnmanagedType.I4)]
         public static partial bool g_source_remove(uint id);
+
+        [LibraryImport(LibGLib)]
+        public static partial void g_list_free(nint list);
 
         // --- libc ---
 

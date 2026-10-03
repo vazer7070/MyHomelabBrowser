@@ -58,6 +58,14 @@ PommeBrowser ──(ligne de commande, stdin/stdout JSON)──► PommeFlashHos
   minuteries). Le module est chargé par `dlopen` et son `NP_Initialize(browser, plugin)` d'Unix.
   L'hôte meurt avec PommeBrowser (`prctl(PR_SET_PDEATHSIG)`) ; les erreurs X11 sont notées dans
   le journal avant le traitement de GDK. Il faut X11 ou XWayland (variable `DISPLAY`).
+  Clavier et souris : la souris va directement à la fenêtre du module (X11) ; un clic dans le
+  contenu donne le focus X11 au cadre, comme un navigateur (filtre GDK sur `ButtonPress`), et les
+  touches reçues par le cadre sont transmises à la fenêtre du module (GTK ne le fait pas de
+  lui-même quand rien n'y est focalisable). Fenêtre « cachée » (`--hidden`) : une fenêtre sans
+  gestionnaire, hors de l'écran, que PommeBrowser loge dans l'onglet (X11Dock) ; elle ne demande
+  jamais sa propre taille (`gtk_widget_set_size_request(prise, 1, 1)`). Diagnostic : avec
+  `POMMEFLASH_XTRACE=1`, l'hôte note chaque événement X reçu ; avec `POMMEFLASH_XSYNC=1`, une
+  erreur X11 est signalée à l'appel fautif, avec la pile de l'hôte et les derniers événements.
 
 ## Échanges avec PommeBrowser
 
@@ -150,9 +158,12 @@ POMMEFLASH_LAUNCHER=wine xvfb-run -a dotnet test tests/PommeFlash.Tests
 Sous Windows, le greffon se compile avec `clang -shared` (ou `cl /LD`) et `POMMEFLASH_LAUNCHER`
 n'est pas nécessaire. En 32 bits : `clang --target=i686-pc-windows-msvc`, avec l'hôte publié en
 `win-x86` ; la CI Windows passe les tests dans les deux architectures, et la CI Linux avec l'hôte
-de Linux. Les vérifications propres à un système (clavier au clic, boîtes de dialogue et
-programmes du module sous Windows ; GTK 2, XEmbed et affichage X11 sous Linux) ne sont faites
-que pour l'hôte concerné.
+de Linux. Les vérifications propres à un système (boîtes de dialogue et programmes du module sous
+Windows ; GTK 2, XEmbed et affichage X11 sous Linux) ne sont faites que pour l'hôte concerné. Le
+clavier est vérifié sur les deux : sous Windows, le greffon simule le clic (`WM_MOUSEACTIVATE`) ;
+sous Linux, il met le clavier dans une autre fenêtre, clique dans le contenu et tape une touche
+(XTEST, `libxtst-dev`), qui doit lui arriver même sans rien de focalisable dans sa fenêtre et le
+pointeur ailleurs.
 
 ## Comparer avec Basilisk : l'espion
 
@@ -163,7 +174,7 @@ moteur intégré : deux journaux pour la même page, à comparer. Voir `flash-en
 
 ## Dans PommeBrowser
 
-Réglage **Paramètres › Avancé › Moteur Flash intégré (expérimental)**, Windows seulement.
+Réglage **Paramètres › Avancé › Moteur Flash intégré (expérimental)**, Windows et Linux (X11).
 
 1. Le script de détection de Ruffle décrit le contenu Flash principal de la page (le plus
    grand) : adresse du SWF, page, flashvars, taille, identifiant et paramètres
@@ -199,6 +210,9 @@ Sans le réglage, sans module Flash ou sans description du contenu, Basilisk res
 5. Linux (`libflashplayer.so`, GTK 2 / XEmbed) :
    a. **Hôte sous Linux** (fait) : fenêtre GTK 2 et prise XEmbed, boucle GLib, `dlopen`,
       greffon de test GTK 2, tests sans écran dans la CI Linux (`PommeFlashHost-Linux-x64`).
-   b. PommeBrowser sous Linux lance l'hôte (`libflashplayer.so` installé ou du système), le loge
-      dans l'onglet (X11) et le livre dans l'AppImage x86_64.
-   c. Contenu à sa place dans la page sous X11 ; cookies partagés avec WebKitGTK.
+   b. **PommeBrowser sous Linux** (fait) : lance l'hôte (`libflashplayer.so` installé, sinon
+      celui d'un dossier de modules du système), le loge dans l'onglet à la place de la page
+      (X11Dock, comme Basilisk : le clic lui donne le clavier) et le livre dans l'AppImage x86_64
+      (`usr/lib/pommebrowser/flash/PommeFlashHost`). Il faut GTK 2 sur la machine (`libgtk2.0-0`).
+   c. Contenu à sa place dans la page sous X11 ; cookies partagés avec WebKitGTK (en attendant,
+      l'hôte garde ses propres cookies sous Linux).

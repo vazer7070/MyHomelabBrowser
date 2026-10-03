@@ -44,9 +44,9 @@ public sealed class HostProtocolTests
             "--flashvars", "a=1&b=2",
             "--id", "jeu",
             "--width", "400",
-            "--height", "300",
-            "--hidden"
-        }, code => code.Contains("pommeAdd(2,3)", StringComparison.Ordinal)
+            "--height", "300"
+        }.Concat(HostRun.IsWindowsHost ? new[] { "--hidden" } : Array.Empty<string>()), // Linux : fenêtre affichée, pour le clic et la touche simulés
+        code => code.Contains("pommeAdd(2,3)", StringComparison.Ordinal)
             ? (true, "<number>5</number>")
             : (false, null));
 
@@ -63,17 +63,18 @@ public sealed class HostProtocolTests
         Assert.Contains("arg wmode=window", reports);
         Assert.Contains("arg id=jeu", reports);
         Assert.Contains("window valid=1 width=400 height=300 type=1", reports);
-        if (HostRun.IsWindowsHost)
+        // Un clic dans le contenu lui donne le clavier (le clavier était ailleurs).
+        Assert.Contains("click-focus=1", reports);
+        if (!HostRun.IsWindowsHost)
         {
-            // Un clic dans le contenu lui donne le clavier.
-            Assert.Contains("click-focus=1", reports);
-        }
-        else
-        {
-            // Linux : GTK 2 et XEmbed annoncés dès NP_Initialize, affichage X11 donné avec la fenêtre.
+            // Linux : GTK 2 et XEmbed annoncés dès NP_Initialize, affichage X11 donné avec la fenêtre,
+            // fenêtre du module branchée dans la prise ; après le clic, la touche tapée lui arrive
+            // même sans rien de focalisable dedans et le pointeur ailleurs.
             Assert.Contains("toolkit=2 xembed=1", reports);
             Assert.Contains(reports, r => r.StartsWith("ws-info type=1 display=1 visual=1 depth=", StringComparison.Ordinal));
             Assert.Contains("plug embedded=1", reports);
+            Assert.Contains("focus-away=1", reports);
+            Assert.Contains("plug-key=97", reports);
         }
         JsonElement ready = host.Events.First(e => e.GetProperty("event").GetString() == "ready");
         Assert.NotEqual(0, ready.GetProperty("window").GetInt64());

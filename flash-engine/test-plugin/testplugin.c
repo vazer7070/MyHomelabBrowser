@@ -6,8 +6,9 @@
  * Compilation : x86_64-w64-mingw32-gcc -shared -O2 -o npPommeTest.dll testplugin.c
  *               (32 bits : i686-w64-mingw32-gcc … -Wl,--kill-at)
  *           ou  clang [--target=i686-pc-windows-msvc] -shared -O2 -o npPommeTest.dll testplugin.c -luser32
- *     Linux :   gcc -shared -fPIC -O2 -o libnpPommeTest.so testplugin.c $(pkg-config --cflags --libs gtk+-2.0) -lX11 -lpthread
- *               (GTK 2, comme le module Flash de Linux : sa fenêtre est un GtkPlug dans la prise de l'hôte)
+ *     Linux :   gcc -shared -fPIC -O2 -o libnpPommeTest.so testplugin.c $(pkg-config --cflags --libs gtk+-2.0) -lX11 -lXtst -lpthread
+ *               (GTK 2, comme le module Flash de Linux : sa fenêtre est un GtkPlug dans la prise de
+ *               l'hôte ; XTEST simule le clic et la touche de l'utilisateur)
  */
 #ifdef _WIN32
 #include <windows.h>
@@ -15,6 +16,8 @@
 #include <pthread.h>
 #include <gtk/gtk.h>
 #include <gdk/gdkx.h>
+#include <X11/extensions/XTest.h>
+#include <X11/keysym.h>
 #endif
 #include <stdarg.h>
 #include <stdio.h>
@@ -41,7 +44,10 @@ static HWND dialog;
 static HWND child;
 #else
 static GtkWidget *plug;
-static int toolkit;
+static GtkWidget *decoy;
+static Display *xdisplay;
+static Window frame;
+static int toolkit, keyDone;
 static NPBool xembed;
 #endif
 static int notifications, timerTicks, asyncDone, streamsDone, finished;
@@ -68,8 +74,11 @@ static uint32_t fnv1a(uint32_t hash, const unsigned char *data, int32_t length)
 
 static void checkFinished(void)
 {
-    /* Contenu principal + 3 adresses demandées, minuterie et appel asynchrone. */
-    if (!finished && notifications >= 3 && streamsDone >= 3 && timerTicks >= 3 && asyncDone)
+    /* Contenu principal + 3 adresses demandées, minuterie et appel asynchrone (Linux : et la touche). */
+#ifdef _WIN32
+    int keyDone = 1;
+#endif
+    if (!finished && notifications >= 3 && streamsDone >= 3 && timerTicks >= 3 && asyncDone && keyDone)
     {
         finished = 1;
         report("done");
@@ -334,16 +343,108 @@ static void checkCookies(const char *url)
     report("set-cookie=%d", ((SetValueForUrlFunc)browser->setvalueforurl)(instanceNpp, 501, url, cookie, (uint32_t)strlen(cookie)));
 }
 
+#ifdef _WIN32
 /* Clic dans la fenêtre du greffon, tel que Windows le signale (WM_MOUSEACTIVATE, remonté aux
    parents) : l'hôte doit lui donner le clavier, comme un navigateur. */
 static void checkClickFocus(void)
 {
-#ifdef _WIN32
     SetFocus(NULL);
     SendMessageA(child, WM_MOUSEACTIVATE, (WPARAM)GetAncestor(child, GA_ROOT), MAKELONG(HTCLIENT, WM_LBUTTONDOWN));
     report("click-focus=%d", child != NULL && GetFocus() == child);
-#endif
 }
+#else
+/* Le clavier est-il dans le cadre de l'hôte (lui ou une de ses fenêtres) ? */
+static int focusInFrame(void)
+{
+    Window focus = None;
+    int revert;
+    XGetInputFocus(xdisplay, &focus, &revert);
+    for (int depth = 0; focus > 1 && depth < 64; depth++)
+    {
+        if (focus == frame)
+            return 1;
+        Window root, parent, *children = NULL;
+        unsigned int count;
+        if (!XQueryTree(xdisplay, focus, &root, &parent, &children, &count))
+            return 0;
+        if (children)
+            XFree(children);
+        if (parent == root)
+            return 0;
+        focus = parent;
+    }
+    return 0;
+}
+
+static gboolean onPlugKey(GtkWidget *widget, GdkEventKey *event, gpointer data)
+{
+    (void)widget;
+    (void)data;
+    report("plug-key=%u", event->keyval);
+    keyDone = 1;
+    checkFinished();
+    return TRUE;
+}
+
+/* Étape 3 : le clavier doit être revenu dans le cadre ; le pointeur part ailleurs, puis une
+   touche est tapée (XTEST) : elle doit arriver à la fenêtre du greffon. */
+static gboolean focusStep3(gpointer data)
+{
+    (void)data;
+    report("click-focus=%d", focusInFrame());
+    XTestFakeMotionEvent(xdisplay, -1, 900, 700, 0);
+    KeyCode key = XKeysymToKeycode(xdisplay, XK_a);
+    XTestFakeKeyEvent(xdisplay, key, True, 0);
+    XTestFakeKeyEvent(xdisplay, key, False, 0);
+    XFlush(xdisplay);
+    return FALSE;
+}
+
+/* Étape 2 : le clavier est ailleurs (une autre fenêtre) ; clic de l'utilisateur dans le greffon (XTEST). */
+static gboolean focusStep2(gpointer data)
+{
+    (void)data;
+    XSetInputFocus(xdisplay, GDK_WINDOW_XID(gtk_widget_get_window(decoy)), RevertToParent, CurrentTime);
+    XSync(xdisplay, False);
+    report("focus-away=%d", !focusInFrame());
+    gint x = 0, y = 0;
+    gdk_window_get_origin(gtk_widget_get_window(plug), &x, &y);
+    XTestFakeMotionEvent(xdisplay, -1, x + 20, y + 20, 0);
+    XTestFakeButtonEvent(xdisplay, 1, True, 0);
+    XTestFakeButtonEvent(xdisplay, 1, False, 0);
+    XFlush(xdisplay);
+    g_timeout_add(300, focusStep3, NULL);
+    return FALSE;
+}
+
+/* Comme un utilisateur : le clavier est dans une autre fenêtre, il clique dans le contenu puis tape. */
+static void checkClickFocus(void)
+{
+    void *netscapeWindow = NULL;
+    browser->getvalue(instanceNpp, NPNVnetscapeWindow, &netscapeWindow);
+    frame = (Window)(uintptr_t)netscapeWindow;
+    if (!plug || !xdisplay || !frame)
+    {
+        report("click-focus=0");
+        keyDone = 1;
+        return;
+    }
+    gint x = 0, y = 0;
+    gdk_window_get_origin(gtk_widget_get_window(plug), &x, &y);
+    if (x < 0 || y < 0 || x + 20 >= gdk_screen_width() || y + 20 >= gdk_screen_height())
+    {
+        /* Fenêtre cachée (hors de l'écran, en attendant que le navigateur la loge) : pas de clic possible. */
+        report("click-focus=skipped");
+        keyDone = 1;
+        return;
+    }
+    decoy = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_move(GTK_WINDOW(decoy), 600, 500);
+    gtk_window_set_default_size(GTK_WINDOW(decoy), 50, 50);
+    gtk_widget_show(decoy);
+    g_timeout_add(200, focusStep2, NULL);
+}
+#endif
 
 static void continueScenario(const char *movieUrl)
 {
@@ -433,6 +534,11 @@ static NPError NPP_Destroy(NPP npp, NPSavedData **save)
         gtk_widget_destroy(plug);
         plug = NULL;
     }
+    if (decoy)
+    {
+        gtk_widget_destroy(decoy);
+        decoy = NULL;
+    }
 #endif
     return NPERR_NO_ERROR;
 }
@@ -467,8 +573,13 @@ static NPError NPP_SetWindow(NPP npp, NPWindow *window)
     }
     if (valid && !plug)
     {
+        xdisplay = display;
+        /* Rien de focalisable dedans : les touches doivent quand même arriver à la fenêtre. */
         plug = gtk_plug_new((GdkNativeWindow)parent);
-        gtk_container_add(GTK_CONTAINER(plug), gtk_drawing_area_new());
+        GtkWidget *area = gtk_drawing_area_new();
+        gtk_widget_add_events(area, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK); /* la souris, comme Flash */
+        gtk_container_add(GTK_CONTAINER(plug), area);
+        g_signal_connect(plug, "key-press-event", G_CALLBACK(onPlugKey), NULL);
         gtk_widget_show_all(plug);
         report("plug embedded=%d", gtk_plug_get_embedded(GTK_PLUG(plug)) ? 1 : 0);
     }
