@@ -80,16 +80,18 @@ namespace PommeBrowser.Engine
                 try { const path = new URL(value, document.baseURI).pathname.toLowerCase(); return path.endsWith('.swf') || path.endsWith('.spl'); }
                 catch (e) { return false; }
               };
+              // Élément d'origine, ou celui de Ruffle qui l'a remplacé (attributs et paramètres recopiés).
+              const kind = (el) => el.localName.startsWith('ruffle-') ? el.localName.slice(7) : el.localName;
               const isFlash = (el) => {
                 const type = (el.getAttribute('type') || '').toLowerCase();
                 if (FLASH_TYPES.includes(type)) return true;
-                if (el.localName === 'object') {
+                if (kind(el) === 'object') {
                   if ((el.getAttribute('classid') || '').toLowerCase() === CLSID) return true;
                   if (isSwf(el.getAttribute('data') || '')) return true;
                   const movie = el.querySelector('param[name="movie" i], param[name="src" i]');
                   return !!movie && isSwf(movie.getAttribute('value') || '');
                 }
-                return el.localName === 'embed' && isSwf(el.getAttribute('src') || '');
+                return kind(el) === 'embed' && isSwf(el.getAttribute('src') || '');
               };
               const contains = (root) => {
                 if (!root || root.nodeType !== 1) return false;
@@ -113,6 +115,7 @@ namespace PommeBrowser.Engine
                 const attach = (player) => {
                   if (seen.has(player)) return;
                   seen.add(player);
+                  report();
                   player.addEventListener('loadedmetadata', () => { if (!playing) { playing = true; post('playing'); } });
                   const box = player.shadowRoot && player.shadowRoot.getElementById('container');
                   if (!box) return;
@@ -129,55 +132,69 @@ namespace PommeBrowser.Engine
                   for (const m of mutations) for (const node of m.addedNodes) scan(node);
                 }).observe(document.documentElement, { childList: true, subtree: true });
               };
-              // Contenu principal : décrit pour le moteur Flash intégré, avant que Ruffle ne
-              // remplace les éléments. Le plus grand, mais un format publicitaire courant passe
-              // après tout autre contenu ; les contenus cachés ou minuscules (pixel de suivi,
-              // lecteur audio invisible) ne comptent pas.
+              // Contenu principal : décrit pour le moteur Flash intégré. Le plus grand, mais un format
+              // publicitaire courant passe après tout autre contenu, et un contenu déclaré minuscule
+              // (pixel de suivi, lecteur audio invisible : width="1") ne compte pas.
               const AD_SIZES = new Set(__AD_SIZES__);
               const describe = () => {
                 let best = null;
-                for (const el of document.querySelectorAll('object, embed')) {
+                for (const el of document.querySelectorAll('object, embed, ruffle-object, ruffle-embed')) {
                   if (!isFlash(el)) continue;
-                  if (el.localName === 'embed' && el.parentElement && el.parentElement.localName === 'object' && isFlash(el.parentElement)) continue;
-                  // Taille donnée en pixels par l'élément, sinon celle affichée (un <object> sans
-                  // lecteur n'affiche que son contenu de repli).
-                  const rect = el.getBoundingClientRect();
-                  const size = (name, shown) => {
+                  const parent = el.parentElement;
+                  if (kind(el) === 'embed' && parent && kind(parent) === 'object' && isFlash(parent)) continue;
+                  const params = {};
+                  if (kind(el) === 'object') {
+                    for (const p of el.querySelectorAll(':scope > param')) {
+                      const name = (p.getAttribute('name') || '').toLowerCase();
+                      if (name) params[name] = p.getAttribute('value') || '';
+                    }
+                  } else {
+                    for (const a of el.attributes) params[a.name.toLowerCase()] = a.value;
+                  }
+                  const source = kind(el) === 'object' ? (el.getAttribute('data') || params.movie || params.src || '') : (el.getAttribute('src') || '');
+                  if (!source) continue;
+                  let swf;
+                  try { swf = new URL(source, document.baseURI).href; } catch (e) { continue; }
+                  // Taille déclarée en pixels, sinon celle affichée : 0 pour un contenu encore caché ou
+                  // en pourcentage d'un conteneur sans taille, qui compte quand même (le plus petit).
+                  const declared = (name) => {
                     const value = (el.getAttribute(name) || '').trim();
-                    return /^\d+(px)?$/i.test(value) ? parseInt(value, 10) : Math.round(shown);
+                    return /^\d+(px)?$/i.test(value) ? parseInt(value, 10) : null;
                   };
-                  const width = size('width', rect.width);
-                  const height = size('height', rect.height);
-                  if (width < 16 || height < 16) continue;
+                  const declaredWidth = declared('width'), declaredHeight = declared('height');
+                  if ((declaredWidth !== null && declaredWidth < 16) || (declaredHeight !== null && declaredHeight < 16)) continue;
+                  const rect = el.getBoundingClientRect();
+                  const width = declaredWidth ?? Math.round(rect.width);
+                  const height = declaredHeight ?? Math.round(rect.height);
                   const ad = AD_SIZES.has(width + 'x' + height);
-                  if (!best || (ad !== best.ad ? !ad : width * height > best.width * best.height)) best = { el, width, height, ad };
+                  if (!best || (ad !== best.ad ? !ad : width * height > best.width * best.height)) best = { el, width, height, ad, swf, params };
                 }
                 if (!best) return null;
                 const el = best.el;
                 // Repère gardé par Ruffle quand il remplace l'élément : le moteur intégré le retrouve.
                 el.setAttribute('data-pomme-flash', '');
-                const params = {};
-                if (el.localName === 'object') {
-                  for (const p of el.querySelectorAll(':scope > param')) {
-                    const name = (p.getAttribute('name') || '').toLowerCase();
-                    if (name) params[name] = p.getAttribute('value') || '';
-                  }
-                } else {
-                  for (const a of el.attributes) params[a.name.toLowerCase()] = a.value;
-                }
-                const source = el.localName === 'object' ? (el.getAttribute('data') || params.movie || params.src || '') : (el.getAttribute('src') || '');
-                let swf;
-                try { swf = new URL(source, document.baseURI).href; } catch (e) { return null; }
+                const params = best.params;
                 const flashvars = params.flashvars || el.getAttribute('flashvars') || null;
                 for (const name of ['movie', 'src', 'data', 'flashvars', 'width', 'height', 'type', 'id', 'name', 'classid', 'codebase', 'pluginspage', 'style', 'class']) delete params[name];
-                return { swf, page: location.href, flashvars, width: best.width, height: best.height, id: el.id || el.getAttribute('name') || null, params };
+                return { swf: best.swf, page: location.href, flashvars, width: best.width, height: best.height, id: el.id || el.getAttribute('name') || null, params };
+              };
+              // Contenu décrit au début, puis de nouveau à chaque lecteur Ruffle créé : un contenu
+              // ajouté plus tard, ou qui n'avait pas encore de taille, est pris en compte.
+              let reported = '';
+              const report = () => {
+                try {
+                  const content = describe();
+                  if (!content) return;
+                  const json = JSON.stringify(content);
+                  if (json !== reported) { reported = json; post('__CONTENT__' + json); }
+                } catch (e) { }
               };
               let observer = null;
               const inject = () => {
                 if (observer) observer.disconnect();
                 if (window.__pommeRuffleInjected) return;
                 window.__pommeRuffleInjected = true;
-                try { const content = describe(); if (content) post('__CONTENT__' + JSON.stringify(content)); } catch (e) { }
+                report();
                 post('detected');
                 load('__BASE__pomme-config.js')
                   .then(() => load('__BASE__ruffle.js'))

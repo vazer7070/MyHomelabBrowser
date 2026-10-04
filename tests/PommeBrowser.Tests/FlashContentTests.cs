@@ -75,11 +75,17 @@ public sealed class FlashContentTests
     }
 
     [Fact]
-    public void The_detection_script_skips_tiny_contents_and_knows_the_advertising_sizes()
+    public void The_detection_script_skips_declared_tiny_contents_and_knows_the_advertising_sizes()
     {
         string script = RuffleContent.ProbeScript("https://pomme.invalid/", "post");
 
-        Assert.Contains("if (width < 16 || height < 16) continue;", script);
+        // Seule une taille déclarée minuscule écarte un contenu : un contenu encore caché ou en
+        // pourcentage (taille affichée nulle) reste candidat.
+        Assert.Contains("if ((declaredWidth !== null && declaredWidth < 16) || (declaredHeight !== null && declaredHeight < 16)) continue;", script);
+        Assert.DoesNotContain("if (width < 16 || height < 16) continue;", script);
+        // Les éléments déjà remplacés par Ruffle comptent, et la description est refaite à chaque lecteur.
+        Assert.Contains("'object, embed, ruffle-object, ruffle-embed'", script);
+        Assert.Contains("report();", script);
         Assert.Contains("\"728x90\"", script);
         Assert.Contains("\"160x600\"", script);
         Assert.DoesNotContain("__AD_SIZES__", script);
