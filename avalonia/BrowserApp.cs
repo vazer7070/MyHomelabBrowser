@@ -128,6 +128,9 @@ namespace PommeBrowser
             RestoreSession(window, urls);
             window.Show();
 
+            // Lancements suivants (liens ouverts depuis d'autres applications) : dans cette instance.
+            Program.Instance?.Attach(targets => Dispatcher.UIThread.Post(() => Current.OpenFromOutside(targets)));
+
             // Durée du démarrage, jusqu'à la fenêtre affichée (journal joint aux rapports).
             if (placement == null)
             {
@@ -233,6 +236,27 @@ namespace PommeBrowser
                 _closedTabs.RemoveAll(t => t.Window == window);
             };
             return window;
+        }
+
+        /// <summary>
+        /// Adresses d'un autre lancement (lien ouvert depuis une autre application, fichier, icône) :
+        /// dans des onglets de la dernière fenêtre, qui passe au premier plan. Sans adresse, une
+        /// nouvelle fenêtre, comme Firefox et Chrome quand on les relance.
+        /// </summary>
+        public void OpenFromOutside(IReadOnlyList<string> targets)
+        {
+            List<string> urls = targets.Select(UrlResolver.TryResolveUrl).OfType<string>().ToList();
+            MainWindow? window = ActiveWindow;
+            if (window == null || urls.Count == 0)
+            {
+                window = NewWindow(urls.FirstOrDefault());
+                urls.RemoveRange(0, Math.Min(1, urls.Count));
+            }
+            foreach (string url in urls)
+                window.NewTab(url, select: true);
+            if (window.WindowState == WindowState.Minimized)
+                window.WindowState = WindowState.Normal;
+            window.Activate();
         }
 
         /// <summary>Nouvelle fenêtre, avec la page d'accueil ou l'adresse donnée.</summary>

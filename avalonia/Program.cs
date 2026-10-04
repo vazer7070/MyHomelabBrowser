@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Avalonia;
 using MyHomelabBrowser.classes;
@@ -20,7 +21,10 @@ namespace PommeBrowser
         public static readonly long StartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
 
         /// <summary>Adresses passées en ligne de commande (ouvertes dans des onglets).</summary>
-        public static string[] StartupUrls { get; private set; } = Array.Empty<string>();
+        public static IReadOnlyList<string> StartupUrls { get; private set; } = Array.Empty<string>();
+
+        /// <summary>Instance unique : reçoit les adresses des lancements suivants (null dans les tests).</summary>
+        public static SingleInstance? Instance { get; private set; }
 
         [STAThread]
         static int Main(string[] args)
@@ -33,6 +37,13 @@ namespace PommeBrowser
             RuntimeLogBuffer.Init();
             AppPaths.Initialize();
             ErrorLog.InstallProcessHandlers();
+
+            // PommeBrowser déjà ouvert (lien cliqué dans une autre application, icône…) : il
+            // reçoit les adresses et ouvre les onglets ; ce lancement s'arrête là.
+            IReadOnlyList<string> targets = LaunchTargets.Resolve(args, Environment.CurrentDirectory);
+            Instance = SingleInstance.Claim(SingleInstance.ChannelName(AppDataContext.GlobalRoot), targets, RuntimeLogBuffer.Append);
+            if (Instance == null)
+                return 0;
 
             // Dernier profil ouvert. Les données d'un profil renommé ou supprimé pendant que
             // PommeBrowser tournait sont déplacées ou effacées maintenant, moteur arrêté.
@@ -52,7 +63,7 @@ namespace PommeBrowser
 
             Appearance = LoadAppearance();
             InitializeLanguage(Appearance.Language);
-            StartupUrls = args;
+            StartupUrls = targets;
 
             if (OperatingSystem.IsLinux())
             {

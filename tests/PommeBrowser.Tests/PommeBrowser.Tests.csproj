@@ -94,6 +94,8 @@
     <Compile Include="..\..\avalonia\Engine\FlashContent.cs" Link="Avalonia\FlashContent.cs" />
     <Compile Include="..\..\avalonia\Engine\FlashCookies.cs" Link="Avalonia\FlashCookies.cs" />
     <Compile Include="..\..\avalonia\Engine\RuffleContent.cs" Link="Avalonia\RuffleContent.cs" />
+    <Compile Include="..\..\avalonia\Core\SingleInstance.cs" Link="Avalonia\SingleInstance.cs" />
+    <Compile Include="..\..\avalonia\Core\LaunchTargets.cs" Link="Avalonia\LaunchTargets.cs" />
   </ItemGroup>
 
   <ItemGroup Label="Édition Linux (logique sans interface)">
