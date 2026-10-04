@@ -58,6 +58,10 @@ namespace PommeBrowser.Engine
             return Area > current.Area;
         }
 
+        /// <summary>Même contenu : même fichier, même document, mêmes flashvars (taille et paramètres mis à part).</summary>
+        public bool IsSameAs(FlashContent other)
+            => Swf == other.Swf && Page == other.Page && string.Equals(FlashVars, other.FlashVars, StringComparison.Ordinal);
+
         [GeneratedRegex("^[a-z][a-z0-9_-]{0,63}$", RegexOptions.CultureInvariant)]
         private static partial Regex ParamName();
 
@@ -130,9 +134,11 @@ namespace PommeBrowser.Engine
     /// <summary>
     /// Position du contenu lu par le moteur intégré dans la page (script de suivi, voir
     /// RuffleContent.FlashTrackerScript) : rectangle en pixels CSS par rapport à la zone affichée,
-    /// rapport pixels CSS / pixels de l'écran, et visibilité. Données de la page : bornées.
+    /// rapport pixels CSS / pixels de l'écran, et visibilité. Contenu d'un cadre : zone du cadre
+    /// où il est visible (<paramref name="Clip"/>, pixels CSS). Données de la page : bornées.
     /// </summary>
-    public sealed record FlashRect(double X, double Y, double Width, double Height, double PixelRatio, bool Visible)
+    public sealed record FlashRect(double X, double Y, double Width, double Height, double PixelRatio, bool Visible,
+                                   FlashClip? Clip = null)
     {
         const double MaxCoordinate = 1_000_000;
         const double MaxSize = 100_000;
@@ -153,7 +159,17 @@ namespace PommeBrowser.Engine
                     width is < 0 or > MaxSize || height is < 0 or > MaxSize || ratio is <= 0 or > 16)
                     return null;
                 bool visible = root.TryGetProperty("visible", out JsonElement shown) && shown.ValueKind == JsonValueKind.True;
-                return new FlashRect(x, y, width, height, ratio, visible && width >= 1 && height >= 1);
+                FlashClip? clip = null;
+                if (root.TryGetProperty("clip", out JsonElement area) && area.ValueKind == JsonValueKind.Object)
+                {
+                    if (!Number(area, "x", out double clipX) || !Number(area, "y", out double clipY) ||
+                        !Number(area, "w", out double clipWidth) || !Number(area, "h", out double clipHeight) ||
+                        Math.Abs(clipX) > MaxCoordinate || Math.Abs(clipY) > MaxCoordinate ||
+                        clipWidth is < 0 or > MaxSize || clipHeight is < 0 or > MaxSize)
+                        return null;
+                    clip = new FlashClip(clipX, clipY, clipWidth, clipHeight);
+                }
+                return new FlashRect(x, y, width, height, ratio, visible && width >= 1 && height >= 1, clip);
             }
             catch (JsonException)
             {
@@ -183,6 +199,14 @@ namespace PommeBrowser.Engine
             double top = Math.Max(0, Y * factor);
             double right = Math.Min(areaWidth, (X + Width) * factor);
             double bottom = Math.Min(areaHeight, (Y + Height) * factor);
+            if (Clip is { } clip)
+            {
+                // Contenu d'un cadre : seule la partie dans la zone du cadre est montrée.
+                left = Math.Max(left, clip.X * factor);
+                top = Math.Max(top, clip.Y * factor);
+                right = Math.Min(right, (clip.X + clip.Width) * factor);
+                bottom = Math.Min(bottom, (clip.Y + clip.Height) * factor);
+            }
             if (right - left < 1 || bottom - top < 1)
                 return null;
 
@@ -194,6 +218,9 @@ namespace PommeBrowser.Engine
                 Math.Max(1, (int)Math.Round(Width * PixelRatio)), Math.Max(1, (int)Math.Round(Height * PixelRatio)));
         }
     }
+
+    /// <summary>Zone d'un cadre où son contenu est visible, en pixels CSS dans la zone affichée.</summary>
+    public readonly record struct FlashClip(double X, double Y, double Width, double Height);
 
     /// <summary>
     /// Contenu placé dans la page : partie visible (DIP, dans la zone de la page web), et fenêtre

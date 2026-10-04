@@ -122,7 +122,75 @@ public sealed class FlashRectTests
         Assert.DoesNotContain("__POST__", script);
         Assert.DoesNotContain("__RECT__", script);
         // Les fonctions déclarées par le contenu suivent l'élément remplacé par l'emplacement.
-        Assert.Contains("window.__pommeFlashEquip(hole)", script);
+        Assert.Contains("root.__pommeFlashEquip(hole)", script);
+        // Contenu retiré par la page : signalé, le lecteur s'arrête.
+        Assert.Contains("'rect:gone'", script);
+        // Document principal : pas de recherche de cadre.
+        Assert.Contains("const root = window;", script);
+        Assert.DoesNotContain("__ROOT__", script);
+    }
+
+    [Fact]
+    public void The_tracker_script_finds_a_content_in_a_frame_of_the_page()
+    {
+        string script = RuffleContent.FlashTrackerScript("send(status)", new Uri("http://na62.evony.com/s2.html?a='b'"));
+
+        Assert.DoesNotContain("const root = window;", script);
+        Assert.Contains("frameElement", script);
+        // Adresse du cadre : chaîne JavaScript sûre.
+        Assert.Contains("(\"http://na62.evony.com/s2.html?a=\\u0027b\\u0027\")", script);
+        Assert.DoesNotContain("__PAGE__", script);
+        Assert.DoesNotContain("__ROOT__", script);
+    }
+
+    [Fact]
+    public void A_script_runs_in_the_window_of_its_frame()
+    {
+        string script = RuffleContent.InWindowOf(new Uri("http://na62.evony.com/s2.html"), "alert(\"</script>\")");
+
+        // Script passé en chaîne JSON, exécuté par l'eval de la fenêtre du cadre (portée globale du cadre).
+        Assert.Contains("w.eval(\"alert(\\u0022\\u003C/script\\u003E\\u0022)\")", script);
+        Assert.Contains("\"http://na62.evony.com/s2.html\"", script);
+        Assert.DoesNotContain("__SCRIPT__", script);
+        Assert.DoesNotContain("__WINDOW__", script);
+    }
+
+    [Fact]
+    public void A_content_of_a_frame_is_cut_to_the_area_of_its_frame()
+    {
+        FlashRect? rect = FlashRect.Parse("""{"x":95,"y":75,"w":600,"h":248,"dpr":1,"visible":true,"clip":{"x":105,"y":55,"w":600,"h":200}}""");
+
+        Assert.NotNull(rect);
+        Assert.Equal(new FlashClip(105, 55, 600, 200), rect.Clip);
+        FlashPlacement? placement = rect.Place(1000, 800, 1);
+        // Partie dans le cadre : de 105 à 695 en largeur, de 75 à 255 en hauteur ; lecteur décalé de 10 pixels.
+        Assert.Equal(new FlashPlacement(105, 75, 590, 180, -10, 0, 600, 248), placement);
+    }
+
+    [Fact]
+    public void A_content_scrolled_out_of_its_frame_is_not_placed()
+    {
+        var rect = new FlashRect(100, 400, 400, 300, 1, true, new FlashClip(100, 50, 400, 300));
+
+        Assert.Null(rect.Place(1000, 800, 1));
+    }
+
+    [Theory]
+    [InlineData("""{"x":0,"y":0,"w":800,"h":600,"dpr":1,"visible":true,"clip":{"x":0,"y":0,"w":-5,"h":10}}""")]
+    [InlineData("""{"x":0,"y":0,"w":800,"h":600,"dpr":1,"visible":true,"clip":{"x":1e300,"y":0,"w":5,"h":10}}""")]
+    [InlineData("""{"x":0,"y":0,"w":800,"h":600,"dpr":1,"visible":true,"clip":{"x":0,"y":0,"w":5}}""")]
+    public void Invalid_frame_areas_are_rejected(string json)
+    {
+        Assert.Null(FlashRect.Parse(json));
+    }
+
+    [Fact]
+    public void A_frame_area_that_is_not_an_object_is_ignored()
+    {
+        FlashRect? rect = FlashRect.Parse("""{"x":0,"y":0,"w":800,"h":600,"dpr":1,"visible":true,"clip":null}""");
+
+        Assert.NotNull(rect);
+        Assert.Null(rect.Clip);
     }
 
     [Fact]

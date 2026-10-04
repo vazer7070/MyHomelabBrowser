@@ -231,13 +231,13 @@ namespace PommeBrowser.Views
 
         /// <summary>Appel de la page vers le contenu, sur le fil de l'interface (la page attend la réponse).</summary>
         string? CallFlash(FlashHostProcess host, FlashContent content, string request)
-            => _flashBridgeHost == host && !host.HasExited && IsTopDocument(content) ? host.CallFunction(request, FlashCallTimeout) : null;
+            => _flashBridgeHost == host && !host.HasExited && IsReachable(content) ? host.CallFunction(request, FlashCallTimeout) : null;
 
         async void InstallFlashBridge(IEngineTab engine, FlashContent content, string token)
         {
             try
             {
-                await engine.EvaluateAsync(RuffleContent.FlashBridgeScript(content.Id, token), isolated: false);
+                await engine.EvaluateAsync(InDocumentOf(content, RuffleContent.FlashBridgeScript(content.Id, token)), isolated: false);
             }
             catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or
                                            System.Runtime.InteropServices.COMException or System.Threading.Tasks.TaskCanceledException)
@@ -313,20 +313,36 @@ namespace PommeBrowser.Views
                System.Uri.Compare(page, content.Page, UriComponents.HttpRequestUrl, UriFormat.UriEscaped, StringComparison.Ordinal) == 0;
 
         /// <summary>
+        /// Le contenu vient d'un cadre de même origine que la page (jeu dans une iframe du site) :
+        /// le document principal y a accès, comme le cadre au document principal.
+        /// </summary>
+        bool IsSameOriginFrame(FlashContent content)
+            => !IsTopDocument(content) && System.Uri.TryCreate(WebUrl, UriKind.Absolute, out Uri? page) &&
+               System.Uri.Compare(page, content.Page, UriComponents.SchemeAndServer, UriFormat.UriEscaped, StringComparison.OrdinalIgnoreCase) == 0;
+
+        /// <summary>Le document principal atteint le contenu : le sien, ou celui d'un cadre de même origine.</summary>
+        bool IsReachable(FlashContent content) => IsTopDocument(content) || IsSameOriginFrame(content);
+
+        /// <summary>Script exécuté dans le document du contenu : le document principal, ou le cadre de même origine.</summary>
+        string InDocumentOf(FlashContent content, string script)
+            => IsTopDocument(content) ? script : RuffleContent.InWindowOf(content.Page, script);
+
+        /// <summary>
         /// Script demandé par le contenu (ExternalInterface.call, adresse javascript:) : exécuté
         /// dans la page, comme dans un navigateur, et son résultat renvoyé au lecteur. Le lecteur
-        /// applique lui-même allowScriptAccess. Seulement pour un contenu du document principal :
-        /// celui d'un cadre n'agit pas sur la page qui le contient (il reçoit un refus).
+        /// applique lui-même allowScriptAccess. Exécuté dans le document du contenu : le document
+        /// principal, ou le cadre de même origine qui le contient ; un contenu d'un cadre d'un autre
+        /// site n'agit pas sur la page (il reçoit un refus).
         /// </summary>
         async void RunFlashScript(FlashHostProcess host, FlashContent content, int? id, string code)
         {
             string? value = null;
             bool ok = false;
-            if (_engine is { } engine && IsTopDocument(content))
+            if (_engine is { } engine && IsReachable(content))
             {
                 try
                 {
-                    value = await engine.EvaluateAsync(code, isolated: false);
+                    value = await engine.EvaluateAsync(InDocumentOf(content, code), isolated: false);
                     ok = true;
                 }
                 catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or

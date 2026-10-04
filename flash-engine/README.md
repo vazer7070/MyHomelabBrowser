@@ -112,8 +112,9 @@ chargements en cours sont interrompus (`NPRES_USER_BREAK`, puis `NPP_URLNotify`)
 comme dans un navigateur. L'hôte envoie `eval` puis attend la réponse (20 s au plus) en traitant les
 messages que Windows lui envoie d'autres fils : PommeBrowser place et affiche la fenêtre du module
 pendant ce temps, et les deux processus s'attendraient sinon l'un l'autre. PommeBrowser exécute le
-script dans la page (document principal seulement : un contenu venu d'un cadre reçoit un refus) ;
-le module applique lui-même `allowScriptAccess`.
+script dans le document du contenu : le document principal, ou le cadre de même origine qui le
+contient (`RuffleContent.InWindowOf`, par l'`eval` de la fenêtre du cadre) ; un contenu venu d'un
+cadre d'un autre site reçoit un refus. Le module applique lui-même `allowScriptAccess`.
 
 **Appels de la page vers le contenu** (`ExternalInterface.addCallback`) : Flash déclare ses
 fonctions dans la page par `__flash__addCallback(élément, nom)` ; elles appellent
@@ -122,8 +123,10 @@ l'élément du contenu (`RuffleContent.FlashBridgeScript`, et à l'emplacement q
 page) : il passe par l'objet WebView2 `pommeFlash` (`AddHostObjectToScript`, document principal
 seulement), ou sous WebKitGTK par une requête synchrone au schéma
 `pomme-flash://call/?t=<jeton>&r=<requête>`, puis par la commande `call` jusqu'à l'objet
-scriptable du module (`NPPVpluginScriptableNPObject`, méthode `CallFunction`). Le jeton, tiré au
-hasard pour chaque lecteur, n'est connu que du script du pont injecté dans le document principal :
+scriptable du module (`NPPVpluginScriptableNPObject`, méthode `CallFunction`). Pour un contenu
+d'un cadre de même origine, le script du pont est injecté dans ce cadre, qui passe par l'objet
+`pommeFlash` du document principal (`window.top`). Le jeton, tiré au hasard pour chaque lecteur,
+n'est connu que du script du pont injecté dans le document du contenu :
 un cadre d'un autre site (publicité) qui appelle le schéma reçoit un refus (403) et n'atteint pas
 les fonctions du jeu. Une requête de plus de 4 Mio est refusée. La page attend la réponse (8 s au
 plus) ; PommeBrowser ne traite pendant ce temps que les messages que Windows envoie d'autres
@@ -246,9 +249,18 @@ Réglage **Paramètres › Avancé › Moteur Flash intégré (expérimental)**,
    fenêtre du lecteur y garde sa taille entière, décalée quand le contenu dépasse de la zone
    (`FlashRect.Place`, `Win32Dock.SetClientPlacement`). Les éléments de la page qui passent
    par-dessus le contenu restent dessous, comme avec `wmode=window` dans les anciens navigateurs.
-4. **Contenu d'un cadre (iframe), ou élément introuvable** : la fenêtre de l'hôte est logée à la
-   place de la page, par le même mécanisme que Basilisk.
-5. ⚡ ou « Lire avec Ruffle » revient à Ruffle pour le site pendant la session. Si le lecteur
+4. **Contenu d'un cadre (iframe) de même origine que la page** (jeu dans une iframe du site,
+   comme Evony) : lu de même à sa place, la page restant active. Le script de suivi, exécuté dans
+   le document principal, trouve le cadre (`RuffleContent.WindowOf`), ajoute à la position celle
+   des cadres qui le contiennent (bordure et marge comprises) et joint la zone du cadre où le
+   contenu est visible (`clip`) : seule cette partie est montrée.
+5. **Contenu retiré par la page** (logo remplacé par le jeu, cadre rechargé ou retiré ; un
+   emplacement retiré puis remis dans la seconde et demie ne compte pas) : le script envoie
+   `rect:gone`, le lecteur s'arrête, et le contenu que la page met à sa place est lu aussitôt
+   décrit, avec le même module, sans repasser par Ruffle.
+6. **Contenu d'un cadre d'un autre site, ou élément introuvable** : la fenêtre de l'hôte est logée
+   à la place de la page, par le même mécanisme que Basilisk.
+7. ⚡ ou « Lire avec Ruffle » revient à Ruffle pour le site pendant la session. Si le lecteur
    s'arrête, « Relancer » reprend l'emplacement laissé dans la page.
 
 Sans le réglage, sans module Flash ou sans description du contenu, Basilisk reste le moteur de secours.

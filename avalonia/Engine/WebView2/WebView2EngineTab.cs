@@ -732,12 +732,13 @@ namespace PommeBrowser.Engine.WebView2
                 return;
             try
             {
-                // Retrait sans effet si l'objet n'était pas offert (selon la version, ArgumentException).
+                // Retrait sans effet si l'objet n'était pas offert : selon la version, ArgumentException
+                // ou COMException « Élément introuvable » (0x80070490), qui empêchait l'ajout qui suit.
                 try
                 {
                     _core.RemoveHostObjectFromScript(RuffleContent.FlashBridgeName);
                 }
-                catch (ArgumentException)
+                catch (Exception ex) when (ex is ArgumentException or COMException)
                 {
                 }
                 if (callFunction != null)

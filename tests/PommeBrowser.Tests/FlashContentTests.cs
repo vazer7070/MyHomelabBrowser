@@ -75,6 +75,17 @@ public sealed class FlashContentTests
     }
 
     [Fact]
+    public void A_content_is_the_same_whatever_its_size_but_not_with_another_file_page_or_flashvars()
+    {
+        FlashContent logo = Sized(600, 248, "http://na62.evony.com/s2.html");
+
+        Assert.True(logo.IsSameAs(Sized(760, 600, "http://na62.evony.com/s2.html#jeu")));
+        Assert.False(logo.IsSameAs(Sized(600, 248, "http://na62.evony.com/s3.html")));
+        Assert.False(logo.IsSameAs(logo with { Swf = new Uri("http://cdn.evony.com/client.swf") }));
+        Assert.False(logo.IsSameAs(logo with { FlashVars = "server=na62" }));
+    }
+
+    [Fact]
     public void The_detection_script_skips_declared_tiny_contents_and_knows_the_advertising_sizes()
     {
         string script = RuffleContent.ProbeScript("https://pomme.invalid/", "post");
@@ -92,6 +103,8 @@ public sealed class FlashContentTests
         Assert.Contains("\"728x90\"", script);
         Assert.Contains("\"160x600\"", script);
         Assert.DoesNotContain("__AD_SIZES__", script);
+        // Emplacement du moteur intégré dans la page : pas de nouveau repère (le contenu lu reste le même).
+        Assert.Contains("if (!document.querySelector('[data-pomme-flash-hole]')) el.setAttribute('data-pomme-flash', '');", script);
     }
 
     [Fact]

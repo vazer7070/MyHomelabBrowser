@@ -215,7 +215,8 @@ namespace PommeBrowser.Engine
                 if (!best) return null;
                 const el = best.el;
                 // Repère gardé par Ruffle quand il remplace l'élément : le moteur intégré le retrouve.
-                el.setAttribute('data-pomme-flash', '');
+                // Pas de nouveau repère tant que l'emplacement du moteur intégré est dans la page.
+                if (!document.querySelector('[data-pomme-flash-hole]')) el.setAttribute('data-pomme-flash', '');
                 const params = best.params;
                 const flashvars = params.flashvars || el.getAttribute('flashvars') || null;
                 for (const name of ['movie', 'src', 'data', 'flashvars', 'width', 'height', 'type', 'id', 'name', 'classid', 'codebase', 'pluginspage', 'style', 'class']) delete params[name];
@@ -260,30 +261,73 @@ namespace PommeBrowser.Engine
         public const string RectPrefix = "rect:";
 
         /// <summary>
+        /// Expression JavaScript : la fenêtre de <paramref name="page"/>, document principal ou cadre
+        /// de même origine (à toute profondeur) ; à défaut, le premier cadre de même origine qui
+        /// contient un contenu repéré (data-pomme-flash) ; null sinon (cadre d'un autre site).
+        /// </summary>
+        public static string WindowOf(Uri page) => """
+            ((page) => {
+              const strip = (url) => String(url).split('#')[0];
+              let fallback = null;
+              const visit = (w) => {
+                let doc;
+                try { doc = w.document; if (strip(w.location.href) === strip(page)) return w; } catch (e) { return null; }
+                if (!fallback && w !== window && doc.querySelector('[data-pomme-flash]')) fallback = w;
+                for (let i = 0; i < w.frames.length; i++) { const found = visit(w.frames[i]); if (found) return found; }
+                return null;
+              };
+              return visit(window) || fallback;
+            })(__PAGE__)
+            """.Replace("__PAGE__", JsonSerializer.Serialize(page.AbsoluteUri), StringComparison.Ordinal);
+
+        /// <summary>
+        /// Script exécuté dans la fenêtre de <paramref name="page"/> (cadre de même origine que la
+        /// page : jeu dans une iframe), depuis le document principal ; son résultat est rendu.
+        /// </summary>
+        public static string InWindowOf(Uri page, string script) => """
+            (() => {
+              const w = __WINDOW__;
+              return w ? w.eval(__SCRIPT__) : undefined;
+            })()
+            """.Replace("__WINDOW__", WindowOf(page), StringComparison.Ordinal)
+               .Replace("__SCRIPT__", JsonSerializer.Serialize(script), StringComparison.Ordinal);
+
+        /// <summary>
         /// Moteur Flash intégré dans la page : le contenu repéré (data-pomme-flash, posé par le script
         /// de détection) est remplacé par un emplacement vide de même taille, ce qui arrête Ruffle, et
         /// sa position dans la fenêtre est envoyée à PommeBrowser à chaque changement (défilement,
         /// taille, mise en page) : « rect: » suivi de x, y, largeur, hauteur (pixels CSS), du rapport
-        /// pixels CSS / pixels de l'écran et de sa visibilité ; « rect:null » s'il est introuvable.
-        /// Relancé, il reprend le même emplacement.
+        /// pixels CSS / pixels de l'écran et de sa visibilité ; « rect:null » s'il est introuvable,
+        /// « rect:gone » quand la page le retire (contenu remplacé, cadre rechargé).
+        /// Le contenu peut être dans un cadre de même origine que la page (<paramref name="framePage"/>,
+        /// jeu dans une iframe) : sa position tient compte de celle des cadres, et la zone du cadre
+        /// où il est visible est jointe (clip). Relancé, il reprend le même emplacement, sauf si la
+        /// page y a mis un nouveau contenu.
         /// </summary>
-        public static string FlashTrackerScript(string post) => """
+        public static string FlashTrackerScript(string post, Uri? framePage = null) => """
             (() => {
               const post = (status) => { try { __POST__; } catch (e) { } };
-              if (window.__pommeFlashSend) { window.__pommeFlashSend(true); return; }
-              const target = document.querySelector('[data-pomme-flash]');
+              // Fenêtre du contenu : document principal, ou cadre de même origine.
+              const root = __ROOT__;
+              if (!root) { post('__RECT__null'); return; }
+              const doc = root.document;
+              const previous = window.__pommeFlashTracker;
+              const marked = doc.querySelector('[data-pomme-flash]:not([data-pomme-flash-hole])');
+              if (previous && previous.doc === doc && previous.hole.isConnected && !marked) { previous.send(true); return; }
+              if (previous) previous.stop();
+              const target = marked || doc.querySelector('[data-pomme-flash]');
               if (!target) { post('__RECT__null'); return; }
               let hole = target;
               if (!target.hasAttribute('data-pomme-flash-hole')) {
                 const box = target.getBoundingClientRect();
-                const style = getComputedStyle(target);
+                const style = root.getComputedStyle(target);
                 const length = (name, measured) => {
                   const value = (target.getAttribute(name) || '').trim();
                   if (/^\d+(px)?$/i.test(value)) return parseInt(value, 10) + 'px';
                   if (/^\d+(\.\d+)?%$/.test(value)) return value;
                   return Math.round(measured) + 'px';
                 };
-                hole = document.createElement('div');
+                hole = doc.createElement('div');
                 for (const name of ['id', 'class', 'style']) {
                   if (target.hasAttribute(name)) hole.setAttribute(name, target.getAttribute(name));
                 }
@@ -294,20 +338,71 @@ namespace PommeBrowser.Engine
                 hole.style.display = style.display === 'inline' ? 'inline-block' : style.display;
                 hole.style.background = '#000';
                 // Fonctions déclarées par le contenu (ExternalInterface.addCallback) : gardées.
-                if (window.__pommeFlashEquip) {
-                  window.__pommeFlashEquip(target);
-                  window.__pommeFlashEquip(hole);
+                if (root.__pommeFlashEquip) {
+                  root.__pommeFlashEquip(target);
+                  root.__pommeFlashEquip(hole);
                   for (const name of Object.keys(target)) {
                     if (typeof target[name] === 'function' && !(name in hole)) hole[name] = target[name];
                   }
                 }
                 target.replaceWith(hole);
               }
+              // Cadres qui contiennent le contenu, du plus proche au document principal.
+              const frames = [];
+              for (let w = root; w !== window && w.frameElement; w = w.parent) frames.push(w.frameElement);
+              // Contenu retiré par la page (remplacé par un autre, logo puis jeu) ou cadre rechargé,
+              // retiré : « rect:gone », le lecteur s'arrête. Un emplacement déplacé (retiré puis
+              // remis aussitôt) ne compte pas.
+              let detached = 0;
+              const isGone = () => {
+                try {
+                  if (root.document !== doc || frames.some(f => !f.isConnected)) return true;
+                } catch (e) { return true; }
+                if (hole.isConnected) { detached = 0; return false; }
+                if (!detached) detached = Date.now();
+                return Date.now() - detached > 1500;
+              };
               let last = '';
+              let stopped = false;
               const send = (force) => {
+                if (stopped) return;
+                if (isGone()) {
+                  tracker.stop();
+                  if (window.__pommeFlashTracker === tracker) delete window.__pommeFlashTracker;
+                  post('__RECT__gone');
+                  return;
+                }
                 const box = hole.getBoundingClientRect();
-                const visible = hole.isConnected && box.width > 0 && box.height > 0 && getComputedStyle(hole).visibility !== 'hidden';
-                const message = JSON.stringify({ x: box.left, y: box.top, w: box.width, h: box.height, dpr: window.devicePixelRatio || 1, visible });
+                let x = box.left, y = box.top;
+                let visible = hole.isConnected && box.width > 0 && box.height > 0 && root.getComputedStyle(hole).visibility !== 'hidden';
+                // Zone visible du cadre, ramenée de cadre en cadre dans la fenêtre principale.
+                let clip = null;
+                for (const frame of frames) {
+                  const owner = frame.ownerDocument.defaultView;
+                  const area = frame.getBoundingClientRect();
+                  const style = owner.getComputedStyle(frame);
+                  const left = parseFloat(style.paddingLeft) || 0, top = parseFloat(style.paddingTop) || 0;
+                  const dx = area.left + frame.clientLeft + left;
+                  const dy = area.top + frame.clientTop + top;
+                  const view = {
+                    x: dx, y: dy,
+                    w: Math.max(0, frame.clientWidth - left - (parseFloat(style.paddingRight) || 0)),
+                    h: Math.max(0, frame.clientHeight - top - (parseFloat(style.paddingBottom) || 0))
+                  };
+                  if (clip) {
+                    const cx = Math.max(view.x, clip.x + dx), cy = Math.max(view.y, clip.y + dy);
+                    const cr = Math.min(view.x + view.w, clip.x + dx + clip.w), cb = Math.min(view.y + view.h, clip.y + dy + clip.h);
+                    clip = { x: cx, y: cy, w: Math.max(0, cr - cx), h: Math.max(0, cb - cy) };
+                  } else {
+                    clip = view;
+                  }
+                  x += dx;
+                  y += dy;
+                  if (area.width <= 0 || area.height <= 0 || style.visibility === 'hidden') visible = false;
+                }
+                const message = JSON.stringify(clip
+                  ? { x, y, w: box.width, h: box.height, dpr: window.devicePixelRatio || 1, visible, clip }
+                  : { x, y, w: box.width, h: box.height, dpr: window.devicePixelRatio || 1, visible });
                 if (force || message !== last) { last = message; post('__RECT__' + message); }
               };
               let queued = false;
@@ -316,16 +411,38 @@ namespace PommeBrowser.Engine
                 queued = true;
                 requestAnimationFrame(() => { queued = false; send(false); });
               };
-              window.__pommeFlashSend = send;
-              addEventListener('scroll', schedule, { capture: true, passive: true });
-              addEventListener('resize', schedule);
-              new ResizeObserver(schedule).observe(hole);
-              new MutationObserver(schedule).observe(document.documentElement, { attributes: true, childList: true, subtree: true });
+              const undo = [];
+              for (const w of new Set([window, root, ...frames.map(f => f.ownerDocument.defaultView)])) {
+                w.addEventListener('scroll', schedule, { capture: true, passive: true });
+                w.addEventListener('resize', schedule);
+                undo.push(() => { w.removeEventListener('scroll', schedule, { capture: true }); w.removeEventListener('resize', schedule); });
+              }
+              const resize = new root.ResizeObserver(schedule);
+              resize.observe(hole);
+              const observers = [new MutationObserver(schedule)];
+              observers[0].observe(document.documentElement, { attributes: true, childList: true, subtree: true });
+              if (root !== window) {
+                const inner = new root.MutationObserver(schedule);
+                inner.observe(doc.documentElement, { attributes: true, childList: true, subtree: true });
+                observers.push(inner);
+              }
               // Animations et transformations CSS ne se signalent pas : vérification régulière.
-              setInterval(() => send(false), 400);
+              const timer = setInterval(() => send(false), 400);
+              const tracker = {
+                doc, hole, send,
+                stop: () => {
+                  stopped = true;
+                  clearInterval(timer);
+                  for (const f of [...undo, () => resize.disconnect(), ...observers.map(o => () => o.disconnect())]) {
+                    try { f(); } catch (e) { }
+                  }
+                }
+              };
+              window.__pommeFlashTracker = tracker;
               send(true);
             })();
-            """.Replace("__POST__", post, StringComparison.Ordinal).Replace("__RECT__", RectPrefix, StringComparison.Ordinal);
+            """.Replace("__POST__", post, StringComparison.Ordinal).Replace("__RECT__", RectPrefix, StringComparison.Ordinal)
+               .Replace("__ROOT__", framePage != null ? WindowOf(framePage) : "window", StringComparison.Ordinal);
 
         /// <summary>Nom de l'objet de PommeBrowser par lequel la page appelle le contenu du moteur intégré.</summary>
         public const string FlashBridgeName = "pommeFlash";
@@ -388,9 +505,15 @@ namespace PommeBrowser.Engine
         /// </summary>
         public static string FlashBridgeScript(string? elementId, string token) => """
             (() => {
+              const hostObject = (w) => {
+                try { return w.chrome && w.chrome.webview && w.chrome.webview.hostObjects && w.chrome.webview.hostObjects.sync.__BRIDGE__; }
+                catch (e) { return null; }
+              };
               const call = (request) => {
                 try {
-                  const bridge = window.chrome && chrome.webview && chrome.webview.hostObjects && chrome.webview.hostObjects.sync.__BRIDGE__;
+                  // Dans un cadre de même origine, l'objet de PommeBrowser est celui du document
+                  // principal (WebView2 ne l'offre qu'à lui).
+                  const bridge = (window !== window.top && hostObject(window.top)) || hostObject(window);
                   if (bridge) return bridge.CallFunction(String(request));
                   const xhr = new XMLHttpRequest();
                   xhr.open('GET', '__SCHEME__://call/?t=__TOKEN__&r=' + encodeURIComponent(String(request)), false);

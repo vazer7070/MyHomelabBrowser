@@ -14,7 +14,9 @@ namespace PommeBrowser.Views
     /// remplace l'élément par un emplacement vide et en envoie la position ; la fenêtre du lecteur
     /// (PommeFlashHost) est logée par-dessus la page web, à cet endroit, et la suit (défilement,
     /// taille, mise en page). Seule la partie visible dans la zone de la page est affichée.
-    /// Les contenus d'un cadre (iframe) restent lus à la place de la page (onglet entier).
+    /// Un contenu d'un cadre (iframe) de même origine que la page y est lu de même, la page restant
+    /// active (ses scripts peuvent remplacer le contenu : logo, puis jeu) ; celui d'un cadre d'un
+    /// autre site est lu à la place de la page (onglet entier).
     /// </summary>
     public sealed partial class BrowserTab
     {
@@ -24,13 +26,20 @@ namespace PommeBrowser.Views
         FlashContent? _overlayContent;
         FlashRect? _overlayRect;
         bool _overlayDocked;
+        // Contenu décrit par la page pendant la lecture : il prend la place de celui que la page retire.
+        FlashContent? _overlaySuccessor;
+        // Module du contenu retiré par la page : le contenu qu'elle met à sa place est lu avec lui.
+        string? _successorModule;
 
         /// <summary>Le contenu Flash de la page est lu à sa place par le moteur intégré.</summary>
         public bool HasFlashOverlay => _overlayHost != null;
 
-        /// <summary>Le contenu peut être lu à sa place : page web affichée, contenu du document principal.</summary>
+        /// <summary>
+        /// Le contenu peut être lu à sa place : page web affichée, contenu du document principal ou
+        /// d'un cadre de même origine.
+        /// </summary>
         bool CanPlaceInPage(FlashContent content)
-            => Page == TabPage.Web && _engine != null && _web != null && LegacyView.IsSupported && IsTopDocument(content);
+            => Page == TabPage.Web && _engine != null && _web != null && LegacyView.IsSupported && IsReachable(content);
 
         void OpenFlashInPage(FlashContent content, string module)
         {
@@ -120,14 +129,18 @@ namespace PommeBrowser.Views
                 OpenFlashInPage(content, module);
         }
 
-        /// <summary>Script de suivi dans le document principal (ses messages arrivent par le canal de Ruffle).</summary>
+        /// <summary>
+        /// Script de suivi dans le document principal (ses messages arrivent par le canal de Ruffle),
+        /// qui trouve le contenu dans le cadre de même origine qui le contient.
+        /// </summary>
         async void StartFlashTracker()
         {
-            if (_engine is not { } engine)
+            if (_engine is not { } engine || _overlayContent is not { } content)
                 return;
             try
             {
-                await engine.EvaluateAsync(RuffleContent.FlashTrackerScript(EngineHost.ScriptPost(RuffleContent.MessageHandler, "status")), isolated: false);
+                string post = EngineHost.ScriptPost(RuffleContent.MessageHandler, "status");
+                await engine.EvaluateAsync(RuffleContent.FlashTrackerScript(post, IsTopDocument(content) ? null : content.Page), isolated: false);
             }
             catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or System.Runtime.InteropServices.COMException or TaskCanceledException)
             {
@@ -135,17 +148,25 @@ namespace PommeBrowser.Views
             }
         }
 
-        /// <summary>Position envoyée par le script de suivi (« null » : contenu introuvable dans la page).</summary>
+        /// <summary>
+        /// Position envoyée par le script de suivi (« null » : contenu introuvable dans la page,
+        /// « gone » : contenu retiré par la page).
+        /// </summary>
         void OnFlashRect(string json)
         {
             if (_overlayHost == null || _overlayContent is not { } content)
                 return;
             if (json == "null")
             {
-                // Élément disparu ou dans un cadre : le contenu est lu à la place de la page, avec le même module.
+                // Élément introuvable (cadre d'un autre site) : le contenu est lu à la place de la page, avec le même module.
                 string? module = (_overlayHost as FlashHostProcess)?.Module;
                 CloseFlashOverlay();
                 OpenInIntegratedFlash(content, module);
+                return;
+            }
+            if (json == "gone")
+            {
+                OnFlashContentRemoved(content);
                 return;
             }
             if (FlashRect.Parse(json) is { } rect)
@@ -153,6 +174,55 @@ namespace PommeBrowser.Views
                 _overlayRect = rect;
                 PlaceOverlay();
             }
+        }
+
+        /// <summary>
+        /// La page a retiré le contenu lu (remplacé par un autre : logo puis jeu ; cadre rechargé) :
+        /// le lecteur s'arrête, et le contenu qu'elle met à sa place est lu avec le même module,
+        /// dans la page, dès qu'il est décrit (ou aussitôt s'il l'est déjà).
+        /// </summary>
+        void OnFlashContentRemoved(FlashContent content)
+        {
+            string? module = (_overlayHost as FlashHostProcess)?.Module;
+            FlashContent? successor = _overlaySuccessor;
+            RuntimeLogBuffer.Append($"[Flash] Contenu retiré par la page : {content.Swf.GetLeftPart(UriPartial.Path)}.");
+            CloseFlashOverlay();
+            if (_flashContent is { } current && current.IsSameAs(content))
+                _flashContent = successor;
+            if (module != null && successor != null && CanPlaceInPage(successor))
+                PlaySuccessor(successor, module);
+            else
+                _successorModule = module;
+            RaiseChanged();
+        }
+
+        /// <summary>
+        /// Contenu décrit par la page pendant que le moteur intégré y lit le sien : gardé pour le
+        /// remplacer si la page le retire, ou lu aussitôt s'il remplace un contenu déjà retiré. Un
+        /// format publicitaire n'est jamais pris pour le contenu principal.
+        /// </summary>
+        /// <returns>Le contenu est lu par le moteur intégré.</returns>
+        bool NoteFlashContent(FlashContent content)
+        {
+            if (content.HasAdSize || !CanPlaceInPage(content))
+                return false;
+            if (_overlayContent is { } current)
+            {
+                if (!content.IsSameAs(current))
+                    _overlaySuccessor = content;
+                return false;
+            }
+            if (_successorModule is not { } module)
+                return false;
+            _flashContent = content;
+            PlaySuccessor(content, module);
+            return true;
+        }
+
+        void PlaySuccessor(FlashContent content, string module)
+        {
+            RuntimeLogBuffer.Append($"[Flash] Contenu mis à sa place par la page : {content.Swf.GetLeftPart(UriPartial.Path)} ({content.Width}×{content.Height}), lu avec le même module.");
+            OpenFlashInPage(content, module);
         }
 
         /// <summary>
@@ -184,6 +254,8 @@ namespace PommeBrowser.Views
             _overlayContent = null;
             _overlayRect = null;
             _overlayDocked = false;
+            _overlaySuccessor = null;
+            _successorModule = null;
             if (_overlayView is { } view)
             {
                 view.Detach();

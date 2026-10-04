@@ -93,8 +93,15 @@ namespace PommeBrowser.Views
         {
             if (status.StartsWith(PommeBrowser.Engine.FlashContent.MessagePrefix, StringComparison.Ordinal))
             {
-                if (PommeBrowser.Engine.FlashContent.Parse(status[PommeBrowser.Engine.FlashContent.MessagePrefix.Length..]) is { } content &&
-                    content.IsPreferredOver(_flashContent))
+                if (PommeBrowser.Engine.FlashContent.Parse(status[PommeBrowser.Engine.FlashContent.MessagePrefix.Length..]) is not { } content)
+                    return;
+                // Moteur intégré en cours dans la page : contenu qui prend la place du sien.
+                if (NoteFlashContent(content))
+                {
+                    RaiseChanged();
+                    return;
+                }
+                if (content.IsPreferredOver(_flashContent))
                 {
                     if (_flashContent?.Swf != content.Swf)
                         RuntimeLogBuffer.Append($"[Flash] Contenu de la page : {content.Swf.GetLeftPart(UriPartial.Path)} ({content.Width}×{content.Height}){(IsTopDocument(content) ? string.Empty : ", dans un cadre")}.");
@@ -131,8 +138,9 @@ namespace PommeBrowser.Views
         /// </summary>
         void OnRuffleFailed()
         {
-            // Contenu déjà lu par le moteur intégré dans la page : l'erreur d'un autre lecteur Ruffle n'y change rien.
-            if (Page != TabPage.Web || HasFlashOverlay || !BasiliskInstall.IsOpenable(WebUrl, out Uri uri))
+            // Contenu déjà lu par le moteur intégré dans la page, ou contenu retiré par la page dont le
+            // remplaçant sera lu par lui dès qu'il est décrit : l'erreur d'un lecteur Ruffle n'y change rien.
+            if (Page != TabPage.Web || HasFlashOverlay || _successorModule != null || !BasiliskInstall.IsOpenable(WebUrl, out Uri uri))
                 return;
 
             RuntimeLogBuffer.Append("[Ruffle] Contenu Flash illisible sur " + uri.Host);
