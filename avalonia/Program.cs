@@ -56,6 +56,8 @@ namespace PommeBrowser
             Instance = SingleInstance.Claim(SingleInstance.ChannelName(AppDataContext.GlobalRoot), targets, RuntimeLogBuffer.Append);
             if (Instance == null)
                 return 0;
+            // Seule instance : un arrêt brutal de la session précédente est consigné (errors.log).
+            CrashWatch.Start();
             // Installation antérieure à l'inscription comme navigateur : faite maintenant, sans attendre.
             if (OperatingSystem.IsWindows())
                 _ = System.Threading.Tasks.Task.Run(() => SafeRegistry(() =>

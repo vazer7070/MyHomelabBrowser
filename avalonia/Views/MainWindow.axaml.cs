@@ -143,6 +143,8 @@ namespace PommeBrowser.Views
             if (_selected != null)
             {
                 _selected.IsSelected = false;
+                // Inactif à partir de maintenant (mise en veille) : pas depuis qu'il a été choisi.
+                _selected.LastActivated = DateTime.Now;
                 CloseFind();
             }
 

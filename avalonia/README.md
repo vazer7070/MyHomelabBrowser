@@ -67,7 +67,7 @@ Elle porte le même nom que celle de l'édition GTK. Gardez-la dans un dossier m
 - Onglets privés (`Ctrl+Maj+N`), avec leur couleur propre.
 - Reprise de la session, plusieurs fenêtres, déplacement d'un onglet dans une nouvelle fenêtre.
 - Vue côte à côte : un clic dans un volet en fait l'onglet actif.
-- Espaces de travail et mise en veille des onglets inactifs.
+- Espaces de travail et mise en veille des onglets inactifs (comptée depuis qu'on a quitté l'onglet ; jamais un onglet dont le Flash joue avec le moteur intégré).
 
 **Barre d'adresse et page d'accueil**
 - Propositions au fil de la saisie : services du homelab, favoris, pages visitées.
@@ -104,7 +104,7 @@ Elle porte le même nom que celle de l'édition GTK. Gardez-la dans un dossier m
 - Téléchargements sans boîte de dialogue, jamais par-dessus un fichier existant.
 - Recherche dans la page, zoom mémorisé par site, impression, outils de développement, plein écran.
 - Import des favoris des autres navigateurs (dont Safari sous macOS).
-- « Signaler un problème » : même rapport que les autres éditions.
+- « Signaler un problème » : même rapport que les autres éditions. Un arrêt brutal de PommeBrowser (plantage dans du code natif, arrêt forcé) est consigné au démarrage suivant dans `errors.log`, joint au rapport : fin du journal de la session et, sous Windows, entrées du journal d'événements (module fautif, pile d'appels de .NET).
 - Mises à jour : Velopack sous Windows, AppImage sous Linux.
 - Thème clair, sombre ou celui du système. Français ou anglais.
 

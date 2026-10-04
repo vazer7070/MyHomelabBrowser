@@ -536,8 +536,16 @@ static void checkClickFocus(void)
 }
 #endif
 
+/* Paramètre « pomme-calme » : contenu sans le scénario de test (essais dans PommeBrowser). */
+static int quiet;
+
 static void continueScenario(const char *movieUrl)
 {
+    if (quiet)
+    {
+        report("calme");
+        return;
+    }
     checkClickFocus();
     evaluateScript("try { __flash__toXML(pommeAdd(2,3)) ; } catch (e) { \"<undefined/>\"; }", "script");
     evaluateScript("pommeRefuse()", "script-refused");
@@ -572,7 +580,11 @@ static NPError NPP_New(NPMIMEType type, NPP npp, uint16_t mode, int16_t argc, ch
 #endif
     report("new mime=%s mode=%u argc=%d", type, mode, argc);
     for (int i = 0; i < argc; i++)
+    {
         report("arg %s=%s", argn[i], argv[i] ? argv[i] : "(null)");
+        if (strcmp(argn[i], "pomme-calme") == 0)
+            quiet = 1;
+    }
 
     report("ua=%s", browser->uagent(npp));
 

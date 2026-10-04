@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Avalonia.Input;
@@ -200,12 +201,34 @@ namespace PommeBrowser.Legacy
             _registered = true;
         }
 
+        // Fonctions appelées par Windows ([UnmanagedCallersOnly]) : une exception ne peut pas
+        // remonter jusqu'à Windows, .NET arrêterait PommeBrowser sur-le-champ, sans rien consigner.
+        // Elle est donc consignée (errors.log), et Windows reçoit la réponse par défaut.
+        static void Report(string where, Exception exception)
+        {
+            try
+            {
+                PommeBrowser.Core.ErrorLog.Write("Fenêtre logée (" + where + ")", exception);
+            }
+            catch
+            {
+                // Rien ne doit sortir d'ici.
+            }
+        }
+
         [UnmanagedCallersOnly]
         static nint WndProc(nint window, uint message, nint wParam, nint lParam)
         {
-            // Avalonia redimensionne l'accueil : Basilisk suit.
-            if (message == WmSize && Docks.TryGetValue(window, out Win32Dock? dock))
-                dock.FitClient();
+            try
+            {
+                // Avalonia redimensionne l'accueil : Basilisk suit.
+                if (message == WmSize && Docks.TryGetValue(window, out Win32Dock? dock))
+                    dock.FitClient();
+            }
+            catch (Exception ex)
+            {
+                Report("taille", ex);
+            }
             return DefWindowProcW(window, message, wParam, lParam);
         }
 
@@ -234,19 +257,41 @@ namespace PommeBrowser.Legacy
         [UnmanagedCallersOnly]
         static void OnFocusEvent(nint hook, uint eventType, nint window, int objectId, int childId, uint thread, uint time)
         {
-            foreach (Win32Dock dock in Docks.Values)
+            try
             {
-                if (dock.Contains(window))
+                foreach (Win32Dock dock in Docks.Values.ToArray())
                 {
-                    Action? clicked = dock.Clicked;
-                    Dispatcher.UIThread.Post(() => clicked?.Invoke());
-                    return;
+                    if (dock.Contains(window))
+                    {
+                        Action? clicked = dock.Clicked;
+                        Dispatcher.UIThread.Post(() => clicked?.Invoke());
+                        return;
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Report("focus", ex);
             }
         }
 
         [UnmanagedCallersOnly]
         static nint OnKeyboard(int code, nint wParam, nint lParam)
+        {
+            try
+            {
+                if (TakeShortcut(code, wParam, lParam))
+                    return 1;
+            }
+            catch (Exception ex)
+            {
+                Report("clavier", ex);
+            }
+            return CallNextHookEx(0, code, wParam, lParam);
+        }
+
+        /// <summary>Raccourci de la fenêtre tapé dans une fenêtre logée : transmis à PommeBrowser, et gardé.</summary>
+        static bool TakeShortcut(int code, nint wParam, nint lParam)
         {
             if (code >= 0 && (wParam == WmKeyDown || wParam == WmSysKeyDown))
             {
@@ -260,19 +305,19 @@ namespace PommeBrowser.Legacy
                     if (BrowserShortcuts.IsLegacyWindowShortcut(key, modifiers))
                     {
                         nint foreground = GetForegroundWindow();
-                        foreach (Win32Dock dock in Docks.Values)
+                        foreach (Win32Dock dock in Docks.Values.ToArray())
                         {
                             if (dock.Contains(focus) && GetAncestor(dock.Host, GaRoot) == foreground)
                             {
                                 Action<Key, KeyModifiers>? shortcut = dock.Shortcut;
                                 Dispatcher.UIThread.Post(() => shortcut?.Invoke(key, modifiers));
-                                return 1;
+                                return true;
                             }
                         }
                     }
                 }
             }
-            return CallNextHookEx(0, code, wParam, lParam);
+            return false;
         }
 
         static bool IsDown(int virtualKey) => (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
@@ -314,8 +359,16 @@ namespace PommeBrowser.Legacy
         [UnmanagedCallersOnly]
         static int CollectChild(nint window, nint state)
         {
-            ((List<nint>)GCHandle.FromIntPtr(state).Target!).Add(window);
-            return 1;
+            try
+            {
+                ((List<nint>)GCHandle.FromIntPtr(state).Target!).Add(window);
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                Report("fenêtres enfants", ex);
+                return 0;
+            }
         }
 
         // ---------------------------------------------------------------

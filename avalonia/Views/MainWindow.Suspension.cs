@@ -21,7 +21,11 @@ namespace PommeBrowser.Views
             Closed += (_, _) => _suspendTimer.Stop();
         }
 
-        /// <summary>Met en veille les onglets affichés depuis longtemps (ou tous les onglets inactifs si <paramref name="force"/>).</summary>
+        /// <summary>
+        /// Met en veille les onglets quittés depuis longtemps (ou tous les onglets inactifs si
+        /// <paramref name="force"/>). Jamais un onglet dont le Flash joue (moteur intégré dans la
+        /// page) : la veille fermerait le jeu.
+        /// </summary>
         void SuspendInactiveTabs(bool force)
         {
             if (!force && !App.Settings.EnableSuspension)
@@ -29,7 +33,7 @@ namespace PommeBrowser.Views
             TimeSpan delay = TimeSpan.FromMinutes(Math.Max(1, App.Settings.SuspendDelayMinutes));
             foreach (BrowserTab tab in _tabs.ToList())
             {
-                if (tab == _selected || tab == _splitPartner || tab.Engine == null || tab.IsPrivate)
+                if (tab == _selected || tab == _splitPartner || tab.Engine == null || tab.IsPrivate || tab.HasFlashOverlay)
                     continue;
                 if (force || DateTime.Now - tab.LastActivated > delay)
                     tab.Suspend();
