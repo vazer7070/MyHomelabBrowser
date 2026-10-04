@@ -65,7 +65,27 @@ public sealed class PagesTests
     }
 
     [AvaloniaFact]
-    public void The_automatic_Basilisk_fallback_can_be_turned_off()
+    public void Basilisk_can_be_turned_off_entirely()
+    {
+        MainWindow window = TestBrowser.OpenWindow();
+        window.OpenSettings("flash");
+        TestBrowser.Pump();
+        Assert.True(TestBrowser.App.BasiliskAllowed);
+
+        CheckBox check = TestBrowser.Find<CheckBox>(window.SelectedTab!.CurrentPage!)
+            .Single(c => c.Content is TextBlock { Text: { } text } && text.StartsWith("Utiliser Basilisk", StringComparison.Ordinal));
+        Assert.True(check.IsChecked);
+
+        TestBrowser.Click(check);
+        Assert.False(TestBrowser.App.Settings.BasiliskEnabled);
+        Assert.False(TestBrowser.App.BasiliskAllowed);
+        TestBrowser.Click(check);
+        Assert.True(TestBrowser.App.BasiliskAllowed);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void The_automatic_fallback_can_be_turned_off()
     {
         MainWindow window = TestBrowser.OpenWindow();
         window.OpenSettings("flash");
@@ -73,7 +93,7 @@ public sealed class PagesTests
         bool before = TestBrowser.App.Settings.FlashAutoFallback;
 
         CheckBox check = TestBrowser.Find<CheckBox>(window.SelectedTab!.CurrentPage!)
-            .Single(c => c.Content is TextBlock { Text: { } text } && text.StartsWith("Ouvrir dans Basilisk les contenus", StringComparison.Ordinal));
+            .Single(c => c.Content is TextBlock { Text: { } text } && text.StartsWith("Quand Ruffle ne sait pas lire un contenu", StringComparison.Ordinal));
         Assert.Equal(before, check.IsChecked);
 
         TestBrowser.Click(check);

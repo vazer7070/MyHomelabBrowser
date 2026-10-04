@@ -563,11 +563,17 @@ namespace PommeBrowser.Views.Pages
                     Settings.EnableFlashSupport = value;
                     Save();
                 }),
-                Check(Tr("Ouvrir dans Basilisk les contenus que Ruffle ne sait pas lire"), Settings.FlashAutoFallback, value =>
+                Check(Tr("Quand Ruffle ne sait pas lire un contenu, passer d'office au moteur de secours"), Settings.FlashAutoFallback, value =>
                 {
                     Settings.FlashAutoFallback = value;
                     Save();
                 }),
+                Check(Tr("Utiliser Basilisk (navigateur avec le lecteur Flash d'origine)"), Settings.BasiliskEnabled != false, value =>
+                {
+                    Settings.BasiliskEnabled = value;
+                    Save();
+                }),
+                Hint(Tr("Décoché, Basilisk ne se lance jamais : ni par le bouton Flash, ni d'office, ni pour les sites réglés sur Basilisk. Le moteur de secours est alors le moteur intégré, s'il est activé.")),
                 IntegratedEngineOption(),
                 Check(Tr("Mode debug Flash (journal détaillé)"), Settings.FlashDebugEnabled, value =>
                 {

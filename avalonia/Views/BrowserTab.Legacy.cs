@@ -104,7 +104,7 @@ namespace PommeBrowser.Views
         }
 
         /// <summary>Un moteur de secours peut lire le Flash de cette page.</summary>
-        public bool HasFlashFallback => UsesIntegratedFlash || _app.BasiliskExecutable != null;
+        public bool HasFlashFallback => UsesIntegratedFlash || (_app.BasiliskAllowed && _app.BasiliskExecutable != null);
 
         /// <summary>Le moteur de secours de cette page est le moteur intégré.</summary>
         public bool FallbackIsIntegrated => UsesIntegratedFlash;
@@ -127,10 +127,25 @@ namespace PommeBrowser.Views
                 else
                     OpenInIntegratedFlash(content);
             }
-            else
+            else if (_app.BasiliskAllowed)
             {
                 OpenInBasilisk(uri);
             }
+            else
+            {
+                // Basilisk désactivé : il ne se lance jamais. Le moteur intégré n'est pas prêt pour cette page.
+                Window.ShowToast(IntegratedUnavailableReason(), Tr("Paramètres"), () => Window.OpenSettings("flash"), warning: true);
+            }
+        }
+
+        /// <summary>Ce qui empêche le moteur intégré de lire le contenu de cette page.</summary>
+        string IntegratedUnavailableReason()
+        {
+            if (!_app.Settings.FlashIntegratedEngine)
+                return Tr("Basilisk est désactivé : activez le moteur Flash intégré dans les paramètres pour lire ce contenu.");
+            if (NextFlashModule(null) == null)
+                return Tr("Module Flash absent : ajoutez votre copie de Flash Player dans les paramètres.");
+            return Tr("Aucun contenu Flash à lire n'a été trouvé sur cette page.");
         }
 
         /// <summary>
@@ -330,7 +345,7 @@ namespace PommeBrowser.Views
             uri = null;
             if (!BasiliskInstall.IsOpenable(url, out Uri parsed) || FlashDomainRules.GetRule(parsed) != FlashRuleMode.Legacy)
                 return false;
-            if (_app.BasiliskExecutable == null)
+            if (!_app.BasiliskAllowed || _app.BasiliskExecutable == null)
                 return false;
             uri = parsed;
             return true;
@@ -342,6 +357,13 @@ namespace PommeBrowser.Views
         /// </summary>
         public void OpenInBasilisk(Uri uri)
         {
+            // « Utiliser Basilisk » décoché : il ne se lance jamais, quel que soit le chemin.
+            if (!_app.BasiliskAllowed)
+            {
+                RuntimeLogBuffer.Append("[Basilisk] Désactivé dans les paramètres : pas de lancement pour " + uri.Host + ".");
+                Window.ShowToast(Tr("Basilisk est désactivé dans les paramètres."), Tr("Paramètres"), () => Window.OpenSettings("flash"));
+                return;
+            }
             if (_app.BasiliskExecutable is not { } executable)
             {
                 Window.ShowBasiliskMissing();

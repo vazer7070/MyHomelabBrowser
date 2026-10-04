@@ -79,6 +79,9 @@ namespace PommeBrowser
                 Tr("Ouvrir"), () => ActiveWindow?.NewTab(service.Url, select: true), warning: !up);
         }
 
+        /// <summary>Basilisk peut se lancer (réglage « Utiliser Basilisk ») : faux, il ne se lance jamais.</summary>
+        public bool BasiliskAllowed => Settings.BasiliskEnabled != false;
+
         /// <summary>
         /// Basilisk choisi dans les paramètres, sinon celui livré avec PommeBrowser, sinon (Linux)
         /// celui trouvé à un emplacement habituel. Null : aucun.

@@ -91,6 +91,7 @@ namespace MyHomelabBrowser.classes
         private static void ApplyRuntimeDefaults(BrowserSettings settings)
         {
             MergeMissingCommands(settings);
+            settings.ResolveBasiliskChoice();
 
             if (settings.SuspendDelayMinutes < 1)
                 settings.SuspendDelayMinutes = 5;

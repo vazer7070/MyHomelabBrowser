@@ -79,8 +79,27 @@ namespace MyHomelabBrowser.classes
         // Ruffle intégré est le moteur principal. Basilisk reste un secours manuel.
         public bool PreferRuffle { get; set; } = true;
 
-        // Contenu que Ruffle ne sait pas lire : la page passe d'elle-même au moteur de secours.
+        // Contenu que Ruffle ne sait pas lire : la page passe d'elle-même au moteur de secours
+        // (moteur intégré, sinon Basilisk s'il est permis).
         public bool FlashAutoFallback { get; set; } = true;
+
+        // Basilisk (navigateur avec le lecteur Flash d'origine) peut se lancer. Faux : jamais, ni par
+        // le bouton Flash, ni d'office, ni pour les sites réglés sur Basilisk. Null dans les réglages
+        // d'avant ce choix : voir ResolveBasiliskChoice.
+        public bool? BasiliskEnabled { get; set; }
+
+        /// <summary>
+        /// Réglages d'avant « Utiliser Basilisk » : la case « Ouvrir dans Basilisk les contenus que
+        /// Ruffle ne sait pas lire », décochée, voulait dire « pas de Basilisk ». Elle devient ce
+        /// réglage, et la bascule d'office (vers le moteur intégré, réglée maintenant à part) reste active.
+        /// </summary>
+        public void ResolveBasiliskChoice()
+        {
+            if (BasiliskEnabled != null)
+                return;
+            BasiliskEnabled = FlashAutoFallback;
+            FlashAutoFallback = true;
+        }
 
         // Moteur Flash intégré (expérimental, Windows) : le module Flash de l'utilisateur lit le
         // contenu à la place de Basilisk.
@@ -127,6 +146,7 @@ namespace MyHomelabBrowser.classes
                 EnableFlashSupport = EnableFlashSupport,
                 PreferRuffle = PreferRuffle,
                 FlashAutoFallback = FlashAutoFallback,
+                BasiliskEnabled = BasiliskEnabled,
                 FlashIntegratedEngine = FlashIntegratedEngine,
                 BasiliskPath = BasiliskPath,
                 FlashDebugEnabled = FlashDebugEnabled,
