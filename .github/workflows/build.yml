@@ -16,6 +16,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Serveur de support (support-server/) : les paquets y envoient « Signaler un problème », qui
+# arrive sur Discord. Variable du dépôt POMMEBROWSER_SUPPORT_API_URL pour en viser un autre ; les
+# copies du dépôt n'envoient rien par défaut. Donnée seulement aux étapes qui fabriquent les
+# paquets (les tests n'envoient jamais de rapport).
+env:
+  PACKAGE_SUPPORT_API_URL: ${{ vars.POMMEBROWSER_SUPPORT_API_URL || (github.repository == 'vazer7070/MyHomelabBrowser' && 'https://support.maloquine.us' || '') }}
+
 jobs:
   support-server:
     name: Serveur de support
@@ -113,6 +120,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           POMMEFLASH_HOST_DIR: ${{ github.workspace }}/artifacts/flash-linux-x64
+          POMMEBROWSER_SUPPORT_API_URL: ${{ env.PACKAGE_SUPPORT_API_URL }}
         run: avalonia/packaging/linux/build-appimage.sh all
 
       - name: Essai de lancement
@@ -149,7 +157,7 @@ jobs:
       - name: Publication (win-x64)
         shell: pwsh
         run: |
-          dotnet publish avalonia/PommeBrowser.csproj --configuration Release --runtime win-x64 --self-contained true -p:DebugType=none -p:RuffleDownloadOptional=false --output artifacts/avalonia-win-x64
+          dotnet publish avalonia/PommeBrowser.csproj --configuration Release --runtime win-x64 --self-contained true -p:DebugType=none -p:RuffleDownloadOptional=false "-p:SupportApiUrl=$env:PACKAGE_SUPPORT_API_URL" --output artifacts/avalonia-win-x64
           Move-Item artifacts/avalonia-win-x64/pommebrowser.exe artifacts/avalonia-win-x64/MyHomelabBrowser.exe
           if (-not (Test-Path artifacts/avalonia-win-x64/Assets/Ruffle/ruffle.js)) { throw "Ruffle absent de la publication." }
 
@@ -293,6 +301,8 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: PommeBrowser.app (arm64 et x64)
+        env:
+          POMMEBROWSER_SUPPORT_API_URL: ${{ env.PACKAGE_SUPPORT_API_URL }}
         run: avalonia/packaging/macos/build-app.sh all
 
       - name: Archives de l'app
