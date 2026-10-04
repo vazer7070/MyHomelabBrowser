@@ -90,7 +90,18 @@ de la page dont le module attend le résultat), `cookies` (id, url, http : cooki
 une adresse), `set-cookie` (url, cookie, http : cookie à garder dans la page), `audio`, `log`
 (niveaux info, error, trace), `called` (id, ok, value : réponse à un appel de la page), `exit`.
 Entrée standard : `close`, `result <id> {"ok":true,"value":…}` en réponse à `eval` et `cookies`,
-et `call <id> {"request":"<invoke …>"}` (appel de la page vers le contenu).
+et `call <id> {"request":"<invoke …>"}` (appel de la page vers le contenu), `ping <n>` (réponse
+`pong`, voir plus bas).
+
+**Robustesse.** Une fois le contenu affiché, PommeBrowser envoie `ping` toutes les 3 s ; le fil du
+module répond `pong` quand il traite ses messages, ou aussitôt s'il attend PommeBrowser (script de
+la page, cookies). Sans réponse depuis 20 s (plus que les 15 s après lesquelles Flash propose
+lui-même d'arrêter un script trop long), l'onglet signale que le lecteur ne répond plus et propose
+de le relancer. Un hôte qui s'arrête de lui-même après avoir affiché le contenu (plantage du
+module) est relancé automatiquement au même endroit, avec le même module, une fois toutes les
+5 minutes au plus ; au-delà, l'onglet propose « Relancer ». À la fermeture (`close`), les
+chargements en cours sont interrompus (`NPRES_USER_BREAK`, puis `NPP_URLNotify`) avant
+`NPP_Destroy`, sans attendre leur fin.
 
 **Scripts de la page** (`ExternalInterface.call`, `NPN_Evaluate`) : le module attend le résultat,
 comme dans un navigateur. L'hôte envoie `eval` puis attend la réponse (20 s au plus) en traitant les

@@ -455,6 +455,7 @@ static void continueScenario(const char *movieUrl)
     browser->geturlnotify(instanceNpp, "data.txt", NULL, (void *)0x1234);
     browser->geturlnotify(instanceNpp, "missing.txt", NULL, (void *)0x5678);
     browser->geturlnotify(instanceNpp, "detour.txt", NULL, (void *)0x4321);
+    browser->geturlnotify(instanceNpp, "lent.bin", NULL, (void *)0x7777);
     const char *post = "Content-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello";
     browser->posturlnotify(instanceNpp, "echo", NULL, (uint32_t)strlen(post), post, 0, (void *)0x9ABC);
     browser->geturl(instanceNpp, "https://example.org/page", "_blank");

@@ -174,17 +174,26 @@ public sealed class HostProtocolTests
 
         // Comme dans un navigateur : le script demandé par le contenu (ExternalInterface.call)
         // appelle le contenu (fonction déclarée par addCallback) avant de rendre son résultat.
-        static async Task<(bool Ok, string? Value)> CallBackIntoTheContent(HostRun run)
+        static async Task<bool> Arrived(HostRun run, string kind)
         {
-            await run.SendAsync("call 11 " + JsonSerializer.Serialize(new { request }));
             var clock = System.Diagnostics.Stopwatch.StartNew();
-            while (!run.Events.Any(e => e.GetProperty("event").GetString() == "called"))
+            while (!run.Events.Any(e => e.GetProperty("event").GetString() == kind))
             {
                 if (clock.Elapsed > TimeSpan.FromSeconds(15))
-                    return (false, null);
+                    return false;
                 await Task.Delay(20);
             }
-            return (true, "<number>5</number>");
+            return true;
+        }
+
+        static async Task<(bool Ok, string? Value)> CallBackIntoTheContent(HostRun run)
+        {
+            // Battement de cœur : le contenu qui attend la page répond aussitôt (il n'est pas figé).
+            await run.SendAsync("ping 42");
+            if (!await Arrived(run, "pong"))
+                return (false, null);
+            await run.SendAsync("call 11 " + JsonSerializer.Serialize(new { request }));
+            return await Arrived(run, "called") ? (true, "<number>5</number>") : (false, null);
         }
 
         await using HostRun host = HostRun.Start(new[]
@@ -207,6 +216,7 @@ public sealed class HostProtocolTests
         int call = reports.ToList().IndexOf("call main=1 request=" + request);
         int script = reports.ToList().IndexOf("script=<number>5</number>");
         Assert.True(call >= 0 && script > call, string.Join("\n", reports));
+        Assert.Equal(42, host.Events.First(e => e.GetProperty("event").GetString() == "pong").GetProperty("id").GetInt64());
 
         await host.SendAsync("close");
         Assert.Equal(0, await host.WaitForExitAsync(TimeSpan.FromSeconds(30)));
@@ -255,6 +265,47 @@ public sealed class HostProtocolTests
 
         await host.SendAsync("close");
         Assert.Equal(0, await host.WaitForExitAsync(TimeSpan.FromSeconds(30)));
+    }
+
+    [Fact(Timeout = 180_000)]
+    public async Task Closing_during_a_download_ends_the_stream_then_the_instance()
+    {
+        HostRun.SkipIfUnavailable();
+
+        byte[] movie = new byte[20_000];
+        new Random(11).NextBytes(movie);
+        using var server = new TestServer();
+        server.Add("movie.swf", movie, "application/x-shockwave-flash");
+        server.Add("jeu/data.txt", "x"u8.ToArray(), "text/plain");
+        server.AddSlow("jeu/lent.bin");
+
+        await using HostRun host = HostRun.Start(new[]
+        {
+            "--plugin", HostRun.HostVisiblePath(HostRun.PluginPath!),
+            "--swf", server.Url("movie.swf"),
+            "--page", server.Url("jeu/page.html"),
+            "--hidden"
+        }, code => code.Contains("pommeAdd(2,3)", StringComparison.Ordinal) ? (true, "<number>5</number>") : (false, null));
+
+        string slow = server.Url("jeu/lent.bin");
+        await host.WaitForAsync(h => h.Reports.Contains("done") && h.Reports.Any(r => r.StartsWith("stream-open url=" + slow, StringComparison.Ordinal)), Scenario);
+
+        // Battement de cœur : réponse du fil du module.
+        await host.SendAsync("ping 7");
+        await host.WaitForAsync(h => h.Events.Any(e => e.GetProperty("event").GetString() == "pong"), TimeSpan.FromSeconds(20));
+        Assert.Equal(7, host.Events.First(e => e.GetProperty("event").GetString() == "pong").GetProperty("id").GetInt64());
+
+        // Onglet fermé pendant le téléchargement : flux interrompu (NPRES_USER_BREAK) et notifié,
+        // puis instance détruite, et fin normale sans attendre la fin du téléchargement.
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        await host.SendAsync("close");
+        Assert.Equal(0, await host.WaitForExitAsync(TimeSpan.FromSeconds(15)));
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(10), clock.Elapsed.ToString());
+        List<string> reports = host.Reports.ToList();
+        int streamDone = reports.FindIndex(r => r.StartsWith("stream-done url=" + slow, StringComparison.Ordinal) && r.EndsWith(" reason=2", StringComparison.Ordinal));
+        int notified = reports.IndexOf("notify url=lent.bin reason=2 data=7777");
+        int destroyed = reports.IndexOf("destroy");
+        Assert.True(streamDone >= 0 && notified > streamDone && destroyed > notified, string.Join("\n", reports));
     }
 
     [Fact(Timeout = 180_000)]

@@ -8,8 +8,8 @@ namespace PommeFlash.Host
 {
     /// <summary>
     /// Échanges avec PommeBrowser : un événement JSON par ligne sur la sortie standard (ready,
-    /// status, navigate, script, eval, log, called, exit) ; une commande par ligne sur l'entrée
-    /// standard (« close », « result &lt;id&gt; &lt;json&gt; », « call &lt;id&gt; &lt;json&gt; »).
+    /// status, navigate, script, eval, log, called, pong, exit) ; une commande par ligne sur l'entrée
+    /// standard (« close », « result &lt;id&gt; &lt;json&gt; », « call &lt;id&gt; &lt;json&gt; », « ping &lt;n&gt; »).
     /// La fin de l'entrée standard (PommeBrowser fermé) arrête l'hôte.
     /// </summary>
     static class HostChannel
@@ -125,6 +125,10 @@ namespace PommeFlash.Host
                             Wakeup.Set();
                             UiThread.Post(RunCalls);
                         }
+                        else if (trimmed.StartsWith("ping ", StringComparison.Ordinal))
+                        {
+                            OnPing(trimmed[5..]);
+                        }
                         else if (trimmed.Length > 0)
                         {
                             command(trimmed);
@@ -143,6 +147,28 @@ namespace PommeFlash.Host
                 Name = "Commandes de PommeBrowser"
             };
             thread.Start();
+        }
+
+        // ---------------------------------------------------------------
+        // Battement de cœur : PommeBrowser vérifie que le fil du module tourne
+        // ---------------------------------------------------------------
+
+        // Attentes en cours d'une réponse de PommeBrowser, sur le fil du module.
+        static int _waitingForBrowser;
+
+        /// <summary>
+        /// « ping &lt;n&gt; » : « pong » répondu par le fil du module, preuve qu'il traite ses
+        /// messages ; aussitôt s'il attend PommeBrowser (script de la page, cookies) : il ne
+        /// bloque alors que sur lui.
+        /// </summary>
+        static void OnPing(string text)
+        {
+            if (!long.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out long number))
+                return;
+            if (Volatile.Read(ref _waitingForBrowser) > 0)
+                Send("pong", ("id", number));
+            else
+                UiThread.Post(() => Send("pong", ("id", number)));
         }
 
         // ---------------------------------------------------------------
@@ -230,6 +256,7 @@ namespace PommeFlash.Host
                 allowCalls = false;
             if (allowCalls)
                 _scriptDepth++;
+            Interlocked.Increment(ref _waitingForBrowser);
             try
             {
                 var clock = Stopwatch.StartNew();
@@ -247,6 +274,7 @@ namespace PommeFlash.Host
             }
             finally
             {
+                Interlocked.Decrement(ref _waitingForBrowser);
                 if (allowCalls)
                     _scriptDepth--;
             }

@@ -61,6 +61,48 @@ namespace PommeBrowser.Views
                     FlashModuleSearch.Is32Bit(failed) ? 32 : 64, FlashModuleSearch.Is32Bit(next) ? 32 : 64));
         }
 
+        // Dernière relance automatique du lecteur après un arrêt (voir TryAutoRelaunch).
+        DateTime _flashAutoRelaunchAt = DateTime.MinValue;
+
+        /// <summary>Entre deux relances automatiques : un module qui plante sans cesse n'est pas relancé en boucle.</summary>
+        static readonly TimeSpan FlashAutoRelaunchSpacing = TimeSpan.FromMinutes(5);
+
+        /// <summary>Module pour relancer le lecteur : le même s'il est toujours là, sinon le premier à essayer.</summary>
+        static string? RelaunchModule(FlashHostProcess host)
+            => System.IO.File.Exists(host.Module) && FlashHostProcess.IsAvailableFor(host.Module) ? host.Module : NextFlashModule(null);
+
+        /// <summary>
+        /// Lecteur arrêté de lui-même après avoir affiché le contenu (plantage du module) : relancé
+        /// automatiquement au même endroit, une fois toutes les 5 minutes au plus. Faux sinon (l'onglet
+        /// propose alors « Relancer »).
+        /// </summary>
+        bool TryAutoRelaunch(FlashHostProcess host, Action<string> relaunch)
+        {
+            if (!host.Crashed || DateTime.UtcNow - _flashAutoRelaunchAt < FlashAutoRelaunchSpacing || RelaunchModule(host) is not { } module)
+                return false;
+            _flashAutoRelaunchAt = DateTime.UtcNow;
+            RuntimeLogBuffer.Append("[Flash] Lecteur arrêté après l'affichage du contenu : relancé automatiquement.");
+            if (IsSelected)
+                Window.ShowToast(Tr("Le lecteur Flash s'est arrêté : il a été relancé."), warning: true);
+            relaunch(module);
+            return true;
+        }
+
+        /// <summary>Lecteur figé (il ne traite plus ses messages) : l'onglet affiché propose de le relancer.</summary>
+        void WatchFlashResponsiveness(FlashHostProcess host, Func<bool> isCurrent, Action<string> relaunch)
+        {
+            host.ResponsivenessChanged += frozen =>
+            {
+                if (!frozen || !isCurrent() || !IsSelected)
+                    return;
+                Window.ShowToast(Tr("Le lecteur Flash ne répond plus."), Tr("Relancer"), () =>
+                {
+                    if (isCurrent() && RelaunchModule(host) is { } module)
+                        relaunch(module);
+                }, timeout: 20, warning: true);
+            };
+        }
+
         /// <summary>Un moteur de secours peut lire le Flash de cette page.</summary>
         public bool HasFlashFallback => UsesIntegratedFlash || _app.BasiliskExecutable != null;
 
@@ -135,9 +177,12 @@ namespace PommeBrowser.Views
                     OpenInIntegratedFlash(content, next);
                     return;
                 }
+                if (Page == TabPage.Legacy && _integrated == content && TryAutoRelaunch(host, m => OpenInIntegratedFlash(content, m)))
+                    return;
                 if (Page == TabPage.Legacy)
                     ShowLegacyPage(running: false);
             };
+            WatchFlashResponsiveness(host, () => _basilisk == host, m => OpenInIntegratedFlash(content, m));
             ConnectFlashHost(host, content);
             host.SetBackground(!IsSelected);
             ShowEmbeddedLegacy(host, Tr("Ouverture du lecteur Flash…"), Tr("{0} s'ouvre avec votre module Flash.", content.Swf.Host), content.Page);

@@ -39,6 +39,12 @@ namespace PommeBrowser.Legacy
         nint _window;
         bool _closed;
         bool _exited;
+        // Battement de cœur (voir StartHeartbeat).
+        Timer? _heartbeat;
+        long _pingsSent;
+        long _lastPong;
+        long _lastPongAt;
+        bool _unresponsive;
 
         FlashHostProcess(Process process, string module)
         {
@@ -48,6 +54,26 @@ namespace PommeBrowser.Legacy
 
         /// <summary>Module Flash chargé par cet hôte.</summary>
         public string Module { get; }
+
+        /// <summary>
+        /// L'hôte s'est arrêté seul après avoir affiché le contenu (plantage du module, processus
+        /// tué) : ni fermé par PommeBrowser, ni échoué au démarrage.
+        /// </summary>
+        public bool Crashed { get; private set; }
+
+        /// <summary>
+        /// Le fil du module ne répond plus depuis <see cref="UnresponsiveAfter"/> (vrai), ou répond
+        /// de nouveau (faux) ; sur le fil de l'interface.
+        /// </summary>
+        public event Action<bool>? ResponsivenessChanged;
+
+        /// <summary>
+        /// Silence du fil du module au-delà duquel le lecteur est dit figé : plus que les 15 s
+        /// après lesquelles Flash propose lui-même d'arrêter un script trop long.
+        /// </summary>
+        public static readonly TimeSpan UnresponsiveAfter = TimeSpan.FromSeconds(20);
+
+        static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(3);
 
         /// <summary>
         /// L'hôte s'est arrêté seul avant d'afficher le contenu : module impossible à charger,
@@ -207,6 +233,10 @@ namespace PommeBrowser.Legacy
                     case "ready" when root.TryGetProperty("window", out JsonElement window) && window.TryGetInt64(out long handle):
                         _window = (nint)handle;
                         _ready = true;
+                        StartHeartbeat();
+                        break;
+                    case "pong" when root.TryGetProperty("id", out JsonElement pong) && pong.TryGetInt64(out long answered):
+                        OnPong(answered);
                         break;
                     case "navigate" when root.TryGetProperty("url", out JsonElement url) &&
                                          Uri.TryCreate(url.GetString(), UriKind.Absolute, out Uri? target) &&
@@ -469,6 +499,62 @@ namespace PommeBrowser.Legacy
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool PeekMessageW(out Msg message, nint hwnd, uint min, uint max, uint remove);
 
+        // ---------------------------------------------------------------
+        // Battement de cœur : le fil du module tourne-t-il encore ?
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// Une fois le contenu affiché : « ping » toutes les 3 s, auquel le fil du module répond
+        /// quand il traite ses messages (ou aussitôt s'il attend PommeBrowser). Sans réponse depuis
+        /// <see cref="UnresponsiveAfter"/>, le lecteur est figé : l'onglet le signale, et propose de
+        /// le relancer. Les réponses sont lues sur le fil de lecture : une interface occupée ne
+        /// fait pas croire à un lecteur figé.
+        /// </summary>
+        void StartHeartbeat()
+        {
+            Interlocked.Exchange(ref _lastPongAt, Environment.TickCount64);
+            var timer = new Timer(_ => Beat(), null, HeartbeatInterval, HeartbeatInterval);
+            if (Interlocked.CompareExchange(ref _heartbeat, timer, null) != null || _closed || _exited)
+                timer.Dispose();
+        }
+
+        void Beat()
+        {
+            if (_closed || _exited)
+                return;
+            long sent = Interlocked.Increment(ref _pingsSent);
+            _ = WriteAsync("ping " + sent.ToString(CultureInfo.InvariantCulture));
+            bool silent = Interlocked.Read(ref _lastPong) < sent - 1 &&
+                          Environment.TickCount64 - Interlocked.Read(ref _lastPongAt) > (long)UnresponsiveAfter.TotalMilliseconds;
+            if (silent && !_unresponsive)
+            {
+                _unresponsive = true;
+                RuntimeLogBuffer.Append($"[Flash] Le lecteur ne répond plus depuis {UnresponsiveAfter.TotalSeconds:0} s : {Path.GetFileName(Module)}.");
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!HasExited)
+                        ResponsivenessChanged?.Invoke(true);
+                });
+            }
+        }
+
+        void OnPong(long answered)
+        {
+            Interlocked.Exchange(ref _lastPong, Math.Max(Interlocked.Read(ref _lastPong), answered));
+            Interlocked.Exchange(ref _lastPongAt, Environment.TickCount64);
+            if (!_unresponsive)
+                return;
+            _unresponsive = false;
+            RuntimeLogBuffer.Append("[Flash] Le lecteur répond de nouveau.");
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!HasExited)
+                    ResponsivenessChanged?.Invoke(false);
+            });
+        }
+
+        void StopHeartbeat() => Interlocked.Exchange(ref _heartbeat, null)?.Dispose();
+
         public bool HasExited => _exited || _process.HasExited;
 
         public IEnumerable<int> ProcessIds => new[] { _process.Id };
@@ -494,6 +580,7 @@ namespace PommeBrowser.Legacy
             if (_closed)
                 return;
             _closed = true;
+            StopHeartbeat();
             try
             {
                 if (await WriteAsync("close").ConfigureAwait(true))
@@ -525,9 +612,11 @@ namespace PommeBrowser.Legacy
             if (_exited)
                 return;
             _exited = true;
+            StopHeartbeat();
             lock (Running)
                 Running.Remove(this);
             FailedToStart = !_closed && !_ready;
+            Crashed = !_closed && _ready;
             try
             {
                 if (_process.HasExited)

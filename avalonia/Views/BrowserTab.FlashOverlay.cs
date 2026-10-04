@@ -74,9 +74,12 @@ namespace PommeBrowser.Views
                     OpenFlashInPage(content, next);
                     return;
                 }
+                if (CanPlaceInPage(content) && TryAutoRelaunch(host, m => OpenFlashInPage(content, m)))
+                    return;
                 if (Page == TabPage.Web && IsSelected)
                     Window.ShowToast(Tr("Le lecteur Flash s'est arrêté : le contenu ne s'affiche plus."), Tr("Relancer"), () => RelaunchFlashInPage(content), timeout: 10, warning: true);
             };
+            WatchFlashResponsiveness(host, () => _overlayHost == host, m => OpenFlashInPage(content, m));
             view.Docked += () =>
             {
                 if (_overlayView != view)
