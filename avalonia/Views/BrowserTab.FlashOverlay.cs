@@ -154,9 +154,10 @@ namespace PommeBrowser.Views
                 return;
             }
 
-            var view = new LegacyView { IsVisible = false };
+            string key = SlotKey(content);
+            var view = new LegacyView { IsVisible = false, KeyboardName = $"lecteur {key} : {FlashContent.ShortName(content.Swf)}" };
             OverlayLayer().Children.Add(view);
-            var slot = new FlashSlot(SlotKey(content), content, host, view);
+            var slot = new FlashSlot(key, content, host, view);
             _slots.Add(slot);
 
             host.SetBackground(!IsSelected);

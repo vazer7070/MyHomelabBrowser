@@ -29,11 +29,12 @@ namespace PommeBrowser.Legacy
 
         nint _client;
         nint _focusTarget;
+        uint _attachedThread;
         (int X, int Y, int Width, int Height)? _placement;
 
         public nint Host { get; private set; }
 
-        /// <summary>Clic dans Basilisk (il a pris le clavier).</summary>
+        /// <summary>La fenêtre logée a reçu le clavier (clic dedans, ou rendu par le gardien du clavier).</summary>
         public event Action? Clicked;
 
         /// <summary>Raccourci de la fenêtre tapé dans Basilisk.</summary>
@@ -125,6 +126,11 @@ namespace PommeBrowser.Legacy
             nint client = _client;
             _client = 0;
             _focusTarget = 0;
+            if (_keeper == this)
+                _keeper = null;
+            if (_requested == this)
+                _requested = null;
+            DetachInput();
             if (client == 0 || !IsWindow(client))
                 return;
             PommeBrowser.Core.CrashWatch.Activity = "fenêtre d'un autre processus retirée de l'onglet";
@@ -149,6 +155,15 @@ namespace PommeBrowser.Legacy
                 RemoveHooks();
         }
 
+        /// <summary>Nom de la fenêtre logée dans le journal du clavier (« jeu f2 : EvonyClient.swf »…).</summary>
+        public string Name { get; set; } = "fenêtre logée";
+
+        /// <summary>
+        /// La fenêtre logée peut garder le clavier : sa vue est affichée (onglet actif) et aucun
+        /// élément de PommeBrowser (champ, bouton) n'a pris le focus d'Avalonia.
+        /// </summary>
+        public Func<bool>? CanKeepKeyboard { get; set; }
+
         /// <summary>Clavier à Basilisk (la vue a le focus d'Avalonia) ou rendu à la fenêtre de PommeBrowser.</summary>
         public void SetKeyboard(bool page, nint topLevel)
         {
@@ -160,31 +175,65 @@ namespace PommeBrowser.Legacy
             {
                 if (inClient && topLevel != 0)
                 {
-                    NoteKeyboard("PommeBrowser (repris à la fenêtre logée)");
+                    if (_keeper == this)
+                        _keeper = null;
+                    NoteKeyboard("PommeBrowser (repris à " + Name + ")");
                     SetFocus(topLevel);
                 }
                 return;
             }
             if (inClient || GetForegroundWindow() != topLevel)
                 return;
-            NoteKeyboard("fenêtre logée (donné par PommeBrowser)");
-
-            // Fil différent : les files de saisie sont reliées le temps de donner le focus.
-            uint thread = GetCurrentThreadId();
-            uint target = GetWindowThreadProcessId(_focusTarget, out _);
-            bool attached = target != thread && AttachThreadInput(thread, target, true);
-            try
-            {
-                SetFocus(_focusTarget != 0 && IsWindow(_focusTarget) ? _focusTarget : _client);
-            }
-            finally
-            {
-                if (attached)
-                    AttachThreadInput(thread, target, false);
-            }
+            NoteKeyboard(Name + " (donné par PommeBrowser)");
+            FocusClient();
         }
 
+        /// <summary>
+        /// Focus à la fenêtre logée. Les files de saisie de PommeBrowser et de l'autre processus
+        /// sont déjà reliées par Windows (fenêtre enfant d'un autre fil) : le focus est donné tel
+        /// quel. Si cela échoue, elles sont reliées à la main, et le restent tant que la fenêtre
+        /// est logée : les délier aussitôt après pourrait couper aussi le lien établi par Windows,
+        /// et le clavier n'arriverait plus au lecteur.
+        /// </summary>
+        void FocusClient()
+        {
+            nint target = _focusTarget != 0 && IsWindow(_focusTarget) ? _focusTarget : _client;
+            SetFocus(target);
+            if (Contains(GetFocus()))
+                return;
+            uint thread = GetCurrentThreadId();
+            uint targetThread = GetWindowThreadProcessId(target, out _);
+            if (_attachedThread == 0 && targetThread != 0 && targetThread != thread && AttachThreadInput(thread, targetThread, true))
+            {
+                _attachedThread = targetThread;
+                LogKeyboard("Files de saisie reliées à la main pour " + Name + ".");
+            }
+            SetFocus(target);
+        }
+
+        /// <summary>Fenêtre retirée : le lien posé par FocusClient est défait.</summary>
+        void DetachInput()
+        {
+            if (_attachedThread == 0)
+                return;
+            AttachThreadInput(GetCurrentThreadId(), _attachedThread, false);
+            _attachedThread = 0;
+        }
+
+        /// <summary>
+        /// La page donne le focus à l'élément du contenu (élément.focus()) : le prochain passage du
+        /// clavier à cette fenêtre est voulu, même si une autre le gardait.
+        /// </summary>
+        public void RequestKeyboard() => _requested = this;
+
         bool Contains(nint window) => _client != 0 && window != 0 && (window == _client || IsChild(_client, window));
+
+        /// <summary>Le pointeur est au-dessus de la partie affichée de la fenêtre logée.</summary>
+        bool IsUnder(Point cursor)
+            => Host != 0 && GetWindowRect(Host, out Rect rect) &&
+               cursor.X >= rect.Left && cursor.X < rect.Right && cursor.Y >= rect.Top && cursor.Y < rect.Bottom;
+
+        bool CanKeep() => _client != 0 && Host != 0 && IsWindow(_client) && (CanKeepKeyboard?.Invoke() ?? true);
 
         // ---------------------------------------------------------------
         // Fenêtre d'accueil
@@ -246,8 +295,10 @@ namespace PommeBrowser.Legacy
 
         static void InstallHooks()
         {
+            // Tous les processus, PommeBrowser compris : sa propre fenêtre peut aussi prendre le
+            // clavier au lecteur (voir OnFocusChanged).
             if (_focusHook == 0)
-                _focusHook = SetWinEventHook(EventObjectFocus, EventObjectFocus, 0, &OnFocusEvent, 0, 0, WinEventOutOfContext | WinEventSkipOwnProcess);
+                _focusHook = SetWinEventHook(EventObjectFocus, EventObjectFocus, 0, &OnFocusEvent, 0, 0, WinEventOutOfContext);
             if (_keyboardHook == 0)
                 _keyboardHook = SetWindowsHookExW(WhKeyboardLl, &OnKeyboard, GetModuleHandleW(null), 0);
         }
@@ -262,33 +313,80 @@ namespace PommeBrowser.Legacy
             _keyboardHook = 0;
         }
 
-        // Journal du clavier (rapports) : à chaque changement de détenteur, 200 fois au plus.
+        // Journal du clavier (rapports) : à chaque changement de détenteur, 300 lignes au plus.
         static string? _keyboardOwner;
         static int _keyboardNotes;
+        static readonly Dictionary<uint, string> ProcessNames = new();
+
+        // Gardien du clavier : fenêtre logée qui l'a reçu en dernier (clic dedans, ou élément.focus()
+        // de la page). Une autre fenêtre de PommeBrowser (page web, fenêtre elle-même, autre
+        // lecteur) qui le lui prend sans que l'utilisateur ait cliqué ailleurs le lui rend.
+        static Win32Dock? _keeper;
+        static Win32Dock? _requested;
+        static nint _lastFocus;
+        static long _givebackStart;
+        static int _givebacks;
+        const int MaxGivebacks = 10;
+        const long GivebackPeriod = 5000;
 
         /// <summary>Le clavier change de détenteur dans la fenêtre de PommeBrowser : noté au journal.</summary>
         static void NoteKeyboard(string owner)
         {
-            if (owner == _keyboardOwner || _keyboardNotes >= 200)
+            if (owner == _keyboardOwner)
                 return;
             _keyboardOwner = owner;
+            LogKeyboard("→ " + owner);
+        }
+
+        static void LogKeyboard(string text)
+        {
+            if (_keyboardNotes >= 300)
+                return;
             _keyboardNotes++;
-            MyHomelabBrowser.classes.RuntimeLogBuffer.Append("[Clavier] → " + owner);
+            MyHomelabBrowser.classes.RuntimeLogBuffer.Append("[Clavier] " + text);
         }
 
         /// <summary>Programme d'une fenêtre (journal du clavier).</summary>
         static string ProcessOf(nint window)
         {
             GetWindowThreadProcessId(window, out uint process);
+            if (ProcessNames.TryGetValue(process, out string? known))
+                return known;
+            string name;
             try
             {
                 using var running = System.Diagnostics.Process.GetProcessById((int)process);
-                return running.ProcessName;
+                name = running.ProcessName;
             }
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
             {
-                return "processus " + process;
+                name = "processus " + process;
             }
+            if (ProcessNames.Count > 64)
+                ProcessNames.Clear();
+            ProcessNames[process] = name;
+            return name;
+        }
+
+        /// <summary>Fenêtre qui a le clavier, pour le journal : programme et classe de fenêtre.</summary>
+        static string Describe(nint window)
+        {
+            char* name = stackalloc char[64];
+            int length = GetClassNameW(window, name, 64);
+            string windowClass = length > 0 ? new string(name, 0, length) : "?";
+            return GetWindowThreadProcessId(window, out uint process) != 0 && process == (uint)Environment.ProcessId
+                ? "PommeBrowser (" + windowClass + ")"
+                : ProcessOf(window) + " (" + windowClass + ")";
+        }
+
+        static Win32Dock? DockOf(nint window)
+        {
+            foreach (Win32Dock dock in Docks.Values)
+            {
+                if (dock.Contains(window))
+                    return dock;
+            }
+            return null;
         }
 
         [UnmanagedCallersOnly]
@@ -296,26 +394,117 @@ namespace PommeBrowser.Legacy
         {
             try
             {
-                Win32Dock[] docks = Docks.Values.ToArray();
-                foreach (Win32Dock dock in docks)
-                {
-                    if (dock.Contains(window))
-                    {
-                        NoteKeyboard("fenêtre logée (" + ProcessOf(window) + ")");
-                        Action? clicked = dock.Clicked;
-                        Dispatcher.UIThread.Post(() => clicked?.Invoke());
-                        return;
-                    }
-                }
-                // Autre programme dans la fenêtre de PommeBrowser (moteur web…) : noté seulement.
+                if (window == 0 || Docks.Count == 0)
+                    return;
+                // Seules comptent les fenêtres de PommeBrowser où un lecteur est logé (pas les autres applications).
                 nint root = GetAncestor(window, GaRoot);
-                if (window != 0 && docks.Any(dock => GetAncestor(dock.Host, GaRoot) == root))
-                    NoteKeyboard(ProcessOf(window));
+                bool ours = false;
+                foreach (Win32Dock dock in Docks.Values)
+                    ours |= GetAncestor(dock.Host, GaRoot) == root;
+                if (!ours)
+                    return;
+                // Geste de l'utilisateur au moment du changement : bouton de la souris enfoncé, et où.
+                bool pressed = IsDown(VkLButton) || IsDown(VkRButton) || IsDown(VkMButton);
+                GetCursorPos(out Point cursor);
+                Dispatcher.UIThread.Post(() => OnFocusChanged(window, pressed, cursor));
             }
             catch (Exception ex)
             {
                 Report("focus", ex);
             }
+        }
+
+        /// <summary>
+        /// Le clavier a changé de fenêtre. Dans une fenêtre logée : elle le garde désormais (et sa
+        /// vue prend le focus d'Avalonia). Ailleurs dans la fenêtre de PommeBrowser, alors qu'une
+        /// fenêtre logée le gardait : s'il n'y a pas eu de clic hors d'elle (la page web le reprend
+        /// d'elle-même, une autre fenêtre se l'attribue…), il lui est rendu.
+        /// </summary>
+        static void OnFocusChanged(nint window, bool pressed, Point cursor)
+        {
+            try
+            {
+                // État actuel (des changements ont pu se suivre) ; rien si le clavier a quitté PommeBrowser.
+                nint focus = GetFocus();
+                if (focus == 0)
+                {
+                    // Le clavier est dans une autre application : au retour, tout changement compte.
+                    _lastFocus = 0;
+                    return;
+                }
+                if (focus == _lastFocus)
+                    return;
+                _lastFocus = focus;
+                nint root = GetAncestor(focus, GaRoot);
+
+                Win32Dock? keeper = _keeper;
+                if (keeper != null && !keeper.CanKeep())
+                    keeper = _keeper = null;
+                bool keeperHere = keeper != null && GetAncestor(keeper.Host, GaRoot) == root;
+                // Clic hors du lecteur qui avait le clavier : l'utilisateur va ailleurs.
+                bool userMove = keeper == null || pressed && !keeper.IsUnder(cursor);
+
+                if (DockOf(focus) is { } owner)
+                {
+                    if (keeperHere && owner != keeper && !userMove && owner != _requested)
+                    {
+                        GiveBack(keeper!, owner.Name);
+                        return;
+                    }
+                    if (owner != keeper)
+                        _givebacks = 0;
+                    _keeper = owner;
+                    _requested = null;
+                    NoteKeyboard(owner.Name + " (" + ProcessOf(focus) + ")");
+                    owner.Clicked?.Invoke();
+                    return;
+                }
+
+                if (!keeperHere)
+                {
+                    // Autre fenêtre de PommeBrowser (moteur web…) alors qu'un lecteur y est logé : noté.
+                    if (Docks.Values.Any(dock => GetAncestor(dock.Host, GaRoot) == root))
+                        NoteKeyboard(Describe(focus));
+                    return;
+                }
+                if (userMove)
+                {
+                    _keeper = null;
+                    NoteKeyboard(Describe(focus) + " (clic hors de " + keeper!.Name + ")");
+                    return;
+                }
+                GiveBack(keeper!, Describe(focus));
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or ObjectDisposedException)
+            {
+                PommeBrowser.Core.ErrorLog.Write("Clavier de la fenêtre logée", ex);
+            }
+        }
+
+        /// <summary>
+        /// Clavier pris à la fenêtre logée sans geste de l'utilisateur : il lui est rendu. Une
+        /// fenêtre qui le reprend sans cesse finit par le garder (pas de lutte sans fin) ; un
+        /// nouveau clic dans le lecteur le lui redonne.
+        /// </summary>
+        static void GiveBack(Win32Dock keeper, string thief)
+        {
+            long now = Environment.TickCount64;
+            if (now - _givebackStart > GivebackPeriod)
+            {
+                _givebackStart = now;
+                _givebacks = 0;
+            }
+            if (++_givebacks > MaxGivebacks)
+            {
+                _keeper = null;
+                LogKeyboard($"{thief} reprend sans cesse le clavier à {keeper.Name} : il le garde (cliquer dans le jeu pour le lui redonner).");
+                return;
+            }
+            if (GetForegroundWindow() != GetAncestor(keeper.Host, GaRoot))
+                return;
+            LogKeyboard($"Pris par {thief} sans clic de l'utilisateur : rendu à {keeper.Name}.");
+            _keyboardOwner = null;
+            keeper.FocusClient();
         }
 
         [UnmanagedCallersOnly]
@@ -449,12 +638,20 @@ namespace PommeBrowser.Legacy
         const uint GaParent = 1;
         const uint GaRoot = 2;
         const uint WinEventOutOfContext = 0x0000;
-        const uint WinEventSkipOwnProcess = 0x0002;
+        const int VkLButton = 0x01;
+        const int VkRButton = 0x02;
+        const int VkMButton = 0x04;
 
         [StructLayout(LayoutKind.Sequential)]
         struct Rect
         {
             public int Left, Top, Right, Bottom;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct Point
+        {
+            public int X, Y;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -507,6 +704,8 @@ namespace PommeBrowser.Legacy
         [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(nint window, out uint processId);
         [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] static extern bool AttachThreadInput(uint attach, uint attachTo, [MarshalAs(UnmanagedType.Bool)] bool doAttach);
         [DllImport("user32.dll")] static extern short GetAsyncKeyState(int virtualKey);
+        [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] static extern bool GetCursorPos(out Point point);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassNameW(nint window, char* name, int length);
         [DllImport("user32.dll")] static extern nint SetWinEventHook(uint eventMin, uint eventMax, nint module, delegate* unmanaged<nint, uint, nint, int, int, uint, uint, void> callback, uint processId, uint threadId, uint flags);
         [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] static extern bool UnhookWinEvent(nint hook);
         [DllImport("user32.dll", SetLastError = true)] static extern nint SetWindowsHookExW(int hookId, delegate* unmanaged<int, nint, nint, nint> callback, nint module, uint threadId);

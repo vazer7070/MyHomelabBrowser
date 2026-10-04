@@ -14,6 +14,8 @@ namespace PommeFlash.Host.Native
         public const uint WM_CLOSE = 0x0010;
         public const uint WM_ERASEBKGND = 0x0014;
         public const uint WM_MOUSEACTIVATE = 0x0021;
+        public const uint WM_KEYDOWN = 0x0100;
+        public const uint WM_SYSKEYDOWN = 0x0104;
         public const uint WM_LBUTTONDOWN = 0x0201;
         public const uint WM_RBUTTONDOWN = 0x0204;
         public const uint WM_MBUTTONDOWN = 0x0207;

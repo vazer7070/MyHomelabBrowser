@@ -40,7 +40,7 @@ namespace PommeBrowser.Legacy
             }
             else if (OperatingSystem.IsWindows())
             {
-                _win32 = new Win32Dock();
+                _win32 = new Win32Dock { CanKeepKeyboard = CanKeepKeyboard };
                 _win32.Clicked += OnClicked;
                 _win32.Shortcut += (key, modifiers) => ShortcutPressed?.Invoke(key, modifiers);
             }
@@ -65,6 +65,17 @@ namespace PommeBrowser.Legacy
         public event Action<Key, KeyModifiers>? ShortcutPressed;
 
         public bool IsDocked { get; private set; }
+
+        /// <summary>Nom de ce qui est logé, pour le journal du clavier (« jeu f2 : EvonyClient.swf »…).</summary>
+        public string KeyboardName
+        {
+            get => _win32 != null && OperatingSystem.IsWindows() ? _win32.Name : "fenêtre logée";
+            set
+            {
+                if (_win32 != null && OperatingSystem.IsWindows())
+                    _win32.Name = value;
+            }
+        }
 
         /// <summary>Attend la fenêtre principale de Basilisk, puis la loge dans la vue.</summary>
         public void Attach(ILegacyBrowser browser)
@@ -190,9 +201,24 @@ namespace PommeBrowser.Legacy
             // Contenu caché ou minuscule (préchargement d'un jeu) : il ne prend pas le clavier.
             if (!IsDocked || !IsEffectivelyVisible || Bounds.Width < 16 || Bounds.Height < 16)
                 return;
+            if (_win32 != null && OperatingSystem.IsWindows())
+                _win32.RequestKeyboard();
             if (!IsFocused)
                 Focus();
             Dispatcher.UIThread.Post(() => SyncKeyboard(), DispatcherPriority.Background);
+        }
+
+        /// <summary>
+        /// Le lecteur peut garder le clavier qu'on lui a donné (voir Win32Dock) : il est affiché
+        /// (onglet actif), et le focus d'Avalonia est sur lui, sur la page web (WebView2 l'y met
+        /// quand il prend le clavier) ou nulle part, pas sur un champ ou un bouton de PommeBrowser.
+        /// </summary>
+        bool CanKeepKeyboard()
+        {
+            if (!IsDocked || !IsEffectivelyVisible || Bounds.Width < 16 || Bounds.Height < 16)
+                return false;
+            object? focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
+            return focused == null || focused == this || focused is NativeWebView;
         }
 
         /// <summary>
@@ -212,7 +238,9 @@ namespace PommeBrowser.Legacy
             {
                 // Aucun élément d'Avalonia n'a le focus : Windows l'a donné à une fenêtre enfant
                 // (clic dans Basilisk) et Avalonia l'a perdu avec la fenêtre. Le clavier y reste.
-                if (!page && IsEffectivelyVisible && TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() == null)
+                // De même si le focus d'Avalonia est sur la page web : c'est WebView2 qui l'y met
+                // quand il prend le clavier, et le reprendre au lecteur à ce moment le volerait.
+                if (!page && IsEffectivelyVisible && TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is null or NativeWebView)
                     return;
                 _win32.SetKeyboard(page, topLevel);
             }

@@ -491,7 +491,11 @@ namespace PommeBrowser.Views
         /// <summary>Page de l'onglet : la fenêtre du lecteur dès qu'elle est logée, un message d'attente avant.</summary>
         void ShowEmbeddedLegacy(ILegacyBrowser browser, string title, string text, Uri uri)
         {
-            var view = new LegacyView { IsVisible = false };
+            var view = new LegacyView
+            {
+                IsVisible = false,
+                KeyboardName = _integrated is { } content ? "lecteur Flash : " + FlashContent.ShortName(content.Swf) : "Basilisk"
+            };
             var waiting = new StatusPage("IconGames", title, text,
                 new (string, bool, Action)[] { (Tr("Lire avec Ruffle"), false, () => BackToRuffle(uri)) });
             var page = new Grid();

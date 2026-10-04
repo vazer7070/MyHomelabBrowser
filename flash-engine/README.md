@@ -61,6 +61,12 @@ PommeBrowser ──(ligne de commande, stdin/stdout JSON)──► PommeFlashHos
   (`WindowWatch`). Sous Windows, un clic dans le
   contenu lui donne le clavier (`WM_MOUSEACTIVATE`, comme Firefox le faisait pour ses modules :
   Flash compte sur le navigateur), et PommeBrowser le reprend quand un de ses champs a le focus.
+  Contenu à sa place dans la page : la page web (WebView2) reste active sous le lecteur, et peut
+  lui prendre le clavier. PommeBrowser suit chaque changement de focus de sa fenêtre
+  (`EVENT_OBJECT_FOCUS`, ses propres fenêtres comprises) et le rend au lecteur qui l'avait quand il
+  lui est pris sans clic de l'utilisateur ailleurs (au plus 10 fois en 5 s : une fenêtre qui le
+  reprend sans cesse le garde). Le journal note chaque détenteur du clavier (« [Clavier] → … »,
+  programme et classe de fenêtre), et l'hôte note les touches qu'il reçoit réellement.
 - **Linux** (`GtkDisplay.cs`, `Native/Gtk.cs`) : le module Flash de Linux est écrit pour GTK 2
   et XEmbed. L'hôte ouvre une fenêtre GTK 2 avec une prise (`GtkSocket`) donnée au module
   (`NPWindow.window` = XID de la prise, `ws_info` = `NPSetWindowCallbackStruct` avec l'affichage

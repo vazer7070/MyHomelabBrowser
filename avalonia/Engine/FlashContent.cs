@@ -80,6 +80,13 @@ namespace PommeBrowser.Engine
             Swf.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped), Id ?? string.Empty, FlashVars ?? string.Empty);
 
         /// <summary>Pour le journal : fichier, taille et identifiant.</summary>
+        /// <summary>Nom court du fichier du contenu (« EvonyClient1921.swf »), pour le journal.</summary>
+        public static string ShortName(Uri swf)
+        {
+            string name = System.IO.Path.GetFileName(swf.AbsolutePath);
+            return name.Length > 0 ? name : swf.Host;
+        }
+
         public override string ToString()
             => $"{Swf.GetLeftPart(UriPartial.Path)} ({Width}×{Height}{(Id is { Length: > 0 } ? ", id " + Id : string.Empty)})";
 
