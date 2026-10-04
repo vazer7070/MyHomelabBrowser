@@ -175,6 +175,24 @@ namespace PommeBrowser.Legacy
             Activated?.Invoke();
             if (!IsFocused)
                 Focus();
+            // La fenêtre de PommeBrowser s'active avec ce clic, et cette activation (ou la page
+            // web) peut reprendre le clavier juste après : il est redonné une fois tout cela passé.
+            Dispatcher.UIThread.Post(() => SyncKeyboard(), DispatcherPriority.Background);
+            DispatcherTimer.RunOnce(() => SyncKeyboard(), TimeSpan.FromMilliseconds(200));
+        }
+
+        /// <summary>
+        /// La page donne le focus à l'élément du contenu (élément.focus(), comme pour un greffon de
+        /// navigateur) : le clavier va au lecteur, s'il est affiché.
+        /// </summary>
+        public void TakeKeyboard()
+        {
+            // Contenu caché ou minuscule (préchargement d'un jeu) : il ne prend pas le clavier.
+            if (!IsDocked || !IsEffectivelyVisible || Bounds.Width < 16 || Bounds.Height < 16)
+                return;
+            if (!IsFocused)
+                Focus();
+            Dispatcher.UIThread.Post(() => SyncKeyboard(), DispatcherPriority.Background);
         }
 
         /// <summary>

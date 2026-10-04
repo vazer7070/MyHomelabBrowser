@@ -18,6 +18,19 @@ namespace PommeBrowser.Views
     /// Contenus Flash que Ruffle ne lit pas : moteur Flash intégré (module Flash de l'utilisateur,
     /// Windows, expérimental) ou Basilisk (lecteur Flash d'origine), logés dans l'onglet.
     /// </summary>
+    /// <summary>Moteur qui lit le Flash d'une page.</summary>
+    public enum FlashEngine
+    {
+        /// <summary>Ruffle, dans la page (ou pas de Flash).</summary>
+        Ruffle,
+
+        /// <summary>Module Flash de l'utilisateur, par PommeFlashHost (dans la page ou à sa place).</summary>
+        Integrated,
+
+        /// <summary>Basilisk, navigateur à part logé dans l'onglet.</summary>
+        Basilisk
+    }
+
     public sealed partial class BrowserTab
     {
         ILegacyBrowser? _basilisk;
@@ -117,6 +130,21 @@ namespace PommeBrowser.Views
 
         /// <summary>La page affichée est lue par le moteur intégré.</summary>
         public bool IsIntegratedFlash => Page == TabPage.Legacy && _integrated != null;
+
+        /// <summary>Moteur qui lit le Flash de la page (bouton ⚡).</summary>
+        public FlashEngine FlashEngine
+            => HasFlashOverlay || IsIntegratedFlash ? FlashEngine.Integrated
+                : Page == TabPage.Legacy && _legacyUri != null ? FlashEngine.Basilisk
+                : FlashEngine.Ruffle;
+
+        /// <summary>Retour à Ruffle depuis le moteur intégré ou Basilisk (bouton ⚡).</summary>
+        public void ReturnToRuffle()
+        {
+            if (HasFlashOverlay)
+                StopFlashOverlay();
+            else if (Page == TabPage.Legacy && _legacyUri is { } uri)
+                BackToRuffle(uri);
+        }
 
         /// <summary>
         /// Contenu que Ruffle ne lit pas : moteur intégré s'il est prêt (à sa place dans la page si
@@ -256,7 +284,15 @@ namespace PommeBrowser.Views
             int separator = message.IndexOf('|', StringComparison.Ordinal);
             if (separator <= 0 || separator > 16 || !_flashCallees.TryGetValue(message[..separator], out var callee))
                 return null;
-            return !callee.Host.HasExited && IsReachable(callee.Content) ? callee.Host.CallFunction(message[(separator + 1)..], FlashCallTimeout) : null;
+            string key = message[..separator];
+            string request = message[(separator + 1)..];
+            if (request == RuffleContent.FocusRequest)
+            {
+                // Après la réponse : la page attend encore celle-ci.
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => FocusFlashSlot(key));
+                return string.Empty;
+            }
+            return !callee.Host.HasExited && IsReachable(callee.Content) ? callee.Host.CallFunction(request, FlashCallTimeout) : null;
         }
 
         async void InstallFlashBridge(IEngineTab engine, FlashContent content, string key, string token)

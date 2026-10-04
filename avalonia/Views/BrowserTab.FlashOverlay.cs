@@ -365,6 +365,13 @@ namespace PommeBrowser.Views
                 slot.Host.SetBackground(background);
         }
 
+        /// <summary>La page a donné le focus à l'élément d'un contenu : le clavier va à son lecteur (onglet affiché).</summary>
+        void FocusFlashSlot(string key)
+        {
+            if (IsSelected && FindSlot(key) is { } slot)
+                slot.View.TakeKeyboard();
+        }
+
         /// <summary>Clavier des lecteurs logés dans la page (voir MainWindow.SyncAllKeyboards).</summary>
         void SyncFlashSlotsKeyboard(bool force)
         {

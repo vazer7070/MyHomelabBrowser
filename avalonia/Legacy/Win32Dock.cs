@@ -159,11 +159,15 @@ namespace PommeBrowser.Legacy
             if (!page)
             {
                 if (inClient && topLevel != 0)
+                {
+                    NoteKeyboard("PommeBrowser (repris à la fenêtre logée)");
                     SetFocus(topLevel);
+                }
                 return;
             }
             if (inClient || GetForegroundWindow() != topLevel)
                 return;
+            NoteKeyboard("fenêtre logée (donné par PommeBrowser)");
 
             // Fil différent : les files de saisie sont reliées le temps de donner le focus.
             uint thread = GetCurrentThreadId();
@@ -258,20 +262,55 @@ namespace PommeBrowser.Legacy
             _keyboardHook = 0;
         }
 
+        // Journal du clavier (rapports) : à chaque changement de détenteur, 200 fois au plus.
+        static string? _keyboardOwner;
+        static int _keyboardNotes;
+
+        /// <summary>Le clavier change de détenteur dans la fenêtre de PommeBrowser : noté au journal.</summary>
+        static void NoteKeyboard(string owner)
+        {
+            if (owner == _keyboardOwner || _keyboardNotes >= 200)
+                return;
+            _keyboardOwner = owner;
+            _keyboardNotes++;
+            MyHomelabBrowser.classes.RuntimeLogBuffer.Append("[Clavier] → " + owner);
+        }
+
+        /// <summary>Programme d'une fenêtre (journal du clavier).</summary>
+        static string ProcessOf(nint window)
+        {
+            GetWindowThreadProcessId(window, out uint process);
+            try
+            {
+                using var running = System.Diagnostics.Process.GetProcessById((int)process);
+                return running.ProcessName;
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                return "processus " + process;
+            }
+        }
+
         [UnmanagedCallersOnly]
         static void OnFocusEvent(nint hook, uint eventType, nint window, int objectId, int childId, uint thread, uint time)
         {
             try
             {
-                foreach (Win32Dock dock in Docks.Values.ToArray())
+                Win32Dock[] docks = Docks.Values.ToArray();
+                foreach (Win32Dock dock in docks)
                 {
                     if (dock.Contains(window))
                     {
+                        NoteKeyboard("fenêtre logée (" + ProcessOf(window) + ")");
                         Action? clicked = dock.Clicked;
                         Dispatcher.UIThread.Post(() => clicked?.Invoke());
                         return;
                     }
                 }
+                // Autre programme dans la fenêtre de PommeBrowser (moteur web…) : noté seulement.
+                nint root = GetAncestor(window, GaRoot);
+                if (window != 0 && docks.Any(dock => GetAncestor(dock.Host, GaRoot) == root))
+                    NoteKeyboard(ProcessOf(window));
             }
             catch (Exception ex)
             {

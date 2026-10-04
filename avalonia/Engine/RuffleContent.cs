@@ -571,6 +571,9 @@ namespace PommeBrowser.Engine
         /// Player : avancement du chargement, variables, lecture) ; les mêmes que l'hôte accepte
         /// (PluginInstance.PageMethods).
         /// </summary>
+        /// <summary>Requête du pont : la page a donné le focus à l'élément du contenu (élément.focus()).</summary>
+        public const string FocusRequest = "focus";
+
         public static readonly IReadOnlyList<string> FlashMethods = new[]
         {
             "PercentLoaded", "GetVariable", "SetVariable", "IsPlaying", "Play", "StopPlay", "Rewind",
@@ -625,6 +628,8 @@ namespace PommeBrowser.Engine
               };
               const methods = {};
               for (const name of __METHODS__) methods[name] = method(name);
+              // Comme pour un greffon : élément.focus() donne le clavier au lecteur.
+              methods.focus = function () { send('__FOCUS__'); };
               const equip = (element) => {
                 if (!element || element.CallFunction === call) return;
                 try {
@@ -643,7 +648,8 @@ namespace PommeBrowser.Engine
                .Replace("__SLOT__", JsonSerializer.Serialize(SlotKey(slot)), StringComparison.Ordinal)
                .Replace("__WANTED__", Wanted(content), StringComparison.Ordinal)
                .Replace("__FIND__", FindContentScript, StringComparison.Ordinal)
-               .Replace("__METHODS__", JsonSerializer.Serialize(FlashMethods), StringComparison.Ordinal);
+               .Replace("__METHODS__", JsonSerializer.Serialize(FlashMethods), StringComparison.Ordinal)
+               .Replace("__FOCUS__", FocusRequest, StringComparison.Ordinal);
 
         /// <summary>Fichier demandé par la page (nom seul) : contenu et type, ou null s'il n'existe pas.</summary>
         public static (byte[] Data, string ContentType)? Read(string name, string baseUrl)

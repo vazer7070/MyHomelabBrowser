@@ -232,7 +232,9 @@ public sealed class FlashRectTests
         Assert.Contains("\"PercentLoaded\"", script);
         Assert.Contains("JSON.stringify({ method: name, args })", script);
         Assert.Contains("[data-pomme-flash-hole=\"' + slot + '\"]", script);
-        foreach (string placeholder in new[] { "__BRIDGE__", "__SLOT__", "__WANTED__", "__FIND__", "__METHODS__" })
+        // élément.focus() : le clavier va au lecteur, comme pour un greffon.
+        Assert.Contains("methods.focus = function () { send('" + RuffleContent.FocusRequest + "'); };", script);
+        foreach (string placeholder in new[] { "__BRIDGE__", "__SLOT__", "__WANTED__", "__FIND__", "__METHODS__", "__FOCUS__" })
             Assert.DoesNotContain(placeholder, script);
         // Sous WebKitGTK, chaque requête au schéma du pont porte le jeton du pont.
         Assert.Contains("'" + RuffleContent.FlashBridgeScheme + "://call/?t=" + token + "&r=' + encodeURIComponent(message)", script);

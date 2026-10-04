@@ -251,11 +251,10 @@
                             </Panel>
                         </Button>
 
-                        <Button x:Name="LegacyButton" Classes="toolbar warm" Margin="2,0,0,0"
-                                ToolTip.Tip="{l:Tr 'Ouvrir ce site avec Flash Legacy (Basilisk)'}"
+                        <Button x:Name="LegacyButton" Classes="toolbar ruffle" Margin="2,0,0,0"
                                 IsVisible="False"
                                 Click="Legacy_Click">
-                            <PathIcon Data="{StaticResource IconFlash}" />
+                            <PathIcon x:Name="LegacyIcon" Data="{StaticResource IconFlash}" />
                         </Button>
 
                         <Button x:Name="DownloadsButton" Classes="toolbar" Margin="2,0,0,0"
