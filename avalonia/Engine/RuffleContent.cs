@@ -20,6 +20,14 @@ namespace PommeBrowser.Engine
     public static class RuffleContent
     {
         public const string MessageHandler = "pommeRuffle";
+
+        /// <summary>
+        /// Message accepté d'un cadre (iframe) de la page : ceux de Ruffle sur le contenu Flash
+        /// (description, lecture, échec), pas la position de suivi (document principal seulement)
+        /// ni les autres canaux.
+        /// </summary>
+        public static bool IsFrameMessage(string channel, string body)
+            => channel == MessageHandler && !body.StartsWith(RectPrefix, StringComparison.Ordinal);
         public const string ScriptId = "ruffle-probe";
         public const string PluginScriptId = "ruffle-plugin";
 

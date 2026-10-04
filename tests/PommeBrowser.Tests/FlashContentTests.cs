@@ -90,4 +90,16 @@ public sealed class FlashContentTests
         Assert.Contains("\"160x600\"", script);
         Assert.DoesNotContain("__AD_SIZES__", script);
     }
+
+    [Fact]
+    public void Only_ruffle_messages_about_the_content_are_accepted_from_a_frame()
+    {
+        // Jeu dans un cadre (Evony…) : contenu décrit, lecture, échec de Ruffle.
+        Assert.True(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, "content:{}"));
+        Assert.True(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, "failed"));
+        Assert.True(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, "playing"));
+        // Position de suivi : document principal seulement ; autres canaux : jamais depuis un cadre.
+        Assert.False(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, RuffleContent.RectPrefix + "{}"));
+        Assert.False(RuffleContent.IsFrameMessage("pommeCredentials", "{}"));
+    }
 }
