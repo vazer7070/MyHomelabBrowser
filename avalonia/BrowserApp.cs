@@ -131,6 +131,11 @@ namespace PommeBrowser
             // Lancements suivants (liens ouverts depuis d'autres applications) : dans cette instance.
             Program.Instance?.Attach(targets => Dispatcher.UIThread.Post(() => Current.OpenFromOutside(targets)));
 
+            // Tout premier lancement : accueil (import, navigateur par défaut, moteur de recherche),
+            // une fois la fenêtre affichée. Pas quand on arrive par un lien : il sera proposé ensuite.
+            if (placement == null && !Appearance.WelcomeDone && urls.Count == 0)
+                DispatcherTimer.RunOnce(() => ShowWelcome(window), TimeSpan.FromMilliseconds(700));
+
             // Durée du démarrage, jusqu'à la fenêtre affichée (journal joint aux rapports).
             if (placement == null)
             {
@@ -236,6 +241,22 @@ namespace PommeBrowser
                 _closedTabs.RemoveAll(t => t.Window == window);
             };
             return window;
+        }
+
+        async void ShowWelcome(MainWindow window)
+        {
+            // Proposé une seule fois, même si l'accueil est fermé ou interrompu.
+            Appearance.WelcomeDone = true;
+            try
+            {
+                Appearance.Save();
+                if (_windows.Contains(window))
+                    await Views.Dialogs.WelcomeDialog.ShowAsync(window);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                RuntimeLogBuffer.Append("[Accueil] " + ex.Message);
+            }
         }
 
         /// <summary>

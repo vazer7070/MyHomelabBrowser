@@ -144,7 +144,8 @@ namespace PommeBrowser
             return new AppearanceSettings
             {
                 Theme = AppTheme.System,
-                Language = culture.Equals("fr", StringComparison.OrdinalIgnoreCase) ? "fr" : "en"
+                Language = culture.Equals("fr", StringComparison.OrdinalIgnoreCase) ? "fr" : "en",
+                WelcomeDone = false
             };
         }
 

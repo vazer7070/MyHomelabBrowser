@@ -40,4 +40,23 @@ public class AppearanceSettingsTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void The_welcome_is_only_for_new_installations()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "pomme-appearance-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            // Fichier d'une version précédente, sans ce réglage : déjà utilisateur, pas d'accueil.
+            File.WriteAllText(path, """{ "Theme": "Dark", "Language": "fr" }""");
+            Assert.True(AppearanceSettings.Load(path).WelcomeDone);
+
+            new AppearanceSettings { WelcomeDone = false }.Save(path);
+            Assert.False(AppearanceSettings.Load(path).WelcomeDone);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

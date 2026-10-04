@@ -56,6 +56,12 @@ Elle porte le même nom que celle de l'édition GTK. Gardez-la dans un dossier m
 
 ## Fonctions
 
+**Venir de Firefox ou de Chrome**
+- Au premier lancement, un accueil propose de reprendre les favoris et l'historique du navigateur le plus utilisé de l'ordinateur (Chrome, Edge, Brave, Vivaldi, Opera, Firefox), de choisir le moteur de recherche, de faire de PommeBrowser le navigateur par défaut et d'importer les mots de passe. Tout reste dans **Réglages › Général** (« Navigateur par défaut », « Venir d'un autre navigateur »).
+- Mots de passe : depuis le fichier CSV exporté par Chrome, Edge, Brave, Firefox, Safari ou Bitwarden, vers le coffre chiffré, sans remplacer ceux déjà présents ; la suppression du fichier en clair est proposée aussitôt.
+- Navigateur par défaut : Windows (PommeBrowser s'inscrit à l'installation ; la page « Applications par défaut » s'ouvre à son nom), Linux (fichier .desktop de l'AppImage et xdg-settings), macOS (http et https déclarés, confirmation du système).
+- Une seule instance, comme Firefox et Chrome : un lien ouvert depuis une autre application (courriel, document, messagerie) arrive dans un onglet de la fenêtre ouverte, qui passe au premier plan ; relancer PommeBrowser ouvre une nouvelle fenêtre.
+
 **Navigation**
 - Onglets réorganisables et épinglables. `Ctrl+Maj+T` rouvre le dernier fermé.
 - Onglets privés (`Ctrl+Maj+N`), avec leur couleur propre.

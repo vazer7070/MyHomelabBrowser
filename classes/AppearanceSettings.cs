@@ -34,6 +34,12 @@ namespace MyHomelabBrowser.classes
         /// </summary>
         public string Language { get; set; } = "fr";
 
+        /// <summary>
+        /// Accueil du premier lancement déjà proposé. Vrai par défaut : un fichier d'une version
+        /// précédente (sans ce réglage) appartient à quelqu'un qui utilise déjà PommeBrowser.
+        /// </summary>
+        public bool WelcomeDone { get; set; } = true;
+
         public static string DefaultPath => Path.Combine(Profiles.AppDataContext.GlobalRoot, "appearance.json");
 
         public static AppearanceSettings Load(string? path = null)
