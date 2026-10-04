@@ -105,7 +105,7 @@ Elle porte le même nom que celle de l'édition GTK. Gardez-la dans un dossier m
 - Recherche dans la page, zoom mémorisé par site, impression, outils de développement, plein écran.
 - Import des favoris des autres navigateurs (dont Safari sous macOS).
 - « Signaler un problème » : même rapport que les autres éditions. Un arrêt brutal de PommeBrowser (plantage dans du code natif, arrêt forcé) est consigné au démarrage suivant dans `errors.log`, joint au rapport : fin du journal de la session et, sous Windows, entrées du journal d'événements (module fautif, pile d'appels de .NET).
-- Mises à jour : Velopack sous Windows, AppImage sous Linux.
+- Mises à jour : Velopack sous Windows, AppImage sous Linux. Sous Windows, la nouvelle version est téléchargée en arrière-plan puis installée à la fermeture de PommeBrowser (ou au redémarrage demandé), jamais pendant qu'il tourne : l'outil de Velopack arrête de force les processus du dossier de l'application. Une compilation de test (artefact de la CI) copiée dans une installation ne se met pas à jour d'elle-même, sinon la dernière version publiée la remplacerait.
 - Thème clair, sombre ou celui du système. Français ou anglais.
 
 **Différences selon le moteur**

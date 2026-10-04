@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Avalonia.Threading;
+using MyHomelabBrowser.classes;
 using PommeBrowser.Updates;
 using static MyHomelabBrowser.classes.Localization.Loc;
 
@@ -19,8 +20,20 @@ namespace PommeBrowser
         /// <summary>Recherche peu après le démarrage, pour ne pas ralentir l'ouverture des pages.</summary>
         void ScheduleUpdateCheck()
         {
+            if (OperatingSystem.IsWindows() && Updater is VelopackUpdater { TestBuildNote: { } note })
+                RuntimeLogBuffer.Append("[Mise à jour] " + note);
             if (Settings.AutoUpdate && Updater.CanUpdate)
                 DispatcherTimer.RunOnce(() => _ = CheckForUpdatesAsync(manual: false), TimeSpan.FromSeconds(20));
+        }
+
+        /// <summary>
+        /// Fin du processus : une version téléchargée est installée une fois PommeBrowser terminé,
+        /// sauf s'il se relance (profil, langue) : l'installation arrêterait la nouvelle instance.
+        /// </summary>
+        public void OnProcessEnding()
+        {
+            if (OperatingSystem.IsWindows() && !_relaunching && _updater is VelopackUpdater velopack)
+                velopack.ApplyOnExit();
         }
 
         /// <summary>Recherche (et installe si possible) une nouvelle version, puis propose de redémarrer.</summary>
@@ -29,7 +42,7 @@ namespace PommeBrowser
             await Updater.CheckAsync();
             if (Updater.Installed is { } installed)
             {
-                ActiveWindow?.ShowToast(Tr("PommeBrowser {0} est installé.", installed.ToString(3)), Tr("Redémarrer"), RestartToUpdate, timeout: 0);
+                ActiveWindow?.ShowToast(Tr("PommeBrowser {0} est prêt : il s'installera à la fermeture.", installed.ToString(3)), Tr("Redémarrer"), RestartToUpdate, timeout: 0);
             }
             else if (!manual && OperatingSystem.IsLinux() && Updater is AppImageUpdater { Available: not null } && Updater.ReleasePage is { } page)
             {
@@ -44,6 +57,7 @@ namespace PommeBrowser
             {
                 SaveSession(isUpdateRestart: true);
                 _quitting = true;
+                _relaunching = true;
                 if (velopack.ApplyAndRestart())
                     return;
             }

@@ -37,6 +37,8 @@ namespace PommeBrowser
     public sealed partial class BrowserApp
     {
         bool _quitting;
+        // Fin pour se relancer (profil, langue, mise à jour) : rien à installer en partant.
+        bool _relaunching;
 
         public bool IsQuitting => _quitting;
 
@@ -128,6 +130,7 @@ namespace PommeBrowser
         /// <summary>Relance PommeBrowser (nouveau profil, langue, mise à jour installée).</summary>
         public void Restart(bool saveSession = true, bool isUpdateRestart = false)
         {
+            _relaunching = true;
             if (saveSession)
                 SaveSession(isUpdateRestart);
             try

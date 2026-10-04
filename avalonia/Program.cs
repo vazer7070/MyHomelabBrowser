@@ -34,7 +34,10 @@ namespace PommeBrowser
             // l'installation et à chaque mise à jour, et se retire à la désinstallation.
             if (OperatingSystem.IsWindows())
             {
+                // Une version téléchargée n'est pas installée d'office au démarrage : elle l'est à la
+                // fermeture (BrowserApp.OnProcessEnding), et jamais sur une compilation de test.
                 Velopack.VelopackApp.Build()
+                    .SetAutoApplyOnStartup(false)
                     .OnAfterInstallFastCallback(_ => RegisterAsBrowser())
                     .OnAfterUpdateFastCallback(_ => RegisterAsBrowser())
                     .OnBeforeUninstallFastCallback(_ => SafeRegistry(() =>
@@ -95,7 +98,9 @@ namespace PommeBrowser
                 Engine.Gtk.WebKitGtk.g_set_prgname(AppPaths.GlibProgramName);
             }
 
-            return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+            int code = BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+            BrowserApp.Current?.OnProcessEnding();
+            return code;
         }
 
         static void RegisterAsBrowser()

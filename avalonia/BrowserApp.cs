@@ -140,7 +140,7 @@ namespace PommeBrowser
             if (placement == null)
             {
                 Dispatcher.UIThread.Post(() => RuntimeLogBuffer.Append(
-                    $"[Démarrage] fenêtre affichée en {System.Diagnostics.Stopwatch.GetElapsedTime(Program.StartedAt).TotalMilliseconds:F0} ms"),
+                    $"[Démarrage] fenêtre affichée en {System.Diagnostics.Stopwatch.GetElapsedTime(Program.StartedAt).TotalMilliseconds:F0} ms ({Environment.ProcessPath})"),
                     DispatcherPriority.Background);
             }
         }

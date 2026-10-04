@@ -106,6 +106,9 @@ namespace PommeBrowser.Core
                 .Append(" s'est arrêtée sans fermeture normale (vers ").Append(lastSeen.ToString("HH:mm:ss")).AppendLine(").");
             if (OperatingSystem.IsWindows() && WindowsEvents(started) is { Length: > 0 } events)
                 text.AppendLine("--- Journal d'événements de Windows ---").AppendLine(events);
+            // Outil de mise à jour (Velopack) actif pendant la session : il peut arrêter PommeBrowser.
+            if (UpdaterLog(started) is { Length: > 0 } updater)
+                text.AppendLine("--- Journal de Velopack (fin) ---").AppendLine(updater);
             if (!string.IsNullOrWhiteSpace(tail))
             {
                 // Début coupé au milieu d'une ligne : on repart de la ligne suivante.
@@ -117,6 +120,41 @@ namespace PommeBrowser.Core
         }
 
         /// <summary>
+        /// Fin du journal de Velopack (Velopack.log, à côté du dossier de l'application installée)
+        /// s'il a été écrit pendant la session : son outil d'installation arrête de force les
+        /// processus du dossier de l'application.
+        /// </summary>
+        static string? UpdaterLog(DateTime since)
+        {
+            try
+            {
+                string current = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                string?[] folders = { current, Path.GetDirectoryName(current) };
+                foreach (string folder in folders.OfType<string>())
+                {
+                    if (!Directory.Exists(folder))
+                        continue;
+                    foreach (string file in Directory.EnumerateFiles(folder, "*.log"))
+                    {
+                        if (!Path.GetFileName(file).StartsWith("velopack", StringComparison.OrdinalIgnoreCase) ||
+                            File.GetLastWriteTime(file) < since.AddMinutes(-2))
+                            continue;
+                        using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                        stream.Position = Math.Max(0, stream.Length - 8 * 1024);
+                        using var reader = new StreamReader(stream, Encoding.UTF8);
+                        string tail = reader.ReadToEnd();
+                        int newline = stream.Length > 8 * 1024 ? tail.IndexOf('\n') : -1;
+                        return file + Environment.NewLine + (newline >= 0 ? tail[(newline + 1)..] : tail).TrimEnd();
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+            }
+            return null;
+        }
+
+        /// <summary>
         /// Entrées récentes du journal Application de Windows sur PommeBrowser (erreur
         /// d'application, erreur de .NET, rapport d'erreurs), depuis le début de la session.
         /// </summary>
@@ -125,8 +163,10 @@ namespace PommeBrowser.Core
             try
             {
                 long milliseconds = Math.Clamp((long)(DateTime.Now - since).TotalMilliseconds + 60_000, 60_000, 7L * 24 * 3600 * 1000);
+                // Plantage, erreur de .NET, rapport d'erreurs, et gel (« ne répond pas », fermé par Windows).
                 string query = "*[System[(Provider[@Name='Application Error'] or Provider[@Name='.NET Runtime'] or " +
-                               $"Provider[@Name='Windows Error Reporting']) and TimeCreated[timediff(@SystemTime) <= {milliseconds}]]]";
+                               "Provider[@Name='Windows Error Reporting'] or Provider[@Name='Application Hang']) and " +
+                               $"TimeCreated[timediff(@SystemTime) <= {milliseconds}]]]";
                 var start = new ProcessStartInfo("wevtutil")
                 {
                     RedirectStandardOutput = true,

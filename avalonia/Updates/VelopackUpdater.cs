@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Runtime.Versioning;
 using System.Threading.Tasks;
 using MyHomelabBrowser.classes;
@@ -10,8 +11,10 @@ namespace PommeBrowser.Updates
 {
     /// <summary>
     /// Windows : mises à jour Velopack depuis les versions publiées sur GitHub, comme l'édition WPF.
-    /// La nouvelle version est téléchargée en arrière-plan, puis installée à la fermeture ou au
-    /// redémarrage demandé par l'utilisateur.
+    /// La nouvelle version est téléchargée en arrière-plan, puis installée au redémarrage demandé
+    /// par l'utilisateur ou une fois PommeBrowser fermé (<see cref="ApplyOnExit"/>). Jamais pendant
+    /// qu'il tourne : l'outil de Velopack n'attend la fin du processus que 60 s, puis arrête de
+    /// force tous ceux du dossier de l'application (PommeBrowser et ses lecteurs Flash compris).
     /// </summary>
     [SupportedOSPlatform("windows")]
     public sealed class VelopackUpdater : IUpdater
@@ -23,8 +26,44 @@ namespace PommeBrowser.Updates
         public string Status { get; private set; } = string.Empty;
         public bool IsBusy => _busy;
 
-        /// <summary>Faux depuis les sources ou un dossier non installé par Velopack.</summary>
-        public bool CanUpdate => _manager.IsInstalled;
+        /// <summary>
+        /// Faux depuis les sources, un dossier non installé par Velopack, ou une compilation de test
+        /// copiée dans une installation (voir <see cref="TestBuildNote"/>).
+        /// </summary>
+        public bool CanUpdate => _manager.IsInstalled && TestBuildNote == null;
+
+        /// <summary>
+        /// Version de cette compilation, donnée à la publication (-p:Version), sans l'identifiant
+        /// du commit.
+        /// </summary>
+        static string BuildVersion
+            => (typeof(VelopackUpdater).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? string.Empty)
+                .Split('+')[0];
+
+        /// <summary>
+        /// Compilation de test (artefact de la CI…) copiée dans le dossier d'une installation : la
+        /// version que Velopack connaît n'est pas la sienne. Sans mise à jour automatique, sinon elle
+        /// serait remplacée par la dernière version publiée. Null pour une installation normale.
+        /// </summary>
+        public string? TestBuildNote
+        {
+            get
+            {
+                try
+                {
+                    if (!_manager.IsInstalled || _manager.CurrentVersion is not { } installed)
+                        return null;
+                    string known = installed.ToNormalizedString();
+                    return string.Equals(known, BuildVersion, StringComparison.OrdinalIgnoreCase)
+                        ? null
+                        : Tr("Compilation de test ({0}) placée dans l'installation {1} : mises à jour automatiques désactivées, pour ne pas la remplacer.", BuildVersion, known);
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or System.IO.IOException or NotSupportedException)
+                {
+                    return null;
+                }
+            }
+        }
         public Version? Installed { get; private set; }
         public string? ReleasePage => CanUpdate ? null : "https://github.com/vazer7070/PommeBrowser-release/releases/latest";
 
@@ -36,7 +75,7 @@ namespace PommeBrowser.Updates
                 return;
             if (!CanUpdate)
             {
-                SetStatus(Tr("Les mises à jour automatiques ne concernent que la version installée."));
+                SetStatus(TestBuildNote ?? Tr("Les mises à jour automatiques ne concernent que la version installée."));
                 return;
             }
 
@@ -54,11 +93,10 @@ namespace PommeBrowser.Updates
                 string version = info.TargetFullRelease.Version.ToString();
                 SetStatus(Tr("Téléchargement de la version {0}…", version));
                 await _manager.DownloadUpdatesAsync(info);
+                // Installée au redémarrage, ou une fois PommeBrowser fermé (ApplyOnExit) : pas maintenant.
                 _pending = info;
-                // Installée à la fermeture si l'utilisateur ne redémarre pas avant.
-                _manager.WaitExitThenApplyUpdates(info.TargetFullRelease, silent: true, restart: false);
                 Installed = Version.TryParse(version.Split('-')[0], out Version? parsed) ? parsed : new Version(0, 0);
-                SetStatus(Tr("La version {0} est installée : elle s'appliquera au prochain démarrage.", version));
+                SetStatus(Tr("La version {0} est téléchargée : elle s'installera à la fermeture de PommeBrowser.", version));
             }
             catch (Exception ex)
             {
@@ -79,6 +117,25 @@ namespace PommeBrowser.Updates
                 return false;
             _manager.ApplyUpdatesAndRestart(_pending.TargetFullRelease);
             return true;
+        }
+
+        /// <summary>
+        /// Fin du processus (fermeture normale, pas une relance) : la version téléchargée est
+        /// installée par Velopack, qui attend que PommeBrowser soit terminé.
+        /// </summary>
+        public void ApplyOnExit()
+        {
+            if (_pending is not { } pending)
+                return;
+            _pending = null;
+            try
+            {
+                _manager.WaitExitThenApplyUpdates(pending.TargetFullRelease, silent: true, restart: false);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.IO.IOException or System.ComponentModel.Win32Exception)
+            {
+                RuntimeLogBuffer.Append("[Mise à jour] " + ex.Message);
+            }
         }
 
         void SetStatus(string status)
