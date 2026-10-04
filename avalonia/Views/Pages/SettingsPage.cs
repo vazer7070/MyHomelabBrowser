@@ -218,10 +218,43 @@ namespace PommeBrowser.Views.Pages
         // Général
         // ---------------------------------------------------------------
 
+        /// <summary>Navigateur par défaut : état, et bouton pour que les liens des autres applications s'ouvrent ici.</summary>
+        Control DefaultBrowserCard()
+        {
+            var status = Hint(Tr("Vérification…"));
+            Button make = Action(Tr("Définir comme navigateur par défaut"), () => { }, primary: true);
+            make.IsVisible = false;
+
+            async void Refresh()
+            {
+                bool? isDefault = await DefaultBrowser.IsDefaultAsync();
+                status.Text = isDefault == true
+                    ? Tr("PommeBrowser est votre navigateur par défaut : les liens des autres applications s'ouvrent ici.")
+                    : Tr("Les liens des autres applications (courriels, documents, messageries) s'ouvrent dans un autre navigateur.");
+                make.IsVisible = isDefault != true;
+            }
+
+            make.Click += async (_, _) =>
+            {
+                make.IsEnabled = false;
+                string? error = await DefaultBrowser.MakeDefaultAsync();
+                make.IsEnabled = true;
+                if (error != null)
+                    _window.ShowToast(error, warning: true);
+                else if (OperatingSystem.IsWindows())
+                    status.Text = Tr("Dans la fenêtre de Windows qui s'est ouverte, choisissez PommeBrowser pour les liens (HTTP et HTTPS).");
+                else
+                    Refresh();
+            };
+            Refresh();
+            return Card(Tr("Navigateur par défaut"), null, status, Buttons(make));
+        }
+
         Control BuildGeneral()
         {
             var panel = new StackPanel { Spacing = 14 };
             panel.Children.Add(Hint(Tr("Démarrage, nouveaux onglets, réseau et certificats du navigateur.")));
+            panel.Children.Add(DefaultBrowserCard());
 
             // Apparence
             var restart = Action(Tr("Redémarrer maintenant"), () => _app.Restart());

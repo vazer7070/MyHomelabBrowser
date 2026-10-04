@@ -30,8 +30,20 @@ namespace PommeBrowser
         static int Main(string[] args)
         {
             // Installation, désinstallation et mises à jour Velopack (Windows) : avant tout le reste.
+            // PommeBrowser s'inscrit comme navigateur (Windows le propose ensuite pour les liens) à
+            // l'installation et à chaque mise à jour, et se retire à la désinstallation.
             if (OperatingSystem.IsWindows())
-                Velopack.VelopackApp.Build().Run();
+            {
+                Velopack.VelopackApp.Build()
+                    .OnAfterInstallFastCallback(_ => RegisterAsBrowser())
+                    .OnAfterUpdateFastCallback(_ => RegisterAsBrowser())
+                    .OnBeforeUninstallFastCallback(_ => SafeRegistry(() =>
+                    {
+                        if (OperatingSystem.IsWindows())
+                            DefaultBrowser.Unregister();
+                    }))
+                    .Run();
+            }
 
             args = Relauncher.WaitForPrevious(args);
             RuntimeLogBuffer.Init();
@@ -44,6 +56,13 @@ namespace PommeBrowser
             Instance = SingleInstance.Claim(SingleInstance.ChannelName(AppDataContext.GlobalRoot), targets, RuntimeLogBuffer.Append);
             if (Instance == null)
                 return 0;
+            // Installation antérieure à l'inscription comme navigateur : faite maintenant, sans attendre.
+            if (OperatingSystem.IsWindows())
+                _ = System.Threading.Tasks.Task.Run(() => SafeRegistry(() =>
+                {
+                    if (OperatingSystem.IsWindows())
+                        DefaultBrowser.EnsureRegistered();
+                }));
 
             // Dernier profil ouvert. Les données d'un profil renommé ou supprimé pendant que
             // PommeBrowser tournait sont déplacées ou effacées maintenant, moteur arrêté.
@@ -75,6 +94,29 @@ namespace PommeBrowser
             }
 
             return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+
+        static void RegisterAsBrowser()
+        {
+            if (OperatingSystem.IsWindows() && DefaultBrowser.InstalledLauncher() is { } launcher)
+                SafeRegistry(() =>
+                {
+                    if (OperatingSystem.IsWindows())
+                        DefaultBrowser.Register(launcher);
+                });
+        }
+
+        /// <summary>Inscription dans le registre : un échec n'empêche ni l'installation ni le démarrage.</summary>
+        static void SafeRegistry(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+            {
+                RuntimeLogBuffer.Append("[Navigateur par défaut] " + ex.Message);
+            }
         }
 
         public static AppBuilder BuildAvaloniaApp()
