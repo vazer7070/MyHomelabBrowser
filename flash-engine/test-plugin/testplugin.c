@@ -20,6 +20,7 @@
 #include <X11/keysym.h>
 #endif
 #include <stdarg.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "npapi-min.h"
@@ -125,6 +126,36 @@ static bool scriptableHasMethod(NPObject *obj, void *name)
     return name == browser->getstringidentifier("CallFunction");
 }
 
+/* ------------------------------------------------------------------ */
+/* Tenue : la page demande « boucle:N » ; N chargements enchaînés,      */
+/* avec à chacun un objet créé puis rendu et les objets de la page lus. */
+/* ------------------------------------------------------------------ */
+
+#define CYCLE_DATA ((void *)0xB0C1E)
+static int cycleLeft, cycleNumber;
+static NPObject *getObject(NPObject *owner, const char *name);
+
+static void cycleStep(void)
+{
+    if (cycleLeft <= 0)
+    {
+        report("cycle-done=%d", cycleNumber);
+        return;
+    }
+    cycleLeft--;
+    NPObject *obj = browser->createobject(instanceNpp, &testClass);
+    browser->releaseobject(obj);
+    NPObject *window = NULL;
+    if (browser->getvalue(instanceNpp, NPNVWindowNPObject, &window) == NPERR_NO_ERROR && window)
+    {
+        NPObject *location = getObject(window, "location");
+        if (location)
+            browser->releaseobject(location);
+        browser->releaseobject(window);
+    }
+    browser->geturlnotify(instanceNpp, "data.txt", NULL, CYCLE_DATA);
+}
+
 /* Réponse : « retour:<requête> », sur le fil du module. */
 static bool scriptableInvoke(NPObject *obj, void *name, const NPVariant *args, uint32_t count, NPVariant *result)
 {
@@ -132,6 +163,16 @@ static bool scriptableInvoke(NPObject *obj, void *name, const NPVariant *args, u
     if (name != browser->getstringidentifier("CallFunction") || count < 1 || args[0].type != NPVariantType_String)
         return false;
     const NPString *request = &args[0].value.stringValue;
+    if (request->UTF8Length > 7 && memcmp(request->UTF8Characters, "boucle:", 7) == 0)
+    {
+        char rounds[16] = { 0 };
+        memcpy(rounds, request->UTF8Characters + 7, request->UTF8Length - 7 < 15 ? request->UTF8Length - 7 : 15);
+        cycleLeft = atoi(rounds);
+        cycleNumber++;
+        cycleStep();
+        result->type = NPVariantType_Void;
+        return true;
+    }
     report("call main=%d request=%.*s", onMainThread(), (int)request->UTF8Length, request->UTF8Characters);
     static const char prefix[] = "retour:";
     uint32_t length = (uint32_t)(sizeof(prefix) - 1) + request->UTF8Length;
@@ -609,8 +650,9 @@ static NPError NPP_NewStream(NPP npp, NPMIMEType type, NPStream *stream, NPBool 
         memcpy(firstLine, stream->headers, length);
         firstLine[length] = 0;
     }
-    report("stream-open url=%s mime=%s end=%u notify=%llx status=%s", stream->url, type, stream->end,
-           (unsigned long long)(uintptr_t)stream->notifyData, firstLine);
+    if (stream->notifyData != CYCLE_DATA)
+        report("stream-open url=%s mime=%s end=%u notify=%llx status=%s", stream->url, type, stream->end,
+               (unsigned long long)(uintptr_t)stream->notifyData, firstLine);
     return NPERR_NO_ERROR;
 }
 
@@ -637,7 +679,8 @@ static NPError NPP_DestroyStream(NPP npp, NPStream *stream, NPReason reason)
 {
     (void)npp;
     StreamState *state = (StreamState *)stream->pdata;
-    report("stream-done url=%s bytes=%u hash=%08x ordered=%d reason=%d", stream->url, state->bytes, state->hash, state->ordered, reason);
+    if (stream->notifyData != CYCLE_DATA)
+        report("stream-done url=%s bytes=%u hash=%08x ordered=%d reason=%d", stream->url, state->bytes, state->hash, state->ordered, reason);
     int isMovie = strstr(stream->url, "movie.swf") != NULL;
     browser->memfree(state);
     stream->pdata = NULL;
@@ -660,6 +703,11 @@ static void NPP_URLRedirectNotify(NPP npp, const char *url, int32_t status, void
 static void NPP_URLNotify(NPP npp, const char *url, NPReason reason, void *notifyData)
 {
     (void)npp;
+    if (notifyData == CYCLE_DATA)
+    {
+        cycleStep();
+        return;
+    }
     report("notify url=%s reason=%d data=%llx", url, reason, (unsigned long long)(uintptr_t)notifyData);
     notifications++;
     checkFinished();

@@ -62,6 +62,9 @@ namespace PommeFlash.Host
 
         internal HostOptions Options => _options;
 
+        /// <summary>Flux ouverts et minuteries du module (diagnostic : commande « stats »).</summary>
+        internal (int Streams, int Timers) Usage => (_streams.Count, _timers.Count);
+
         public static void SetUserAgent(string userAgent) => _userAgent = NpMemory.Utf8(userAgent);
 
         public static PluginInstance? FromNpp(nint npp)

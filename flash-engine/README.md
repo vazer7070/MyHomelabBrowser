@@ -167,12 +167,28 @@ l'échelle).
 module Flash vis-à-vis de l'hôte et rapporte ce qu'il observe (`NPN_Status("TEST …")`).
 `tests/PommeFlash.Tests` lance le vrai hôte avec ce greffon et un serveur HTTP local, puis vérifie
 tout le parcours : paramètres, fenêtre, flux par petites bouchées, notifications, 404, envoi,
-objets de la page, fils, minuteries, navigation, fin propre.
+objets de la page, fils, minuteries, navigation, fin propre. Et aussi :
+
+- appels imbriqués (appel de la page pendant que le contenu attend un script), redirections
+  soumises au module (accordée, refusée), fermeture pendant un téléchargement sans fin,
+  battement de cœur (`ping`/`pong`) ;
+- logement X11 (`DockedHostTests`, Linux) : la fenêtre cachée de l'hôte est logée dans celle
+  d'un autre programme et redimensionnée par lui, puis clic et touche simulés (XTEST) ;
+- tenue (`EnduranceTests`) : deux séries identiques de 100 chargements, avec objets créés et
+  objets de la page lus à chaque fois (le greffon les enchaîne quand la page lui demande
+  `boucle:N`) ; entre les deux, rien ne doit croître (commande de diagnostic `stats` : blocs de
+  mémoire, objets de l'hôte, flux, minuteries) ;
+- robustesse du protocole : lignes malformées, JSON d'un autre type, nombres hors limites,
+  ligne de 1 Mo, octets au hasard ; l'hôte doit continuer de répondre et finir normalement.
+
+Côté PommeBrowser, `tests/PommeBrowser.UiTests/FlashHostTests.cs` lance l'hôte réel (mêmes
+variables, Linux) : processus arrêté (`SIGSTOP`) signalé comme figé puis rétabli, processus tué
+reconnu comme un plantage.
 
 Sous Linux, l'hôte de Linux (greffon GTK 2, sans écran) :
 
 ```sh
-gcc -shared -fPIC -O2 -o /tmp/libnpPommeTest.so flash-engine/test-plugin/testplugin.c $(pkg-config --cflags --libs gtk+-2.0) -lX11 -lpthread
+gcc -shared -fPIC -O2 -o /tmp/libnpPommeTest.so flash-engine/test-plugin/testplugin.c $(pkg-config --cflags --libs gtk+-2.0) -lX11 -lXtst -lpthread
 dotnet publish flash-engine/PommeFlash.Host -c Release -r linux-x64 --self-contained -o /tmp/pommeflash-linux
 POMMEFLASH_HOST=/tmp/pommeflash-linux/PommeFlashHost POMMEFLASH_TEST_PLUGIN=/tmp/libnpPommeTest.so \
 xvfb-run -a dotnet test tests/PommeFlash.Tests
@@ -190,7 +206,8 @@ POMMEFLASH_LAUNCHER=wine xvfb-run -a dotnet test tests/PommeFlash.Tests
 Sous Windows, le greffon se compile avec `clang -shared` (ou `cl /LD`) et `POMMEFLASH_LAUNCHER`
 n'est pas nécessaire. En 32 bits : `clang --target=i686-pc-windows-msvc`, avec l'hôte publié en
 `win-x86` ; la CI Windows passe les tests dans les deux architectures, et la CI Linux avec l'hôte
-de Linux. Les vérifications propres à un système (boîtes de dialogue et programmes du module sous
+de Linux. Hors de Windows, l'hôte 32 bits demande Wine en 32 bits (`wine32`), souvent absent :
+la CI Windows reste la référence pour le 32 bits. Les vérifications propres à un système (boîtes de dialogue et programmes du module sous
 Windows ; GTK 2, XEmbed et affichage X11 sous Linux) ne sont faites que pour l'hôte concerné. Le
 clavier est vérifié sur les deux : sous Windows, le greffon simule le clic (`WM_MOUSEACTIVATE`) ;
 sous Linux, il met le clavier dans une autre fenêtre, clique dans le contenu et tape une touche

@@ -115,23 +115,14 @@ namespace PommeFlash.Host
                     while (reader.ReadLine() is { } line)
                     {
                         string trimmed = line.Trim();
-                        if (trimmed.StartsWith("result ", StringComparison.Ordinal))
+                        try
                         {
-                            OnResult(trimmed);
+                            Dispatch(trimmed);
                         }
-                        else if (trimmed.StartsWith("call ", StringComparison.Ordinal))
+                        catch (Exception ex) when (ex is not OutOfMemoryException)
                         {
-                            Calls.Enqueue(trimmed);
-                            Wakeup.Set();
-                            UiThread.Post(RunCalls);
-                        }
-                        else if (trimmed.StartsWith("ping ", StringComparison.Ordinal))
-                        {
-                            OnPing(trimmed[5..]);
-                        }
-                        else if (trimmed.Length > 0)
-                        {
-                            command(trimmed);
+                            // Une ligne malformée n'arrête jamais la lecture des suivantes.
+                            Error($"Commande illisible ({ex.GetType().Name}) : {Excerpt(trimmed, 80)}");
                         }
                     }
                 }
@@ -147,6 +138,28 @@ namespace PommeFlash.Host
                 Name = "Commandes de PommeBrowser"
             };
             thread.Start();
+
+            void Dispatch(string trimmed)
+            {
+                if (trimmed.StartsWith("result ", StringComparison.Ordinal))
+                {
+                    OnResult(trimmed);
+                }
+                else if (trimmed.StartsWith("call ", StringComparison.Ordinal))
+                {
+                    Calls.Enqueue(trimmed);
+                    Wakeup.Set();
+                    UiThread.Post(RunCalls);
+                }
+                else if (trimmed.StartsWith("ping ", StringComparison.Ordinal))
+                {
+                    OnPing(trimmed[5..]);
+                }
+                else if (trimmed.Length > 0)
+                {
+                    command(trimmed);
+                }
+            }
         }
 
         // ---------------------------------------------------------------
@@ -346,6 +359,11 @@ namespace PommeFlash.Host
             {
                 using JsonDocument document = JsonDocument.Parse(parts[2]);
                 JsonElement root = document.RootElement;
+                if (root.ValueKind != JsonValueKind.Object)
+                {
+                    Complete(id, result);
+                    return;
+                }
                 bool ok = root.TryGetProperty("ok", out JsonElement flag) && flag.ValueKind == JsonValueKind.True;
                 object? value = !root.TryGetProperty("value", out JsonElement element) ? null : element.ValueKind switch
                 {

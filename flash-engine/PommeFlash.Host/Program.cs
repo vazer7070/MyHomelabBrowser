@@ -109,6 +109,12 @@ namespace PommeFlash.Host
                 case "close":
                     Close();
                     break;
+                case "stats":
+                    // Diagnostic (tests de tenue) : ressources vivantes, lues sur le fil du module.
+                    (int streams, int timers) = _instance?.Usage ?? (0, 0);
+                    HostChannel.Send("stats", ("memory", NpMemory.Live), ("objects", NpObjects.LiveHostObjects),
+                        ("streams", streams), ("timers", timers));
+                    break;
                 default:
                     HostChannel.Log("Commande inconnue : " + command);
                     break;
@@ -125,7 +131,8 @@ namespace PommeFlash.Host
             try
             {
                 using var document = System.Text.Json.JsonDocument.Parse(parts[2]);
-                if (document.RootElement.TryGetProperty("request", out System.Text.Json.JsonElement value) && value.ValueKind == System.Text.Json.JsonValueKind.String)
+                if (document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                    document.RootElement.TryGetProperty("request", out System.Text.Json.JsonElement value) && value.ValueKind == System.Text.Json.JsonValueKind.String)
                     request = value.GetString();
             }
             catch (System.Text.Json.JsonException)

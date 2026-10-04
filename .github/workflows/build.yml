@@ -85,6 +85,8 @@ jobs:
         run: |
           gcc -shared -fPIC -O2 -o "$POMMEFLASH_TEST_PLUGIN" flash-engine/test-plugin/testplugin.c $(pkg-config --cflags --libs gtk+-2.0) -lX11 -lXtst -lpthread
           xvfb-run --auto-servernum dotnet test tests/PommeFlash.Tests/PommeFlash.Tests.csproj --configuration Release --logger "trx;LogFileName=moteur-flash-linux.trx" --results-directory TestResults
+          # Côté PommeBrowser, avec l'hôte réel : lecteur figé signalé puis rétabli, plantage reconnu.
+          xvfb-run --auto-servernum dotnet test tests/PommeBrowser.UiTests/PommeBrowser.UiTests.csproj --configuration Release --filter "FullyQualifiedName~FlashHostTests" --logger "trx;LogFileName=moteur-flash-navigateur.trx" --results-directory TestResults
 
       - name: Résultats des tests
         if: always()
