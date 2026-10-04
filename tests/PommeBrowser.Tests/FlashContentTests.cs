@@ -143,24 +143,18 @@ public sealed class FlashContentTests
     }
 
     [Fact]
-    public void Only_ruffle_messages_about_the_content_are_accepted_from_a_frame()
+    public void Messages_of_a_frame_reach_the_browser_through_the_main_document_after_an_origin_check()
     {
-        const string frame = "http://na62.evony.com/s2.html";
-        string content = "content:" + """{"swf":"http://www.evony.com/Logo2.swf","page":"http://na62.evony.com/s2.html","width":550,"height":400}""";
-        // Jeu dans un cadre (Evony…) : contenu de sa propre page, lecture, échec de Ruffle.
-        Assert.True(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, content, frame));
-        Assert.True(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, "failed", frame));
-        Assert.True(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, "playing", frame));
-        // Un cadre d'un autre site ne décrit pas le contenu d'une autre page (cookies de la page).
-        Assert.False(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, content, "https://pub.exemple.net/cadre.html"));
-        Assert.False(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, content, null));
-        // Liste des contenus : chacun de la page du cadre.
-        string list = FlashContent.ListPrefix + "[" + content["content:".Length..] + "]";
-        Assert.True(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, list, frame));
-        Assert.False(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, list, "https://pub.exemple.net/cadre.html"));
-        Assert.False(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, FlashContent.ListPrefix + "[]", frame));
-        // Position de suivi : document principal seulement ; autres canaux : jamais depuis un cadre.
-        Assert.False(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, RuffleContent.RectPrefix + "{}", frame));
-        Assert.False(RuffleContent.IsFrameMessage("pommeCredentials", "{}", frame));
+        string script = RuffleContent.ProbeScript("https://pomme.invalid/", "post");
+
+        // Un cadre (jeu dans une iframe, Evony…) envoie ses messages au document principal, qui les
+        // transmet : pas d'abonnement aux cadres dans le moteur (WebView2 s'arrêtait sur Google).
+        Assert.Contains("window.top.postMessage({ __pommeRuffle: String(status) }, '*')", script);
+        Assert.Contains("if (window === window.top) {", script);
+        // Jamais de position de suivi depuis un cadre ; une description de contenu, seule ou en
+        // liste, seulement de la page qu'elle décrit (même origine que le cadre qui l'envoie).
+        Assert.Contains("if (status.startsWith('" + RuffleContent.RectPrefix + "')) return;", script);
+        Assert.Contains("if (new URL(JSON.parse(status.slice('" + FlashContent.MessagePrefix + "'.length)).page).origin !== event.origin) return;", script);
+        Assert.Contains("list.some(item => new URL(item.page).origin !== event.origin)", script);
     }
 }

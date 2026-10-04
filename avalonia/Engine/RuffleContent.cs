@@ -22,30 +22,6 @@ namespace PommeBrowser.Engine
     {
         public const string MessageHandler = "pommeRuffle";
 
-        /// <summary>
-        /// Message accepté d'un cadre (iframe) de la page, d'adresse <paramref name="frameUrl"/> : ceux
-        /// de Ruffle sur le contenu Flash (description de sa propre page, lecture, échec), pas la
-        /// position de suivi (document principal seulement) ni les autres canaux.
-        /// </summary>
-        public static bool IsFrameMessage(string channel, string body, string? frameUrl)
-        {
-            if (channel != MessageHandler || body.StartsWith(RectPrefix, StringComparison.Ordinal))
-                return false;
-            if (body.StartsWith(FlashContent.ListPrefix, StringComparison.Ordinal))
-            {
-                // Liste des contenus : chacun de la page qui l'envoie.
-                IReadOnlyList<FlashContent> list = FlashContent.ParseList(body[FlashContent.ListPrefix.Length..]);
-                return list.Count > 0 && list.All(item => FromFrame(item, frameUrl));
-            }
-            if (!body.StartsWith(FlashContent.MessagePrefix, StringComparison.Ordinal))
-                return true;
-            // Description de contenu : seulement de la page qu'elle décrit (même origine que le cadre).
-            return FlashContent.Parse(body[FlashContent.MessagePrefix.Length..]) is { } content && FromFrame(content, frameUrl);
-        }
-
-        static bool FromFrame(FlashContent content, string? frameUrl)
-            => Uri.TryCreate(frameUrl, UriKind.Absolute, out Uri? frame) &&
-               Uri.Compare(content.Page, frame, UriComponents.SchemeAndServer, UriFormat.UriEscaped, StringComparison.OrdinalIgnoreCase) == 0;
         public const string ScriptId = "ruffle-probe";
         public const string PluginScriptId = "ruffle-plugin";
 

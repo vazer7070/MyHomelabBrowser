@@ -76,7 +76,6 @@ namespace PommeBrowser.Engine.WebView2
             _core.WindowCloseRequested += OnWindowCloseRequested;
             _core.ProcessFailed += OnProcessFailed;
             _core.WebMessageReceived += OnWebMessageReceived;
-            _core.FrameCreated += OnFrameCreated;
             _core.DownloadStarting += OnDownloadStarting;
             _core.AddWebResourceRequestedFilter(EngineHost.RuffleBaseUrl + "*", CoreWebView2WebResourceContext.All);
             _core.WebResourceRequested += OnWebResourceRequested;
@@ -810,52 +809,16 @@ namespace PommeBrowser.Engine.WebView2
 
         public void RegisterMessageHandler(string name) => _channels.Add(name);
 
-        /// <summary>Message d'un script de PommeBrowser : { channel, body } (voir EngineHost.ScriptPost).</summary>
-        void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e) => OnScriptMessage(e, fromFrame: false);
-
-        // ---------------------------------------------------------------
-        // Cadres (iframe) : WebView2 remet leurs messages à chaque CoreWebView2Frame, pas à la vue.
-        // ---------------------------------------------------------------
-
-        void OnFrameCreated(object? sender, CoreWebView2FrameCreatedEventArgs e) => WatchFrame(e.Frame);
-
         /// <summary>
-        /// Cadre de la page (et ses propres cadres) : ses messages de Ruffle arrivent comme ceux du
-        /// document principal. Un jeu Flash est souvent dans un cadre (Evony…) : sans eux, ni son
-        /// contenu ni l'échec de Ruffle n'arrivaient, et rien ne passait au moteur de secours.
+        /// Message d'un script de PommeBrowser : { channel, body } (voir EngineHost.ScriptPost), du
+        /// document principal seulement. Ceux de Ruffle dans un cadre (jeu dans une iframe, Evony…)
+        /// lui sont relayés par le script de détection du document principal, qui vérifie leur
+        /// origine (voir RuffleContent.ProbeScript). Pas d'abonnement aux cadres de WebView2
+        /// (CoreWebView2.FrameCreated, CoreWebView2Frame.WebMessageReceived…) : sur une page qui crée
+        /// et détruit beaucoup de cadres (Google), le moteur arrêtait PommeBrowser sur une
+        /// vérification interne (0x80000003 dans EmbeddedBrowserWebView.dll).
         /// </summary>
-        void WatchFrame(CoreWebView2Frame frame)
-        {
-            try
-            {
-                frame.WebMessageReceived += OnFrameWebMessageReceived;
-                frame.FrameCreated += OnFrameCreated;
-                frame.Destroyed += (_, _) =>
-                {
-                    try
-                    {
-                        frame.WebMessageReceived -= OnFrameWebMessageReceived;
-                        frame.FrameCreated -= OnFrameCreated;
-                    }
-                    catch (Exception ex) when (ex is InvalidOperationException or COMException)
-                    {
-                    }
-                };
-            }
-            catch (Exception ex) when (ex is InvalidOperationException or COMException)
-            {
-                // Cadre déjà détruit.
-            }
-        }
-
-        void OnFrameWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e) => OnScriptMessage(e, fromFrame: true);
-
-        /// <summary>
-        /// Message { channel, body }. Depuis un cadre, seuls les messages de Ruffle sont acceptés
-        /// (contenu Flash décrit, lecture, échec), sans position de suivi : un cadre d'un autre site
-        /// ne parle pas aux autres canaux de PommeBrowser (identifiants, page…).
-        /// </summary>
-        void OnScriptMessage(CoreWebView2WebMessageReceivedEventArgs e, bool fromFrame)
+        void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
             try
             {
@@ -872,8 +835,6 @@ namespace PommeBrowser.Engine.WebView2
                 string body = root.TryGetProperty("body", out JsonElement bodyElement)
                     ? bodyElement.ValueKind == JsonValueKind.String ? bodyElement.GetString() ?? string.Empty : bodyElement.GetRawText()
                     : string.Empty;
-                if (fromFrame && !RuffleContent.IsFrameMessage(channel, body, e.Source))
-                    return;
                 ScriptMessage?.Invoke(channel, body);
             }
             catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException)
@@ -930,7 +891,6 @@ namespace PommeBrowser.Engine.WebView2
                 _core.WindowCloseRequested -= OnWindowCloseRequested;
                 _core.ProcessFailed -= OnProcessFailed;
                 _core.WebMessageReceived -= OnWebMessageReceived;
-                _core.FrameCreated -= OnFrameCreated;
                 _core.DownloadStarting -= OnDownloadStarting;
                 _core.WebResourceRequested -= OnWebResourceRequested;
                 if (_controller != null)
