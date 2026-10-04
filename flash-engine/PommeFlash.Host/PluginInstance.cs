@@ -39,17 +39,8 @@ namespace PommeFlash.Host
             _window = NpMemory.AllocZeroed((nuint)(OperatingSystem.IsWindows() ? sizeof(NPWindow) : sizeof(NPWindowUnix)));
             _self = GCHandle.Alloc(this);
             _npp->ndata = GCHandle.ToIntPtr(_self);
-            // Cookies de la page (PommeBrowser) ou propres à l'hôte.
-            HttpMessageHandler handler = options.ShareCookies
-                ? new PageCookieHandler()
-                : new SocketsHttpHandler
-                {
-                    AutomaticDecompression = DecompressionMethods.All,
-                    AllowAutoRedirect = true,
-                    UseCookies = true,
-                    CookieContainer = _cookies
-                };
-            _http = new HttpClient(handler);
+            // Cookies de la page (PommeBrowser) ou propres à l'hôte ; redirections suivies comme un navigateur.
+            _http = new HttpClient(new BrowserHttpHandler(options.ShareCookies, _cookies));
             _http.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
 
             var page = new PageObjects(options);
@@ -167,6 +158,7 @@ namespace PommeFlash.Host
 
             _library.Destroy(_npp);
             IsAlive = false;
+            AnswerRedirects(0, false);
             NpObjects.Release(_windowObject.Pointer);
             NpObjects.Release(_elementObject.Pointer);
             _http.Dispose();
@@ -429,6 +421,20 @@ namespace PommeFlash.Host
             {
                 NpVariants.Release(&argument);
                 NpVariants.Release(&result);
+            }
+        }
+
+        /// <summary>NPP_URLRedirectNotify, sur le fil du module (voir PluginInstance.Redirects.cs).</summary>
+        void NotifyRedirect(Uri next, int status, nint notifyData)
+        {
+            nint url = NpMemory.Utf8(next.AbsoluteUri);
+            try
+            {
+                _library.UrlRedirectNotify(_npp, url, status, notifyData);
+            }
+            finally
+            {
+                NpMemory.Free(url);
             }
         }
 

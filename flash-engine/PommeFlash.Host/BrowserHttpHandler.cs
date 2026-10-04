@@ -3,41 +3,82 @@ using System.Net;
 namespace PommeFlash.Host
 {
     /// <summary>
-    /// Cookies partagés avec la page, comme dans un navigateur : chaque chargement du module, et
-    /// chaque redirection, porte les cookies que PommeBrowser a pour cette adresse ; ceux que les
-    /// réponses déposent (Set-Cookie) lui sont transmis. PommeBrowser décide de ce qu'il donne et
-    /// accepte (seulement pour le site de la page). Les redirections sont suivies ici, pour que
-    /// chaque étape porte ses propres cookies et que ceux d'un site n'en suivent jamais un autre.
+    /// Chargements du module, comme dans un navigateur. Les redirections sont suivies ici, étape par
+    /// étape (20 au plus, comme Firefox) :
+    /// <list type="bullet">
+    /// <item>Cookies partagés avec la page (<c>--share-cookies</c>) : chaque étape porte les cookies
+    /// que PommeBrowser a pour son adresse, et ceux que les réponses déposent (Set-Cookie) lui sont
+    /// transmis. PommeBrowser décide de ce qu'il donne et accepte (seulement pour le site de la
+    /// page) ; ceux d'un site n'en suivent jamais un autre. Sans partage : cookies propres à l'hôte.</item>
+    /// <item>Le module peut demander à être consulté avant chaque redirection d'un chargement
+    /// notifié (<see cref="RedirectApproval"/>, NPP_URLRedirectNotify) : Flash y applique ses règles
+    /// de sécurité. Refusée, la redirection fait échouer le chargement.</item>
+    /// <item>Un envoi (POST) redirigé par 307 ou 308 vers une autre origine n'est pas suivi (Firefox).</item>
+    /// </list>
     /// </summary>
-    sealed class PageCookieHandler : DelegatingHandler
+    sealed class BrowserHttpHandler : DelegatingHandler
     {
-        const int MaxRedirects = 10;
+        /// <summary>Comme Firefox (network.http.redirection-limit).</summary>
+        const int MaxRedirects = 20;
 
-        public PageCookieHandler()
-            : base(new SocketsHttpHandler
+        /// <summary>Accord du module pour suivre une redirection (adresse suivante, code HTTP).</summary>
+        public static readonly HttpRequestOptionsKey<Func<Uri, int, CancellationToken, Task<bool>>> RedirectApproval = new("PommeFlash.RedirectApproval");
+
+        readonly bool _shareCookies;
+
+        /// <param name="cookies">Cookies propres à l'hôte, quand ceux de la page ne sont pas partagés.</param>
+        public BrowserHttpHandler(bool shareCookies, CookieContainer cookies)
+            : base(Inner(shareCookies, cookies))
+        {
+            _shareCookies = shareCookies;
+        }
+
+        static SocketsHttpHandler Inner(bool shareCookies, CookieContainer cookies)
+        {
+            var inner = new SocketsHttpHandler
             {
                 AutomaticDecompression = DecompressionMethods.All,
                 AllowAutoRedirect = false,
-                UseCookies = false
-            })
-        {
+                UseCookies = !shareCookies
+            };
+            if (!shareCookies)
+                inner.CookieContainer = cookies;
+            return inner;
         }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellation)
         {
             byte[]? body = request.Content != null ? await request.Content.ReadAsByteArrayAsync(cancellation).ConfigureAwait(false) : null;
+            request.Options.TryGetValue(RedirectApproval, out Func<Uri, int, CancellationToken, Task<bool>>? approve);
             HttpRequestMessage current = request;
             for (int hop = 0; ; hop++)
             {
-                await AttachCookiesAsync(current, cancellation).ConfigureAwait(false);
+                if (_shareCookies)
+                    await AttachCookiesAsync(current, cancellation).ConfigureAwait(false);
                 HttpResponseMessage response = await base.SendAsync(current, cancellation).ConfigureAwait(false);
-                ForwardCookies(current.RequestUri!, response);
+                if (_shareCookies)
+                    ForwardCookies(current.RequestUri!, response);
 
                 if (hop >= MaxRedirects || !IsRedirect(response.StatusCode) || response.Headers.Location is not { } location)
                     return response;
-                Uri next = location.IsAbsoluteUri ? location : new Uri(current.RequestUri!, location);
+                Uri from = current.RequestUri!;
+                Uri next = location.IsAbsoluteUri ? location : new Uri(from, location);
                 if (next.Scheme is not ("http" or "https"))
                     return response;
+                int status = (int)response.StatusCode;
+                if (status is 307 or 308 && current.Method == HttpMethod.Post && !SameOrigin(from, next))
+                {
+                    HostChannel.Trace("redirect-post:" + from.GetLeftPart(UriPartial.Path),
+                        $"Envoi redirigé vers une autre origine, non suivi (comme Firefox) : {from.GetLeftPart(UriPartial.Path)} → {next.GetLeftPart(UriPartial.Path)}");
+                    return response;
+                }
+                HostChannel.Trace("redirect:" + from.GetLeftPart(UriPartial.Path),
+                    $"Redirection {status} : {from.GetLeftPart(UriPartial.Path)} → {next.GetLeftPart(UriPartial.Path)}");
+                if (approve != null && !await approve(next, status, cancellation).ConfigureAwait(false))
+                {
+                    response.Dispose();
+                    throw new HttpRequestException($"redirection vers {next.GetLeftPart(UriPartial.Path)} refusée par le module");
+                }
 
                 HttpRequestMessage following = Follow(request, current, next, response.StatusCode, body);
                 response.Dispose();
@@ -46,6 +87,9 @@ namespace PommeFlash.Host
                 current = following;
             }
         }
+
+        static bool SameOrigin(Uri a, Uri b)
+            => a.Scheme == b.Scheme && a.Port == b.Port && string.Equals(a.Host, b.Host, StringComparison.OrdinalIgnoreCase);
 
         static bool IsRedirect(HttpStatusCode status)
             => status is HttpStatusCode.MovedPermanently or HttpStatusCode.Found or HttpStatusCode.SeeOther

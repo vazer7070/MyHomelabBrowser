@@ -454,6 +454,7 @@ static void continueScenario(const char *movieUrl)
     checkCookies(movieUrl);
     browser->geturlnotify(instanceNpp, "data.txt", NULL, (void *)0x1234);
     browser->geturlnotify(instanceNpp, "missing.txt", NULL, (void *)0x5678);
+    browser->geturlnotify(instanceNpp, "detour.txt", NULL, (void *)0x4321);
     const char *post = "Content-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello";
     browser->posturlnotify(instanceNpp, "echo", NULL, (uint32_t)strlen(post), post, 0, (void *)0x9ABC);
     browser->geturl(instanceNpp, "https://example.org/page", "_blank");
@@ -646,6 +647,15 @@ static NPError NPP_DestroyStream(NPP npp, NPStream *stream, NPReason reason)
     return NPERR_NO_ERROR;
 }
 
+/* Redirection d'un chargement notifié, soumise par le navigateur : refusée vers « interdit ». */
+static void NPP_URLRedirectNotify(NPP npp, const char *url, int32_t status, void *notifyData)
+{
+    int allow = strstr(url, "interdit") == NULL;
+    report("redirect url=%s status=%d data=%llx main=%d allow=%d", url, (int)status,
+           (unsigned long long)(uintptr_t)notifyData, onMainThread(), allow);
+    ((void (*)(NPP, void *, NPBool))browser->urlredirectresponse)(npp, notifyData, (NPBool)allow);
+}
+
 static void NPP_URLNotify(NPP npp, const char *url, NPReason reason, void *notifyData)
 {
     (void)npp;
@@ -696,6 +706,7 @@ static void fillPluginFuncs(NPPluginFuncs *funcs)
     funcs->writeready = NPP_WriteReady;
     funcs->write = NPP_Write;
     funcs->urlnotify = NPP_URLNotify;
+    funcs->urlredirectnotify = (void *)NPP_URLRedirectNotify;
     funcs->getvalue = NPP_GetValue;
     funcs->setvalue = NPP_SetValue;
 }

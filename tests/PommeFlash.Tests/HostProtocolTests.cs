@@ -105,6 +105,7 @@ public sealed class HostProtocolTests
         Assert.Contains($"stream-done url={server.Url("jeu/data.txt")} bytes={data.Length} hash={Fnv1a(data):x8} ordered=1 reason=0", reports);
         Assert.Contains("notify url=data.txt reason=0 data=1234", reports);
         Assert.Contains("notify url=missing.txt reason=1 data=5678", reports);
+        Assert.Contains("notify url=detour.txt reason=1 data=4321", reports);
         Assert.Contains($"stream-done url={server.Url("jeu/echo")} bytes=5 hash={Fnv1a("hello"u8.ToArray()):x8} ordered=1 reason=0", reports);
         Assert.Contains("notify url=echo reason=0 data=9abc", reports);
 
@@ -206,6 +207,51 @@ public sealed class HostProtocolTests
         int call = reports.ToList().IndexOf("call main=1 request=" + request);
         int script = reports.ToList().IndexOf("script=<number>5</number>");
         Assert.True(call >= 0 && script > call, string.Join("\n", reports));
+
+        await host.SendAsync("close");
+        Assert.Equal(0, await host.WaitForExitAsync(TimeSpan.FromSeconds(30)));
+    }
+
+    [Fact(Timeout = 180_000)]
+    public async Task Redirects_of_notified_loads_are_submitted_to_the_module()
+    {
+        HostRun.SkipIfUnavailable();
+
+        byte[] movie = new byte[20_000];
+        new Random(9).NextBytes(movie);
+        byte[] data = Encoding.UTF8.GetBytes("données après redirection");
+        using var server = new TestServer();
+        server.Add("movie.swf", movie, "application/x-shockwave-flash");
+        server.Redirect("jeu/data.txt", "/jeu/vrai.txt", "jeton=xyz; Path=/");
+        server.Add("jeu/vrai.txt", data, "text/plain; charset=utf-8");
+        // Le module refuse les redirections vers « interdit ».
+        server.Redirect("jeu/detour.txt", "/jeu/interdit.txt", "autre=1; Path=/");
+        server.Add("jeu/interdit.txt", data, "text/plain; charset=utf-8");
+
+        await using HostRun host = HostRun.Start(new[]
+        {
+            "--plugin", HostRun.HostVisiblePath(HostRun.PluginPath!),
+            "--swf", server.Url("movie.swf"),
+            "--page", server.Url("jeu/page.html"),
+            "--hidden"
+        }, code => code.Contains("pommeAdd(2,3)", StringComparison.Ordinal) ? (true, "<number>5</number>") : (false, null));
+
+        await host.WaitForAsync(h => h.Reports.Contains("done") && h.Reports.Any(r => r.StartsWith("notify url=detour.txt", StringComparison.Ordinal)), Scenario);
+        IReadOnlyList<string> reports = host.Reports;
+
+        // Accordée : suivie, avec les cookies propres à l'hôte déposés au passage.
+        Assert.Contains($"redirect url={server.Url("jeu/vrai.txt")} status=302 data=1234 main=1 allow=1", reports);
+        Assert.Contains($"stream-done url={server.Url("jeu/vrai.txt")} bytes={data.Length} hash={Fnv1a(data):x8} ordered=1 reason=0", reports);
+        Assert.Contains("notify url=data.txt reason=0 data=1234", reports);
+        Assert.Contains("jeton=xyz", server.CookieHeader("jeu/vrai.txt")!.Split("; "));
+
+        // Refusée : pas suivie, le chargement échoue.
+        Assert.Contains($"redirect url={server.Url("jeu/interdit.txt")} status=302 data=4321 main=1 allow=0", reports);
+        Assert.Contains("notify url=detour.txt reason=1 data=4321", reports);
+        Assert.False(server.WasRequested("jeu/interdit.txt"));
+
+        // Le contenu principal (sans notification) n'est pas soumis.
+        Assert.DoesNotContain(reports, r => r.StartsWith("redirect url=" + server.Url("movie.swf"), StringComparison.Ordinal));
 
         await host.SendAsync("close");
         Assert.Equal(0, await host.WaitForExitAsync(TimeSpan.FromSeconds(30)));

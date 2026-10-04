@@ -39,6 +39,9 @@ sealed class TestServer : IDisposable
     /// <summary>En-tête Cookie reçu pour ce chemin (vide sans cookie), null s'il n'a pas été demandé.</summary>
     public string? CookieHeader(string path) => _cookies.TryGetValue(path, out string? cookie) ? cookie : null;
 
+    /// <summary>Adresse demandée au moins une fois.</summary>
+    public bool WasRequested(string path) => _cookies.ContainsKey(path);
+
     async Task ServeAsync()
     {
         while (_listener.IsListening)

@@ -26,6 +26,13 @@ PommeBrowser ──(ligne de commande, stdin/stdout JSON)──► PommeFlashHos
   `NPN_PostURLNotify`) sont résolues par rapport à la page, téléchargées sur un autre fil puis
   remises au module sur son fil, au rythme qu'il accepte (`NPP_WriteReady` / `NPP_Write`).
   Les cibles (`_blank`, `_self`…) et les adresses `javascript:` remontent à PommeBrowser.
+  Redirections (`BrowserHttpHandler.cs`) suivies étape par étape, 20 au plus, comme Firefox :
+  pour un chargement notifié (`notifyData` non nul), un module qui le demande est consulté avant
+  chacune (`NPP_URLRedirectNotify`, réponse par `NPN_URLRedirectResponse`, 20 s au plus) ; Flash
+  y applique ses règles de sécurité, et un refus fait échouer le chargement. Un envoi (POST)
+  redirigé par 307 ou 308 vers une autre origine n'est pas suivi. Les flux sont annoncés non
+  « seekable » (`NPN_RequestRead` refusé et noté dans le journal) : Flash Player recherche dans une
+  vidéo par de nouvelles requêtes.
 - **Page** (`PageObjects.cs`) : `window`, `location`, `document`, `navigator` et l'élément,
   en lecture seule. Flash y lit l'adresse de la page pour ses règles de sécurité
   (`top.location + "__flashplugin_unique__"`) : l'hôte répond lui-même.
@@ -112,7 +119,7 @@ l'appel a répondu (la plupart des `ExternalInterface.call` n'attendent pas de r
 question de cookies du fil du module (`NPN_GetValueForURL`) pendant un appel de la page reçoit
 aussitôt une réponse vide.
 
-**Cookies partagés avec la page** (`--share-cookies`, `PageCookieHandler.cs`) : comme dans un
+**Cookies partagés avec la page** (`--share-cookies`, `BrowserHttpHandler.cs`) : comme dans un
 navigateur, chaque chargement du module porte les cookies de la page pour son adresse, HttpOnly
 compris, et ceux que les réponses déposent (`Set-Cookie`) sont gardés dans la page. Les
 redirections sont suivies par l'hôte, étape par étape, pour que chacune porte ses propres cookies.

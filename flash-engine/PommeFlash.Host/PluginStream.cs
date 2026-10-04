@@ -78,6 +78,9 @@ namespace PommeFlash.Host
             using var request = new HttpRequestMessage(_post != null ? HttpMethod.Post : HttpMethod.Get, _uri);
             if (_owner.Options.Page.Scheme is "http" or "https")
                 request.Headers.Referrer = _owner.Options.Page;
+            // Comme Firefox : chargement notifié (notifyData non nul), module qui le demande.
+            if (_notify && _notifyData != 0 && _owner.Library.HandlesRedirects)
+                request.Options.Set(BrowserHttpHandler.RedirectApproval, (next, status, cancellation) => _owner.ApproveRedirectAsync(next, status, _notifyData, cancellation));
             if (_post != null)
             {
                 request.Content = new ByteArrayContent(_post.Body);
