@@ -115,10 +115,16 @@ fonctions dans la page par `__flash__addCallback(élément, nom)` ; elles appell
 `élément.CallFunction(<invoke …>)` et évaluent la réponse. PommeBrowser donne `CallFunction` à
 l'élément du contenu (`RuffleContent.FlashBridgeScript`, et à l'emplacement qui le remplace dans la
 page) : il passe par l'objet WebView2 `pommeFlash` (`AddHostObjectToScript`, document principal
-seulement), appelé de façon synchrone, puis par la commande `call` jusqu'à l'objet scriptable du
-module (`NPPVpluginScriptableNPObject`, méthode `CallFunction`). La page attend la réponse
-(8 s au plus) ; PommeBrowser ne traite pendant ce temps que les messages que Windows envoie
-d'autres processus.
+seulement), ou sous WebKitGTK par une requête synchrone au schéma
+`pomme-flash://call/?t=<jeton>&r=<requête>`, puis par la commande `call` jusqu'à l'objet
+scriptable du module (`NPPVpluginScriptableNPObject`, méthode `CallFunction`). Le jeton, tiré au
+hasard pour chaque lecteur, n'est connu que du script du pont injecté dans le document principal :
+un cadre d'un autre site (publicité) qui appelle le schéma reçoit un refus (403) et n'atteint pas
+les fonctions du jeu. Une requête de plus de 4 Mio est refusée. La page attend la réponse (8 s au
+plus) ; PommeBrowser ne traite pendant ce temps que les messages que Windows envoie d'autres
+processus. Si le lecteur ne répond plus (battement de cœur), ou si deux appels de suite restent
+sans réponse, les appels suivants sont refusés aussitôt (10 s dans le second cas) : l'interface ne
+se fige pas à chaque appel.
 
 **Appels imbriqués.** Comme dans un navigateur, un script de la page demandé par le contenu peut
 appeler le contenu avant de rendre son résultat (contenu → page → contenu) : pendant qu'il attend
@@ -244,4 +250,4 @@ Sans le réglage, sans module Flash ou sans description du contenu, Basilisk res
       fenêtre de l'hôte est logée par-dessus la page WebKitGTK à la place du contenu (X11Dock :
       place demandée, premier plan), les cookies passent par le gestionnaire de cookies de WebKit
       (`--share-cookies`), et la page appelle le contenu (`addCallback`) par une requête synchrone
-      au schéma `pomme-flash://call/?r=…`, servie par PommeBrowser.
+      au schéma `pomme-flash://call/?t=…&r=…`, servie par PommeBrowser.

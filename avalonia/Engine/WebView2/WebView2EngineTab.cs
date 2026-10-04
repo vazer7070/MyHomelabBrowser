@@ -715,9 +715,10 @@ namespace PommeBrowser.Engine.WebView2
 
         /// <summary>
         /// Objet du pont vers le contenu Flash, offert au document principal seulement
-        /// (AddHostObjectToScript) ; la page l'appelle de façon synchrone.
+        /// (AddHostObjectToScript : les cadres ne le voient pas, d'où un jeton inutile ici) ; la
+        /// page l'appelle de façon synchrone.
         /// </summary>
-        public void SetFlashBridge(Func<string, string?>? callFunction)
+        public void SetFlashBridge(Func<string, string?>? callFunction, string? token)
         {
             if (_disposed)
                 return;

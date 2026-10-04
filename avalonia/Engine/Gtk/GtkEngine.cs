@@ -181,7 +181,7 @@ namespace PommeBrowser.Engine.Gtk
         }
 
         // ---------------------------------------------------------------
-        // Pont page → Flash : pomme-flash://call/?r=<requête>
+        // Pont page → Flash : pomme-flash://call/?t=<jeton>&r=<requête>
         // ---------------------------------------------------------------
 
         /// <summary>Réponse de la page que l'onglet attend d'un appel vers le contenu (fil de l'interface).</summary>
@@ -191,7 +191,9 @@ namespace PommeBrowser.Engine.Gtk
         /// Appel de la page vers le contenu Flash (CallFunction d'une fonction déclarée par
         /// ExternalInterface.addCallback) : la page fait une requête synchrone, et attend ; l'onglet
         /// répond sur le fil de l'interface. 200 avec la réponse, 204 si l'appel est refusé ou sans
-        /// réponse. Seul l'onglet de la vue qui demande peut répondre (voir GtkEngineTab.SetFlashBridge).
+        /// réponse, 403 sans le jeton du lecteur (requête venue d'ailleurs que du script du pont,
+        /// par exemple d'un cadre d'un autre site) ou trop longue. Seul l'onglet de la vue qui
+        /// demande peut répondre (voir GtkEngineTab.SetFlashBridge).
         /// </summary>
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         static void ServeFlashBridge(nint request, nint data)
@@ -199,25 +201,31 @@ namespace PommeBrowser.Engine.Gtk
             try
             {
                 string? result = null;
+                bool refused = false;
                 nint view = webkit_uri_scheme_request_get_web_view(request);
-                Func<string, string?>? bridge = view != 0 && Tabs.TryGetValue(view, out GtkEngineTab? tab) ? tab.FlashBridge : null;
-                if (bridge != null && Uri.TryCreate(String(webkit_uri_scheme_request_get_uri(request)), UriKind.Absolute, out Uri? uri) &&
-                    uri.Host == "call" && uri.Query.StartsWith("?r=", StringComparison.Ordinal))
+                if (view != 0 && Tabs.TryGetValue(view, out GtkEngineTab? tab) && tab.FlashBridge is { } bridge)
                 {
-                    string call = Uri.UnescapeDataString(uri.Query[3..]);
-                    // La page attend : l'onglet répond sur son fil, sans attente sans fin si l'interface est prise.
-                    Task<string?> answer = Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => bridge(call)).GetTask();
-                    if (answer.Wait(FlashBridgeTimeout))
-                        result = answer.Result;
+                    if (RuffleContent.ParseFlashBridgeRequest(String(webkit_uri_scheme_request_get_uri(request)), bridge.Token) is { } call)
+                    {
+                        // La page attend : l'onglet répond sur son fil, sans attente sans fin si l'interface est prise.
+                        Task<string?> answer = Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => bridge.Call(call)).GetTask();
+                        if (answer.Wait(FlashBridgeTimeout))
+                            result = answer.Result;
+                        else
+                            RuntimeLogBuffer.Append("[Flash] Appel de la page vers le contenu sans réponse de l'interface.");
+                    }
                     else
-                        RuntimeLogBuffer.Append("[Flash] Appel de la page vers le contenu sans réponse de l'interface.");
+                    {
+                        refused = true;
+                        RuntimeLogBuffer.Append("[Flash] Appel du contenu refusé : sans le jeton du pont (cadre d'un autre site ?) ou trop long.");
+                    }
                 }
 
                 byte[] body = System.Text.Encoding.UTF8.GetBytes(result ?? string.Empty);
                 nint bytes = Bytes(body);
                 nint stream = g_memory_input_stream_new_from_bytes(bytes);
                 nint response = webkit_uri_scheme_response_new(stream, body.Length);
-                webkit_uri_scheme_response_set_status(response, result != null ? 200u : 204u, null);
+                webkit_uri_scheme_response_set_status(response, refused ? 403u : result != null ? 200u : 204u, null);
                 webkit_uri_scheme_response_set_content_type(response, "text/plain; charset=utf-8");
                 nint headers = soup_message_headers_new(SoupHeadersResponse);
                 soup_message_headers_append(headers, "Content-Type", "text/plain; charset=utf-8");

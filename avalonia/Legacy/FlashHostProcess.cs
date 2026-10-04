@@ -35,6 +35,9 @@ namespace PommeBrowser.Legacy
         readonly Dictionary<int, CallSlot> _calls = new();
         int _nextCall;
         volatile bool _calling;
+        // Appels de la page restés sans réponse à la suite, et appels suspendus jusqu'à (Environment.TickCount64).
+        int _callTimeouts;
+        long _callsSuspendedUntil;
         volatile bool _ready;
         nint _window;
         bool _closed;
@@ -393,6 +396,14 @@ namespace PommeBrowser.Legacy
         {
             if (HasExited)
                 return null;
+            if (request.Length > RuffleContent.MaxFlashCallLength)
+            {
+                RuntimeLogBuffer.Append($"[Flash] Appel de la page vers le contenu refusé : {request.Length} caractères.");
+                return null;
+            }
+            // Lecteur figé, ou appels restés sans réponse : l'interface ne reste pas bloquée à chaque appel.
+            if (_unresponsive || Environment.TickCount64 < Interlocked.Read(ref _callsSuspendedUntil))
+                return null;
 
             int id = Interlocked.Increment(ref _nextCall);
             var slot = new CallSlot();
@@ -415,8 +426,15 @@ namespace PommeBrowser.Legacy
                 if (!answered)
                 {
                     RuntimeLogBuffer.Append($"[Flash] Le contenu n'a pas répondu à un appel de la page après {timeout.TotalSeconds:0} s.");
+                    if (++_callTimeouts >= 2)
+                    {
+                        // Deux fois de suite : appels suivants refusés aussitôt pendant 10 s.
+                        Interlocked.Exchange(ref _callsSuspendedUntil, Environment.TickCount64 + 10_000);
+                        RuntimeLogBuffer.Append("[Flash] Appels de la page vers le contenu suspendus 10 s.");
+                    }
                     return null;
                 }
+                _callTimeouts = 0;
                 return slot.Ok ? slot.Value : null;
             }
             finally

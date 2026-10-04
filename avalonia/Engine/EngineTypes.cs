@@ -229,10 +229,11 @@ namespace PommeBrowser.Engine
 
         /// <summary>
         /// Appels synchrones de la page vers le contenu du moteur Flash intégré : objet
-        /// <see cref="RuffleContent.FlashBridgeName"/> dont la méthode CallFunction(requête) rend la
-        /// réponse du contenu. Null : retiré. Sans effet hors du moteur Windows.
+        /// <see cref="RuffleContent.FlashBridgeName"/> (WebView2, document principal seulement) ou
+        /// schéma <see cref="RuffleContent.FlashBridgeScheme"/> (WebKitGTK, requêtes accompagnées de
+        /// <paramref name="token"/>), dont CallFunction(requête) rend la réponse du contenu. Null : retiré.
         /// </summary>
-        void SetFlashBridge(Func<string, string?>? callFunction);
+        void SetFlashBridge(Func<string, string?>? callFunction, string? token);
 
         /// <summary>
         /// Script injecté à chaque chargement, dans le monde isolé de PommeBrowser ; avec

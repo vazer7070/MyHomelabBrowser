@@ -452,7 +452,7 @@ namespace PommeBrowser.Engine.Apple
 
         public Task SetCookieAsync(PageCookie cookie) => Task.CompletedTask;
 
-        public void SetFlashBridge(Func<string, string?>? callFunction)
+        public void SetFlashBridge(Func<string, string?>? callFunction, string? token)
         {
         }
 

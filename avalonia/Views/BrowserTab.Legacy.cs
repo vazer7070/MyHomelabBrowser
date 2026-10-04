@@ -200,14 +200,16 @@ namespace PommeBrowser.Views
             if (_engine is { } engine)
             {
                 _flashBridgeHost = host;
-                engine.SetFlashBridge(request => CallFlash(host, content, request));
-                InstallFlashBridge(engine, content);
+                // Jeton propre à ce lecteur : seul le script du pont, dans le document principal, le connaît.
+                string token = RuffleContent.NewFlashBridgeToken();
+                engine.SetFlashBridge(request => CallFlash(host, content, request), token);
+                InstallFlashBridge(engine, content, token);
                 host.Exited += () =>
                 {
                     if (_flashBridgeHost != host)
                         return;
                     _flashBridgeHost = null;
-                    _engine?.SetFlashBridge(null);
+                    _engine?.SetFlashBridge(null, null);
                 };
             }
         }
@@ -216,11 +218,11 @@ namespace PommeBrowser.Views
         string? CallFlash(FlashHostProcess host, FlashContent content, string request)
             => _flashBridgeHost == host && !host.HasExited && IsTopDocument(content) ? host.CallFunction(request, FlashCallTimeout) : null;
 
-        async void InstallFlashBridge(IEngineTab engine, FlashContent content)
+        async void InstallFlashBridge(IEngineTab engine, FlashContent content, string token)
         {
             try
             {
-                await engine.EvaluateAsync(RuffleContent.FlashBridgeScript(content.Id), isolated: false);
+                await engine.EvaluateAsync(RuffleContent.FlashBridgeScript(content.Id, token), isolated: false);
             }
             catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or
                                            System.Runtime.InteropServices.COMException or System.Threading.Tasks.TaskCanceledException)

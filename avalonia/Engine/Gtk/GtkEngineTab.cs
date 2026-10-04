@@ -840,10 +840,14 @@ namespace PommeBrowser.Engine.Gtk
         // Moteur Flash intégré : cookies de la page et appels de la page vers le contenu
         // ---------------------------------------------------------------
 
-        /// <summary>Réponse aux appels de la page vers le contenu Flash (fil de l'interface) ; null : aucun lecteur.</summary>
-        public Func<string, string?>? FlashBridge => _flashBridge;
+        /// <summary>
+        /// Réponse aux appels de la page vers le contenu Flash (fil de l'interface) et jeton que ces
+        /// appels doivent porter ; null : aucun lecteur.
+        /// </summary>
+        public (Func<string, string?> Call, string Token)? FlashBridge => _flashBridge?.Value;
 
-        volatile Func<string, string?>? _flashBridge;
+        // Boîte : lue et remplacée d'un seul coup depuis d'autres fils.
+        volatile StrongBox<(Func<string, string?> Call, string Token)>? _flashBridge;
 
         /// <summary>Cookies de la page pour une adresse (en-tête Cookie), lus dans le gestionnaire de cookies de WebKit.</summary>
         public Task<string?> GetCookieHeaderAsync(Uri url, bool includeHttpOnly)
@@ -981,9 +985,13 @@ namespace PommeBrowser.Engine.Gtk
         /// <summary>
         /// Appels de la page vers le contenu Flash : la page y accède par une requête synchrone au
         /// schéma <see cref="RuffleContent.FlashBridgeScheme"/> (voir GtkEngine.ServeFlashBridge),
-        /// à laquelle <paramref name="callFunction"/> répond ; null quand le lecteur s'arrête.
+        /// portant <paramref name="token"/>, à laquelle <paramref name="callFunction"/> répond ; null
+        /// quand le lecteur s'arrête.
         /// </summary>
-        public void SetFlashBridge(Func<string, string?>? callFunction) => _flashBridge = callFunction;
+        public void SetFlashBridge(Func<string, string?>? callFunction, string? token)
+            => _flashBridge = callFunction != null && !string.IsNullOrEmpty(token)
+                ? new StrongBox<(Func<string, string?> Call, string Token)>((callFunction, token))
+                : null;
 
         public Task<string?> EvaluateAsync(string script, bool isolated)
         {

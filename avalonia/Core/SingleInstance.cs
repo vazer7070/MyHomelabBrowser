@@ -101,19 +101,18 @@ namespace PommeBrowser.Core
                 handler(targets);
         }
 
-        void Deliver(IReadOnlyList<string> targets)
+        /// <summary>
+        /// Adresses reçues : gardées pour <see cref="Attach"/> s'il n'y a pas encore de gestionnaire,
+        /// sinon le gestionnaire à qui les remettre.
+        /// </summary>
+        Action<IReadOnlyList<string>>? Receive(IReadOnlyList<string> targets)
         {
-            Action<IReadOnlyList<string>>? handler;
             lock (_gate)
             {
-                handler = _handler;
-                if (handler == null)
-                {
+                if (_handler == null)
                     _queued.Add(targets);
-                    return;
-                }
+                return _handler;
             }
-            handler(targets);
         }
 
         /// <summary>Nom du canal pour ce dossier de données et cet utilisateur.</summary>
@@ -259,8 +258,10 @@ namespace PommeBrowser.Core
             string? line = ReadLine(stream);
             if (line == null || ParseRequest(line) is not { } targets)
                 return;
+            // Reçues avant l'accusé : le lancement qui s'arrête sur « ok » ne les perd jamais.
+            Action<IReadOnlyList<string>>? handler = Receive(targets);
             writer.WriteLine("ok");
-            Deliver(targets);
+            handler?.Invoke(targets);
         }
 
         // ---------------------------------------------------------------

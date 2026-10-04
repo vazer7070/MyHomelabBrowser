@@ -128,7 +128,8 @@ public sealed class FlashRectTests
     [Fact]
     public void The_bridge_script_gives_call_function_to_the_element_of_the_content()
     {
-        string script = RuffleContent.FlashBridgeScript("EmpireClient");
+        string token = RuffleContent.NewFlashBridgeToken();
+        string script = RuffleContent.FlashBridgeScript("EmpireClient", token);
 
         Assert.Contains("chrome.webview.hostObjects.sync." + RuffleContent.FlashBridgeName, script);
         Assert.Contains("'CallFunction'", script);
@@ -136,15 +137,47 @@ public sealed class FlashRectTests
         Assert.Contains("const id = \"EmpireClient\";", script);
         Assert.DoesNotContain("__BRIDGE__", script);
         Assert.DoesNotContain("__ID__", script);
+        // Sous WebKitGTK, chaque requête au schéma du pont porte le jeton du lecteur.
+        Assert.Contains("'" + RuffleContent.FlashBridgeScheme + "://call/?t=" + token + "&r=' + encodeURIComponent(", script);
+        Assert.DoesNotContain("__TOKEN__", script);
+    }
+
+    [Fact]
+    public void Bridge_tokens_are_random_hexadecimal_strings()
+    {
+        string first = RuffleContent.NewFlashBridgeToken();
+        Assert.Matches("^[0-9a-f]{32}$", first);
+        Assert.NotEqual(first, RuffleContent.NewFlashBridgeToken());
+        // Un jeton qui ne serait pas hexadécimal n'entre jamais dans le script.
+        Assert.ThrowsAny<FormatException>(() => RuffleContent.FlashBridgeScript(null, "x'+alert(1)+'"));
+    }
+
+    [Fact]
+    public void A_bridge_request_is_accepted_only_with_the_token_of_the_player()
+    {
+        string token = RuffleContent.NewFlashBridgeToken();
+        string request = "<invoke name=\"jeu\" returntype=\"javascript\"><arguments><string>été &amp; co</string></arguments></invoke>";
+        string url = RuffleContent.FlashBridgeScheme + "://call/?t=" + token + "&r=" + Uri.EscapeDataString(request);
+
+        Assert.Equal(request, RuffleContent.ParseFlashBridgeRequest(url, token));
+        // Autre jeton (cadre d'un autre site), sans jeton, jeton tronqué, ancienne forme, autre schéma.
+        Assert.Null(RuffleContent.ParseFlashBridgeRequest(url, RuffleContent.NewFlashBridgeToken()));
+        Assert.Null(RuffleContent.ParseFlashBridgeRequest(url, null));
+        Assert.Null(RuffleContent.ParseFlashBridgeRequest(RuffleContent.FlashBridgeScheme + "://call/?t=" + token[..8] + "&r=x", token));
+        Assert.Null(RuffleContent.ParseFlashBridgeRequest(RuffleContent.FlashBridgeScheme + "://call/?r=" + Uri.EscapeDataString(request), token));
+        Assert.Null(RuffleContent.ParseFlashBridgeRequest("https://call/?t=" + token + "&r=x", token));
+        // Trop longue.
+        string huge = new('a', RuffleContent.MaxFlashCallLength + 1);
+        Assert.Null(RuffleContent.ParseFlashBridgeRequest(RuffleContent.FlashBridgeScheme + "://call/?t=" + token + "&r=" + huge, token));
     }
 
     [Fact]
     public void The_identifier_of_the_element_is_a_safe_javascript_string()
     {
-        string script = RuffleContent.FlashBridgeScript("a\"b</script>'c");
+        string script = RuffleContent.FlashBridgeScript("a\"b</script>'c", RuffleContent.NewFlashBridgeToken());
 
         Assert.DoesNotContain("a\"b", script);
         Assert.DoesNotContain("</script>", script);
-        Assert.Contains("const id = \"\";", RuffleContent.FlashBridgeScript(null));
+        Assert.Contains("const id = \"\";", RuffleContent.FlashBridgeScript(null, RuffleContent.NewFlashBridgeToken()));
     }
 }

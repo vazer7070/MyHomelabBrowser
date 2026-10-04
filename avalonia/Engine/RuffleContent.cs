@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using MyHomelabBrowser.classes;
@@ -262,9 +264,49 @@ namespace PommeBrowser.Engine
 
         /// <summary>
         /// Schéma d'adresse du pont sous WebKitGTK : la page appelle le contenu par une requête
-        /// synchrone « pomme-flash://call/?r=requête » (comme un greffon, elle attend la réponse).
+        /// synchrone « pomme-flash://call/?t=jeton&amp;r=requête » (comme un greffon, elle attend la réponse).
         /// </summary>
         public const string FlashBridgeScheme = "pomme-flash";
+
+        /// <summary>Requête la plus longue transmise au contenu (caractères) : bien au-delà des appels réels.</summary>
+        public const int MaxFlashCallLength = 4 * 1024 * 1024;
+
+        /// <summary>
+        /// Jeton du pont, propre à chaque lecteur : seul le script du pont, injecté dans le
+        /// document principal, le connaît. Un cadre d'un autre site (publicité) ne peut donc pas
+        /// appeler les fonctions du contenu par le schéma du pont.
+        /// </summary>
+        public static string NewFlashBridgeToken() => Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
+
+        /// <summary>
+        /// Requête reçue par le schéma du pont (« pomme-flash://call/?t=jeton&amp;r=requête ») : la
+        /// requête si le jeton est celui du lecteur et sa taille raisonnable, null sinon.
+        /// </summary>
+        public static string? ParseFlashBridgeRequest(string? url, string? token)
+        {
+            string prefix = FlashBridgeScheme + "://call/?t=";
+            if (url == null || string.IsNullOrEmpty(token) || !url.StartsWith(prefix, StringComparison.Ordinal))
+                return null;
+            int separator = url.IndexOf("&r=", prefix.Length, StringComparison.Ordinal);
+            if (separator < 0)
+                return null;
+            ReadOnlySpan<char> given = url.AsSpan(prefix.Length, separator - prefix.Length);
+            if (!CryptographicOperations.FixedTimeEquals(MemoryMarshal.AsBytes(given), MemoryMarshal.AsBytes(token.AsSpan())))
+                return null;
+            // Chaque caractère encodé en prend au plus 9 (%XX par octet UTF-8, 3 octets).
+            ReadOnlySpan<char> encoded = url.AsSpan(separator + 3);
+            if (encoded.Length > (long)MaxFlashCallLength * 9)
+                return null;
+            try
+            {
+                string request = Uri.UnescapeDataString(encoded.ToString());
+                return request.Length <= MaxFlashCallLength ? request : null;
+            }
+            catch (UriFormatException)
+            {
+                return null;
+            }
+        }
 
         /// <summary>
         /// Appels de la page vers le contenu lu par le moteur intégré (ExternalInterface.addCallback).
@@ -273,16 +315,17 @@ namespace PommeBrowser.Engine
         /// data-pomme-flash ou son identifiant) reçoit ce CallFunction, qui passe par l'objet
         /// <see cref="FlashBridgeName"/> de PommeBrowser (WebView2) ou par une requête synchrone au
         /// schéma <see cref="FlashBridgeScheme"/> (WebKitGTK), appelé de façon synchrone comme un greffon.
-        /// Sans réponse, l'appel rend undefined.
+        /// Sans réponse, l'appel rend undefined. Le jeton (<see cref="NewFlashBridgeToken"/>)
+        /// accompagne chaque requête au schéma.
         /// </summary>
-        public static string FlashBridgeScript(string? elementId) => """
+        public static string FlashBridgeScript(string? elementId, string token) => """
             (() => {
               const call = (request) => {
                 try {
                   const bridge = window.chrome && chrome.webview && chrome.webview.hostObjects && chrome.webview.hostObjects.sync.__BRIDGE__;
                   if (bridge) return bridge.CallFunction(String(request));
                   const xhr = new XMLHttpRequest();
-                  xhr.open('GET', '__SCHEME__://call/?r=' + encodeURIComponent(String(request)), false);
+                  xhr.open('GET', '__SCHEME__://call/?t=__TOKEN__&r=' + encodeURIComponent(String(request)), false);
                   xhr.send();
                   return xhr.status === 200 ? xhr.responseText : undefined;
                 } catch (e) { return undefined; }
@@ -298,6 +341,7 @@ namespace PommeBrowser.Engine
             })();
             """.Replace("__BRIDGE__", FlashBridgeName, StringComparison.Ordinal)
                .Replace("__SCHEME__", FlashBridgeScheme, StringComparison.Ordinal)
+               .Replace("__TOKEN__", Convert.ToHexString(Convert.FromHexString(token)).ToLowerInvariant(), StringComparison.Ordinal)
                .Replace("__ID__", JsonSerializer.Serialize(elementId ?? string.Empty), StringComparison.Ordinal);
 
         /// <summary>Fichier demandé par la page (nom seul) : contenu et type, ou null s'il n'existe pas.</summary>
