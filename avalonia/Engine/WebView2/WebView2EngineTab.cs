@@ -507,6 +507,11 @@ namespace PommeBrowser.Engine.WebView2
 
         void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
         {
+            // Journal (rapports, arrêt brutal) : quel processus du moteur, pourquoi, et le module fautif.
+            RuntimeLogBuffer.Append($"[WebView2] Processus arrêté : {e.ProcessFailedKind}, " +
+                                    $"raison {Safe(() => e.Reason.ToString(), "?")}, code {Safe(() => e.ExitCode, 0)}" +
+                                    (Safe(() => e.ProcessDescription, (string?)null) is { Length: > 0 } description ? ", " + description : string.Empty) +
+                                    (Safe(() => e.FailureSourceModulePath, (string?)null) is { Length: > 0 } module ? ", module " + module : string.Empty) + ".");
             if (e.ProcessFailedKind is not (CoreWebView2ProcessFailedKind.RenderProcessExited or CoreWebView2ProcessFailedKind.BrowserProcessExited))
                 return;
             _loading = false;

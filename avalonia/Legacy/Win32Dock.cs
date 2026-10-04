@@ -57,6 +57,7 @@ namespace PommeBrowser.Legacy
             if (_client == client)
                 return true;
             Undock();
+            PommeBrowser.Core.CrashWatch.Activity = "fenêtre d'un autre processus logée dans l'onglet";
 
             _client = client;
             SetParent(client, Host);
@@ -70,6 +71,7 @@ namespace PommeBrowser.Legacy
             FitClient();
             ShowWindow(client, SwShow);
             _focusTarget = LargestChild(client) is var child && child != 0 ? child : client;
+            PommeBrowser.Core.CrashWatch.Activity = null;
             return true;
         }
 
@@ -125,12 +127,14 @@ namespace PommeBrowser.Legacy
             _focusTarget = 0;
             if (client == 0 || !IsWindow(client))
                 return;
+            PommeBrowser.Core.CrashWatch.Activity = "fenêtre d'un autre processus retirée de l'onglet";
             ShowWindow(client, SwHide);
             SetParent(client, 0);
             int style = GetWindowLongW(client, GwlStyle);
             SetWindowLongW(client, GwlStyle, (style & ~WsChild) | WsPopup | WsCaption | WsThickFrame | WsSysMenu | WsMinimizeBox | WsMaximizeBox);
             int exStyle = GetWindowLongW(client, GwlExStyle);
             SetWindowLongW(client, GwlExStyle, (exStyle & ~WsExToolWindow) | WsExAppWindow);
+            PommeBrowser.Core.CrashWatch.Activity = null;
         }
 
         public void Destroy()

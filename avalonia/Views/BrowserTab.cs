@@ -539,6 +539,9 @@ namespace PommeBrowser.Views
                     break;
 
                 case LoadStage.Committed:
+                    // Repère du journal (arrêt brutal) : le site seulement, rien d'une page privée.
+                    RuntimeLogBuffer.Append("[Page] " + (IsPrivate ? "navigation privée" :
+                        System.Uri.TryCreate(url, UriKind.Absolute, out Uri? committed) ? committed.Host : "?"));
                     _upgradedHosts.Clear();
                     _rufflePlaying = false;
                     _flashContent = null;

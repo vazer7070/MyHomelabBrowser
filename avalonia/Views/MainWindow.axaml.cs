@@ -89,6 +89,7 @@ namespace PommeBrowser.Views
         {
             var tab = new BrowserTab(this, isPrivate);
             AddTab(tab, index ?? _tabs.Count);
+            MyHomelabBrowser.classes.RuntimeLogBuffer.Append($"[Onglet] Nouvel onglet ({_tabs.Count} ouverts).");
             if (url != null)
                 tab.Navigate(url, httpsFallback);
             else

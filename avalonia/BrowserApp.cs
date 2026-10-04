@@ -114,6 +114,7 @@ namespace PommeBrowser
         {
             _lifetime = lifetime;
             Dispatcher.UIThread.UnhandledException += OnUnhandledException;
+            CrashWatch.WatchInterface();
             lifetime.ShutdownMode = ShutdownMode.OnLastWindowClose;
             lifetime.ShutdownRequested += OnShutdownRequested;
 

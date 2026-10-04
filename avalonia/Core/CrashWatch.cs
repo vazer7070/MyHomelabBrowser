@@ -22,6 +22,18 @@ namespace PommeBrowser.Core
         /// <summary>Fin du journal recopiée (caractères).</summary>
         const int TailChars = 24 * 1024;
 
+        /// <summary>Début du journal gardé en plus (démarrage : exécutable, mises à jour…).</summary>
+        const int HeadChars = 3 * 1024;
+
+        /// <summary>Interface sans réponse au-delà de ce délai : noté au journal (gel).</summary>
+        static readonly TimeSpan HangDelay = TimeSpan.FromSeconds(5);
+
+        /// <summary>
+        /// Opération en cours sur le fil de l'interface qui peut attendre un autre processus
+        /// (appel d'un lecteur Flash, fenêtre logée…) : notée si l'interface se fige.
+        /// </summary>
+        public static string? Activity { get; set; }
+
         static readonly TimeSpan SaveInterval = TimeSpan.FromSeconds(5);
         static readonly object Gate = new();
         static Timer? _timer;
@@ -80,12 +92,52 @@ namespace PommeBrowser.Core
             }
         }
 
+        /// <summary>
+        /// Veille du fil de l'interface : s'il ne répond plus pendant <see cref="HangDelay"/>, le gel
+        /// est noté (avec l'opération en cours) et la fin du journal recopiée aussitôt ; son retour
+        /// aussi. Un arrêt brutal qui suit un gel n'est donc pas pris pour un plantage.
+        /// </summary>
+        public static void WatchInterface()
+        {
+            if (Interlocked.Exchange(ref _watching, 1) != 0)
+                return;
+            var thread = new Thread(() =>
+            {
+                while (true)
+                {
+                    using var answered = new ManualResetEventSlim();
+                    Avalonia.Threading.Dispatcher.UIThread.Post(answered.Set, Avalonia.Threading.DispatcherPriority.Send);
+                    if (!answered.Wait(HangDelay))
+                    {
+                        var clock = System.Diagnostics.Stopwatch.StartNew();
+                        RuntimeLogBuffer.Append($"[Interface] Ne répond plus depuis {HangDelay.TotalSeconds:0} s" +
+                                                (Activity is { } activity ? " (en cours : " + activity + ")." : "."));
+                        SaveTail();
+                        answered.Wait();
+                        RuntimeLogBuffer.Append($"[Interface] De nouveau active après {clock.Elapsed.TotalSeconds + HangDelay.TotalSeconds:0} s.");
+                        SaveTail();
+                    }
+                    Thread.Sleep(2000);
+                }
+            })
+            {
+                IsBackground = true,
+                Name = "Veille de l'interface"
+            };
+            thread.Start();
+        }
+
+        static int _watching;
+
         static void SaveTail()
         {
             try
             {
                 string snapshot = RuntimeLogBuffer.GetSnapshot();
-                string tail = snapshot.Length > TailChars ? snapshot[^TailChars..] : snapshot;
+                // Début de la session (démarrage) et fin : les chargements d'un jeu Flash ne le noient pas.
+                string tail = snapshot.Length > HeadChars + TailChars
+                    ? snapshot[..HeadChars] + Environment.NewLine + "[…]" + Environment.NewLine + snapshot[^TailChars..]
+                    : snapshot;
                 lock (Gate)
                 {
                     if (tail == _saved)
@@ -185,11 +237,17 @@ namespace PommeBrowser.Core
                     process.Kill();
                     return null;
                 }
+                // Programme de PommeBrowser (MyHomelabBrowser.exe une fois installé), ses lecteurs
+                // Flash et le moteur web (WebView2), dont l'arrêt fait aussi tomber les pages.
+                string[] names =
+                {
+                    Path.GetFileName(Environment.ProcessPath) ?? "MyHomelabBrowser.exe", "MyHomelabBrowser",
+                    "pommebrowser", "PommeFlashHost", "msedgewebview2"
+                };
                 string[] entries = output.Result.Split("Event[", StringSplitOptions.RemoveEmptyEntries);
                 string relevant = string.Join(Environment.NewLine, entries
-                    .Where(entry => entry.Contains("pommebrowser", StringComparison.OrdinalIgnoreCase) ||
-                                    entry.Contains("PommeFlashHost", StringComparison.OrdinalIgnoreCase))
-                    .Take(4)
+                    .Where(entry => names.Any(name => entry.Contains(name, StringComparison.OrdinalIgnoreCase)))
+                    .Take(6)
                     .Select(entry => "Event[" + entry.Trim()));
                 return relevant.Length > 12_000 ? relevant[..12_000] + "…" : relevant;
             }

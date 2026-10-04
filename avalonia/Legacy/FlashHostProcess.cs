@@ -430,6 +430,7 @@ namespace PommeBrowser.Legacy
             lock (_calls)
                 _calls[id] = slot;
             _calling = true;
+            PommeBrowser.Core.CrashWatch.Activity = "appel de la page vers le lecteur Flash " + _process.Id.ToString(CultureInfo.InvariantCulture);
             try
             {
                 using var buffer = new MemoryStream();
@@ -460,6 +461,7 @@ namespace PommeBrowser.Legacy
             finally
             {
                 _calling = false;
+                PommeBrowser.Core.CrashWatch.Activity = null;
                 lock (_calls)
                     _calls.Remove(id);
                 slot.Done.Dispose();
