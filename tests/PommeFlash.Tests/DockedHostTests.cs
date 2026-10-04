@@ -80,7 +80,7 @@ public sealed class DockedHostTests
                     XFree(children);
                 if (parent == root)
                     break;
-                await Task.Delay(10);
+                await Task.Delay(10, TestContext.Current.CancellationToken);
             }
             XReparentWindow(display, client, dock, 0, 0);
             XMoveResizeWindow(display, client, 0, 0, 500, 400);
@@ -95,7 +95,7 @@ public sealed class DockedHostTests
             XTestFakeButtonEvent(display, 1, 1, 0);
             XTestFakeButtonEvent(display, 1, 0, 0);
             XSync(display, 0);
-            await Task.Delay(400);
+            await Task.Delay(400, TestContext.Current.CancellationToken);
             XTestFakeMotionEvent(display, -1, 900, 700, 0);
             byte key = XKeysymToKeycode(display, 0x61);
             XTestFakeKeyEvent(display, key, 1, 0);

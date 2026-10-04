@@ -95,6 +95,7 @@ jobs:
           name: resultats-tests
           path: TestResults
           if-no-files-found: ignore
+          retention-days: 3
 
       - name: Moteur Flash intégré (artefact)
         uses: actions/upload-artifact@v4
@@ -102,6 +103,7 @@ jobs:
           name: PommeFlashHost-Linux-x64
           path: artifacts/flash-linux-x64
           if-no-files-found: error
+          retention-days: 7
 
       - name: Compilation de l'édition Avalonia
         run: dotnet build avalonia/PommeBrowser.csproj --configuration Release
@@ -127,6 +129,7 @@ jobs:
             avalonia/packaging/out/*.AppImage
             avalonia/packaging/out/*.sha256
           if-no-files-found: error
+          retention-days: 7
 
   avalonia-windows:
     name: Avalonia Windows
@@ -256,6 +259,7 @@ jobs:
           name: espion-flash
           path: artifacts/espion-flash
           if-no-files-found: error
+          retention-days: 3
 
       - name: Résultats des tests du moteur Flash
         if: always()
@@ -264,6 +268,7 @@ jobs:
           name: resultats-tests-moteur-flash
           path: TestResults
           if-no-files-found: ignore
+          retention-days: 3
 
       - name: Dossier publié
         uses: actions/upload-artifact@v4
@@ -271,6 +276,7 @@ jobs:
           name: PommeBrowser-Avalonia-Windows-x64
           path: artifacts/avalonia-win-x64
           if-no-files-found: error
+          retention-days: 7
 
   avalonia-macos:
     name: Avalonia macOS (.app)
@@ -297,3 +303,4 @@ jobs:
             avalonia/packaging/out/*.zip
             avalonia/packaging/out/*.sha256
           if-no-files-found: error
+          retention-days: 7
