@@ -93,7 +93,7 @@ namespace PommeBrowser.Views
             if (status.StartsWith(PommeBrowser.Engine.FlashContent.MessagePrefix, StringComparison.Ordinal))
             {
                 if (PommeBrowser.Engine.FlashContent.Parse(status[PommeBrowser.Engine.FlashContent.MessagePrefix.Length..]) is { } content &&
-                    (_flashContent == null || content.Area > _flashContent.Area))
+                    content.IsPreferredOver(_flashContent))
                 {
                     _flashContent = content;
                     RaiseChanged();

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -28,6 +29,34 @@ namespace PommeBrowser.Engine
         const int MaxParamValue = 2048;
 
         public long Area => (long)Width * Height;
+
+        /// <summary>
+        /// Formats publicitaires courants (IAB) : sur une page « jeu + publicités Flash », un
+        /// contenu de cette taille cède la place à un contenu d'une autre taille, même plus petit.
+        /// </summary>
+        public static readonly IReadOnlyList<(int Width, int Height)> AdSizes = new[]
+        {
+            (728, 90), (970, 90), (970, 250), (468, 60), (234, 60), (320, 50), (320, 100),
+            (300, 250), (336, 280), (250, 250), (200, 200), (180, 150), (125, 125),
+            (160, 600), (120, 600), (300, 600), (120, 240), (88, 31)
+        };
+
+        /// <summary>Taille d'un format publicitaire courant.</summary>
+        public bool HasAdSize => AdSizes.Contains((Width, Height));
+
+        /// <summary>
+        /// Contenu à confier au moteur intégré plutôt que <paramref name="current"/> (contenu
+        /// principal retenu jusque-là, d'un autre document de la page par exemple) : celui qui n'a
+        /// pas une taille de publicité, sinon le plus grand.
+        /// </summary>
+        public bool IsPreferredOver(FlashContent? current)
+        {
+            if (current == null)
+                return true;
+            if (HasAdSize != current.HasAdSize)
+                return !HasAdSize;
+            return Area > current.Area;
+        }
 
         [GeneratedRegex("^[a-z][a-z0-9_-]{0,63}$", RegexOptions.CultureInvariant)]
         private static partial Regex ParamName();

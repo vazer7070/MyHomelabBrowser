@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -128,10 +129,13 @@ namespace PommeBrowser.Engine
                   for (const m of mutations) for (const node of m.addedNodes) scan(node);
                 }).observe(document.documentElement, { childList: true, subtree: true });
               };
-              // Contenu principal (le plus grand) : décrit pour le moteur Flash intégré, avant
-              // que Ruffle ne remplace les éléments.
+              // Contenu principal : décrit pour le moteur Flash intégré, avant que Ruffle ne
+              // remplace les éléments. Le plus grand, mais un format publicitaire courant passe
+              // après tout autre contenu ; les contenus cachés ou minuscules (pixel de suivi,
+              // lecteur audio invisible) ne comptent pas.
+              const AD_SIZES = new Set(__AD_SIZES__);
               const describe = () => {
-                let best = null, bestArea = -1;
+                let best = null;
                 for (const el of document.querySelectorAll('object, embed')) {
                   if (!isFlash(el)) continue;
                   if (el.localName === 'embed' && el.parentElement && el.parentElement.localName === 'object' && isFlash(el.parentElement)) continue;
@@ -144,7 +148,9 @@ namespace PommeBrowser.Engine
                   };
                   const width = size('width', rect.width);
                   const height = size('height', rect.height);
-                  if (width * height > bestArea) { best = { el, width, height }; bestArea = width * height; }
+                  if (width < 16 || height < 16) continue;
+                  const ad = AD_SIZES.has(width + 'x' + height);
+                  if (!best || (ad !== best.ad ? !ad : width * height > best.width * best.height)) best = { el, width, height, ad };
                 }
                 if (!best) return null;
                 const el = best.el;
@@ -186,7 +192,8 @@ namespace PommeBrowser.Engine
               setTimeout(() => observer.disconnect(), 30000);
             })();
             """.Replace("__BASE__", baseUrl, StringComparison.Ordinal).Replace("__POST__", post, StringComparison.Ordinal)
-               .Replace("__CONTENT__", FlashContent.MessagePrefix, StringComparison.Ordinal);
+               .Replace("__CONTENT__", FlashContent.MessagePrefix, StringComparison.Ordinal)
+               .Replace("__AD_SIZES__", JsonSerializer.Serialize(FlashContent.AdSizes.Select(s => s.Width + "x" + s.Height)), StringComparison.Ordinal);
 
         /// <summary>Préfixe des messages de position du contenu lu par le moteur intégré.</summary>
         public const string RectPrefix = "rect:";

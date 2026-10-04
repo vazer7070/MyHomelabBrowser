@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
@@ -101,6 +102,25 @@ namespace PommeBrowser.Legacy
 
         /// <summary>Un hôte est livré dans cette compilation (au moins en 64 bits).</summary>
         public static bool IsAvailable => File.Exists(ExecutablePath(false));
+
+        /// <summary>L'hôte 32 bits (modules NPSWF32) est livré : Windows seulement.</summary>
+        public static bool IsAvailable32 => OperatingSystem.IsWindows() && File.Exists(ExecutablePath(true));
+
+        /// <summary>Arrêt d'un lecteur que PommeBrowser n'a pas demandé (diagnostic).</summary>
+        public sealed record Stop(DateTime At, string Module, int? ExitCode, bool BeforeContent);
+
+        /// <summary>Dernier arrêt non demandé d'un lecteur pendant cette session, ou null.</summary>
+        public static Stop? LastStop { get; private set; }
+
+        /// <summary>Lecteurs ouverts : numéros de leurs processus.</summary>
+        public static IReadOnlyList<int> RunningProcessIds
+        {
+            get
+            {
+                lock (Running)
+                    return Running.Where(h => !h.HasExited).Select(h => h._process.Id).ToList();
+            }
+        }
 
         /// <summary>L'hôte de l'architecture de ce module est livré (Linux : 64 bits seulement).</summary>
         public static bool IsAvailableFor(string module)
@@ -635,14 +655,20 @@ namespace PommeBrowser.Legacy
                 Running.Remove(this);
             FailedToStart = !_closed && !_ready;
             Crashed = !_closed && _ready;
+            int? code = null;
             try
             {
                 if (_process.HasExited)
-                    RuntimeLogBuffer.Append($"[Flash] Moteur intégré arrêté (code {_process.ExitCode}){(FailedToStart ? " avant d'afficher le contenu" : string.Empty)} : {Path.GetFileName(Module)}.");
+                {
+                    code = _process.ExitCode;
+                    RuntimeLogBuffer.Append($"[Flash] Moteur intégré arrêté (code {code}){(FailedToStart ? " avant d'afficher le contenu" : string.Empty)} : {Path.GetFileName(Module)}.");
+                }
             }
             catch (InvalidOperationException)
             {
             }
+            if (!_closed)
+                LastStop = new Stop(DateTime.Now, Path.GetFileName(Module), code, FailedToStart);
             Exited?.Invoke();
         }
 

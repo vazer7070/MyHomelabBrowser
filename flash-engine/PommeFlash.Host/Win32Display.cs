@@ -46,6 +46,7 @@ namespace PommeFlash.Host
         public void Create(HostOptions options)
         {
             _current = this;
+            DeclareDpiAwareness();
             nint module = Win32.GetModuleHandleW(null);
             Register(FrameClass, (nint)(delegate* unmanaged<nint, uint, nuint, nint, nint>)&FrameProc, module);
             Register(PluginClass, (nint)(delegate* unmanaged<nint, uint, nuint, nint, nint>)&PluginProc, module);
@@ -69,6 +70,30 @@ namespace PommeFlash.Host
 
             if (!options.Hidden)
                 Win32.ShowWindow(Frame, Win32.SW_SHOW);
+        }
+
+        /// <summary>
+        /// Adapté à la densité de chaque écran, comme le plugin-container de Basilisk et de
+        /// Firefox : le module dessine à la taille réelle de la zone (en pixels de l'écran) au lieu
+        /// d'une image agrandie, floue au-delà de 100 %. Avant toute fenêtre, et avant le module.
+        /// </summary>
+        static void DeclareDpiAwareness()
+        {
+            try
+            {
+                if (Win32.SetProcessDpiAwarenessContext(Win32.DpiAwarenessPerMonitorV2))
+                    return;
+            }
+            catch (EntryPointNotFoundException)
+            {
+            }
+            try
+            {
+                Win32.SetProcessDPIAware();
+            }
+            catch (EntryPointNotFoundException)
+            {
+            }
         }
 
         static void Register(string name, nint procedure, nint module)

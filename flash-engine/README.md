@@ -53,7 +53,12 @@ PommeBrowser ──(ligne de commande, stdin/stdout JSON)──► PommeFlashHos
   mode fenêtré, le module dessine dans sa fenêtre, que PommeBrowser loge dans l'onglet comme il
   le faisait pour Basilisk. Les modes `direct` et `gpu` demandés par la page sont gardés
   (fenêtrés sous Windows, ils donnent accès à Stage3D, dont beaucoup de jeux ont besoin) ;
-  `opaque` et `transparent`, sans fenêtre, deviennent `window`. Sous Windows, un clic dans le
+  `opaque` et `transparent`, sans fenêtre, deviennent `window`. L'hôte de Windows est adapté à
+  la densité de chaque écran (`PerMonitorV2`, déclaré avant toute fenêtre), comme le
+  plugin-container de Basilisk : au-delà de 100 %, le module dessine à la taille réelle de la
+  zone au lieu d'une image agrandie et floue. Les fenêtres que le module ouvre sont notées dès
+  leur affichage (`EVENT_OBJECT_SHOW`), et les programmes qu'il lance toutes les 5 s
+  (`WindowWatch`). Sous Windows, un clic dans le
   contenu lui donne le clavier (`WM_MOUSEACTIVATE`, comme Firefox le faisait pour ses modules :
   Flash compte sur le navigateur), et PommeBrowser le reprend quand un de ses champs a le focus.
 - **Linux** (`GtkDisplay.cs`, `Native/Gtk.cs`) : le module Flash de Linux est écrit pour GTK 2

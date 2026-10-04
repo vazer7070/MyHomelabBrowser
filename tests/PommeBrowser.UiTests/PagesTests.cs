@@ -37,6 +37,9 @@ public sealed class PagesTests
         window.OpenDiagnostics();
         TestBrowser.Pump();
         Assert.IsType<DiagnosticsPage>(window.SelectedTab?.CurrentPage);
+        // Moteur Flash intégré : réglage, hôtes, modules, lecteurs, dernier arrêt.
+        Assert.Contains(TestBrowser.Find<TextBlock>(window), t => t.Text is "Moteur Flash intégré" or "Integrated Flash engine");
+        Assert.Contains(TestBrowser.Find<TextBlock>(window), t => t.Text is "Dernier arrêt inattendu" or "Last unexpected stop");
 
         window.OpenReport();
         TestBrowser.Pump();

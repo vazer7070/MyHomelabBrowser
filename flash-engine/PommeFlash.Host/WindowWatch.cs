@@ -13,10 +13,10 @@ namespace PommeFlash.Host
     [SupportedOSPlatform("windows")]
     static unsafe class WindowWatch
     {
-        // Chaque seconde pendant deux minutes (démarrage du contenu), puis toutes les cinq secondes.
-        const uint IntervalMs = 1000;
-        const uint SlowIntervalMs = 5000;
-        const int FastScans = 120;
+        // Fenêtres du module : signalées dès leur affichage (évènement EVENT_OBJECT_SHOW). Programmes
+        // lancés et leurs fenêtres : relevés toutes les cinq secondes (ce relevé rattrape aussi une
+        // fenêtre du module que l'évènement n'aurait pas signalée).
+        const uint IntervalMs = 5000;
         const int MaxWindows = 30;
         const int MaxTexts = 8;
 
@@ -25,7 +25,7 @@ namespace PommeFlash.Host
         static readonly Dictionary<uint, string> ProcessNames = new();
         static readonly List<nint> Found = new();
         static uint _self;
-        static int _scans;
+        static nint _hook;
 
         public static void Start()
         {
@@ -39,7 +39,26 @@ namespace PommeFlash.Host
                 .ToArray();
             HostChannel.Log("Programmes Flash déjà en cours : " + (flash.Length > 0 ? string.Join(", ", flash) : "aucun") +
                             $" ({processes.Count} processus vus)");
+            // Sur le fil du module, qui a une boucle de messages : l'évènement y est remis.
+            _hook = Win32.SetWinEventHook(Win32.EVENT_OBJECT_SHOW, Win32.EVENT_OBJECT_SHOW, 0, &OnShow, _self, 0, Win32.WINEVENT_OUTOFCONTEXT);
             UiThread.Delay(IntervalMs, Scan);
+        }
+
+        /// <summary>Fenêtre de ce processus affichée : notée si c'est une fenêtre principale (boîte de dialogue…).</summary>
+        [UnmanagedCallersOnly]
+        static void OnShow(nint hook, uint kind, nint window, int objectId, int childId, uint thread, uint time)
+        {
+            if (window == 0 || objectId != Win32.OBJID_WINDOW || childId != 0 || Win32.GetAncestor(window, Win32.GA_ROOT) != window)
+                return;
+            // Décrite après l'évènement : sa description envoie des messages (WM_GETTEXT).
+            UiThread.Post(() => Consider(window, _self));
+        }
+
+        static void Consider(nint window, uint process)
+        {
+            if (SeenWindows.Count >= MaxWindows || window == UiThread.Display.Frame || !Win32.IsWindowVisible(window) || !SeenWindows.Add(window))
+                return;
+            Describe(window, process);
         }
 
         static void Scan()
@@ -53,18 +72,15 @@ namespace PommeFlash.Host
                 {
                     if (SeenWindows.Count >= MaxWindows)
                         break;
-                    if (window == UiThread.Display.Frame || !Win32.IsWindowVisible(window))
-                        continue;
                     uint process;
                     Win32.GetWindowThreadProcessId(window, &process);
-                    if (!watched.Contains(process) || !SeenWindows.Add(window))
-                        continue;
-                    Describe(window, process);
+                    if (watched.Contains(process))
+                        Consider(window, process);
                 }
             }
             finally
             {
-                UiThread.Delay(++_scans < FastScans ? IntervalMs : SlowIntervalMs, Scan);
+                UiThread.Delay(IntervalMs, Scan);
             }
         }
 
