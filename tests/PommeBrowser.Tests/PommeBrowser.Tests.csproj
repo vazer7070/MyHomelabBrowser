@@ -39,6 +39,8 @@
     <Compile Include="..\..\classes\FavoriteItem.cs" Link="App\FavoriteItem.cs" />
     <Compile Include="..\..\classes\SiteZoomStore.cs" Link="App\SiteZoomStore.cs" />
     <Compile Include="..\..\classes\Import\BookmarkImporter.cs" Link="App\Import\BookmarkImporter.cs" />
+    <Compile Include="..\..\classes\Import\HistoryImporter.cs" Link="App\Import\HistoryImporter.cs" />
+    <Compile Include="..\..\classes\Import\PasswordCsvImporter.cs" Link="App\Import\PasswordCsvImporter.cs" />
     <Compile Include="..\..\classes\Security\Totp.cs" Link="App\Security\Totp.cs" />
     <Compile Include="..\..\classes\Security\CertificatePinStore.cs" Link="App\Security\CertificatePinStore.cs" />
     <Compile Include="..\..\classes\Homelab\HomelabService.cs" Link="App\Homelab\HomelabService.cs" />

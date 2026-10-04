@@ -108,6 +108,26 @@ namespace PommeBrowser.Linux.Core
             Changed?.Invoke();
         }
 
+        /// <summary>
+        /// Visites importées d'un autre navigateur : écrites hors du fil de l'interface, puis la
+        /// liste des visites récentes est relue (à appeler depuis le fil de l'interface).
+        /// </summary>
+        public async System.Threading.Tasks.Task<int> ImportAsync(IReadOnlyList<HistoryEntry> entries)
+        {
+            if (_store is not { } store || entries.Count == 0)
+                return 0;
+            store.Flush();
+            int added = await System.Threading.Tasks.Task.Run(() => store.Import(entries));
+            if (added > 0)
+            {
+                List<HistoryEntry> recent = await System.Threading.Tasks.Task.Run(() => store.LoadRecent(InMemory));
+                _recent.Clear();
+                _recent.AddRange(recent);
+                Changed?.Invoke();
+            }
+            return added;
+        }
+
         public static bool IsRecordable(string? url)
             => Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) &&
                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeFile);

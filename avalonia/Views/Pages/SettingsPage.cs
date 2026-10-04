@@ -255,6 +255,11 @@ namespace PommeBrowser.Views.Pages
             var panel = new StackPanel { Spacing = 14 };
             panel.Children.Add(Hint(Tr("Démarrage, nouveaux onglets, réseau et certificats du navigateur.")));
             panel.Children.Add(DefaultBrowserCard());
+            panel.Children.Add(Card(Tr("Venir d'un autre navigateur"),
+                Tr("Reprenez les favoris, l'historique et les mots de passe de Chrome, Edge, Brave, Firefox…"),
+                Buttons(
+                    Action(Tr("Favoris et historique…"), () => _ = ImportFavoritesDialog.ShowAsync(_window)),
+                    Action(Tr("Mots de passe…"), () => _ = ImportPasswordsDialog.ShowAsync(_window)))));
 
             // Apparence
             var restart = Action(Tr("Redémarrer maintenant"), () => _app.Restart());
