@@ -99,6 +99,7 @@
     <Compile Include="..\..\avalonia\Core\SingleInstance.cs" Link="Avalonia\SingleInstance.cs" />
     <Compile Include="..\..\avalonia\Core\LaunchTargets.cs" Link="Avalonia\LaunchTargets.cs" />
     <Compile Include="..\..\avalonia\Core\DefaultBrowser.cs" Link="Avalonia\DefaultBrowser.cs" />
+    <Compile Include="..\..\avalonia\Legacy\Win32Embedding.cs" Link="Avalonia\Win32Embedding.cs" />
   </ItemGroup>
 
   <ItemGroup Label="Édition Linux (logique sans interface)">

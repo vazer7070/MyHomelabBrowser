@@ -177,13 +177,15 @@ jobs:
           dotnet publish flash-engine/PommeFlash.Host/PommeFlash.Host.csproj --configuration Release --runtime win-x86 -p:PublishAot=true -p:DebugType=none --output artifacts/avalonia-win-x64/flash/x86
           if (-not (Test-Path artifacts/avalonia-win-x64/flash/x86/PommeFlashHost.exe)) { throw "PommeFlashHost 32 bits absent de la publication." }
 
-      # Propre à Windows : instance unique (mutex nommé et tube réservé à l'utilisateur) et
-      # inscription comme navigateur (registre de l'utilisateur, sous un nom de test).
-      - name: Tests de l'instance unique et du navigateur par défaut (Windows)
+      # Propre à Windows : instance unique (mutex nommé et tube réservé à l'utilisateur),
+      # inscription comme navigateur (registre de l'utilisateur, sous un nom de test) et clavier
+      # d'une fenêtre logée par SetParent (le journal dit si Windows relie la saisie de lui-même).
+      - name: Tests propres à Windows (instance unique, navigateur par défaut, fenêtre logée)
         run: >
           dotnet test tests/PommeBrowser.Tests/PommeBrowser.Tests.csproj
           --configuration Release
-          --filter "FullyQualifiedName~SingleInstanceTests|FullyQualifiedName~DefaultBrowserTests"
+          --filter "FullyQualifiedName~SingleInstanceTests|FullyQualifiedName~DefaultBrowserTests|FullyQualifiedName~Win32EmbeddingTests"
+          --logger "console;verbosity=detailed"
           --logger "trx;LogFileName=instance-unique.trx"
           --results-directory TestResults
 

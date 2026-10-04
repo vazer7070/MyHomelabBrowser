@@ -61,14 +61,14 @@ namespace PommeBrowser.Legacy
             PommeBrowser.Core.CrashWatch.Activity = "fenêtre d'un autre processus logée dans l'onglet";
 
             _client = client;
-            SetParent(client, Host);
-            int style = GetWindowLongW(client, GwlStyle);
-            // Ni cadre ni boutons de fenêtre : Basilisk n'est plus qu'une page de l'onglet.
-            style = (style & ~(WsPopup | WsCaption | WsThickFrame | WsSysMenu | WsMinimizeBox | WsMaximizeBox)) | WsChild | WsVisible;
-            SetWindowLongW(client, GwlStyle, style);
-            int exStyle = GetWindowLongW(client, GwlExStyle);
-            SetWindowLongW(client, GwlExStyle, (exStyle & ~WsExAppWindow) | WsExToolWindow);
-            SetWindowPos(client, 0, 0, 0, 0, 0, SwpFrameChanged | SwpNoMove | SwpNoSize | SwpNoZOrder | SwpNoActivate);
+            // Ni cadre ni boutons de fenêtre : Basilisk ou le lecteur n'est plus qu'une page de l'onglet.
+            Win32Embedding.MakeChild(client, Host);
+            // Saisie reliée tant que la fenêtre est logée : sans cela, le clavier ne lui arrive
+            // jamais (voir Win32Embedding).
+            _attachedThread = Win32Embedding.LinkInput(client, out int linkError);
+            LogKeyboard(_attachedThread != 0
+                ? "Saisie de " + Name + " reliée à PommeBrowser."
+                : "Saisie de " + Name + " non reliée (erreur " + linkError + ").");
             FitClient();
             ShowWindow(client, SwShow);
             _focusTarget = LargestChild(client) is var child && child != 0 ? child : client;
@@ -134,12 +134,7 @@ namespace PommeBrowser.Legacy
             if (client == 0 || !IsWindow(client))
                 return;
             PommeBrowser.Core.CrashWatch.Activity = "fenêtre d'un autre processus retirée de l'onglet";
-            ShowWindow(client, SwHide);
-            SetParent(client, 0);
-            int style = GetWindowLongW(client, GwlStyle);
-            SetWindowLongW(client, GwlStyle, (style & ~WsChild) | WsPopup | WsCaption | WsThickFrame | WsSysMenu | WsMinimizeBox | WsMaximizeBox);
-            int exStyle = GetWindowLongW(client, GwlExStyle);
-            SetWindowLongW(client, GwlExStyle, (exStyle & ~WsExToolWindow) | WsExAppWindow);
+            Win32Embedding.MakeTopLevel(client);
             PommeBrowser.Core.CrashWatch.Activity = null;
         }
 
@@ -189,34 +184,26 @@ namespace PommeBrowser.Legacy
         }
 
         /// <summary>
-        /// Focus à la fenêtre logée. Les files de saisie de PommeBrowser et de l'autre processus
-        /// sont déjà reliées par Windows (fenêtre enfant d'un autre fil) : le focus est donné tel
-        /// quel. Si cela échoue, elles sont reliées à la main, et le restent tant que la fenêtre
-        /// est logée : les délier aussitôt après pourrait couper aussi le lien établi par Windows,
-        /// et le clavier n'arriverait plus au lecteur.
+        /// Focus à la fenêtre logée (sa saisie est reliée à celle de PommeBrowser depuis Dock ; si
+        /// la liaison avait échoué, elle est retentée sur la fenêtre qui doit recevoir le clavier).
         /// </summary>
         void FocusClient()
         {
             nint target = _focusTarget != 0 && IsWindow(_focusTarget) ? _focusTarget : _client;
             SetFocus(target);
-            if (Contains(GetFocus()))
+            if (Contains(GetFocus()) || _attachedThread != 0)
                 return;
-            uint thread = GetCurrentThreadId();
-            uint targetThread = GetWindowThreadProcessId(target, out _);
-            if (_attachedThread == 0 && targetThread != 0 && targetThread != thread && AttachThreadInput(thread, targetThread, true))
-            {
-                _attachedThread = targetThread;
-                LogKeyboard("Files de saisie reliées à la main pour " + Name + ".");
-            }
+            _attachedThread = Win32Embedding.LinkInput(target, out int error);
+            LogKeyboard(_attachedThread != 0
+                ? "Saisie de " + Name + " reliée à PommeBrowser (seconde tentative)."
+                : "Saisie de " + Name + " toujours non reliée (erreur " + error + ").");
             SetFocus(target);
         }
 
-        /// <summary>Fenêtre retirée : le lien posé par FocusClient est défait.</summary>
+        /// <summary>Fenêtre retirée : la liaison de la saisie est défaite.</summary>
         void DetachInput()
         {
-            if (_attachedThread == 0)
-                return;
-            AttachThreadInput(GetCurrentThreadId(), _attachedThread, false);
+            Win32Embedding.UnlinkInput(_attachedThread);
             _attachedThread = 0;
         }
 
@@ -379,6 +366,17 @@ namespace PommeBrowser.Legacy
                 : ProcessOf(window) + " (" + windowClass + ")";
         }
 
+        /// <summary>Fenêtre logée affichée sous le pointeur, dans la fenêtre <paramref name="root"/>.</summary>
+        static Win32Dock? DockUnder(Point cursor, nint root)
+        {
+            foreach (Win32Dock dock in Docks.Values)
+            {
+                if (dock._client != 0 && GetAncestor(dock.Host, GaRoot) == root && IsWindowVisible(dock.Host) && dock.IsUnder(cursor))
+                    return dock;
+            }
+            return null;
+        }
+
         static Win32Dock? DockOf(nint window)
         {
             foreach (Win32Dock dock in Docks.Values)
@@ -432,10 +430,30 @@ namespace PommeBrowser.Legacy
                     _lastFocus = 0;
                     return;
                 }
+                nint root = GetAncestor(focus, GaRoot);
+
+                // Clic dans un lecteur logé (ou élément.focus() de la page pour lui), mais le clavier
+                // est ailleurs dans PommeBrowser (fenêtre réactivée, page web) : il va au lecteur.
+                Win32Dock? focused = DockOf(focus);
+                // Un clic suffit (même depuis la barre d'adresse) ; une demande de la page, seulement
+                // si aucun champ de PommeBrowser n'a le focus.
+                Win32Dock? clicked = pressed ? DockUnder(cursor, root)
+                    : DockOf(window) is { } asked && asked == _requested && asked.CanKeep() ? asked : null;
+                if (clicked != null && clicked != focused)
+                {
+                    _keeper = clicked;
+                    _requested = null;
+                    _givebacks = 0;
+                    LogKeyboard($"Clic dans {clicked.Name}, clavier à {Describe(focus)} : donné au lecteur.");
+                    _keyboardOwner = null;
+                    _lastFocus = 0;
+                    clicked.FocusClient();
+                    return;
+                }
+
                 if (focus == _lastFocus)
                     return;
                 _lastFocus = focus;
-                nint root = GetAncestor(focus, GaRoot);
 
                 Win32Dock? keeper = _keeper;
                 if (keeper != null && !keeper.CanKeep())
@@ -607,27 +625,15 @@ namespace PommeBrowser.Legacy
         // Interop
         // ---------------------------------------------------------------
 
-        const int GwlStyle = -16;
-        const int GwlExStyle = -20;
         const int WsChild = 0x40000000;
         const int WsVisible = 0x10000000;
         const int WsClipChildren = 0x02000000;
-        const int WsPopup = unchecked((int)0x80000000);
-        const int WsCaption = 0x00C00000;
-        const int WsThickFrame = 0x00040000;
-        const int WsSysMenu = 0x00080000;
-        const int WsMinimizeBox = 0x00020000;
-        const int WsMaximizeBox = 0x00010000;
-        const int WsExAppWindow = 0x00040000;
-        const int WsExToolWindow = 0x00000080;
         const uint SwpNoSize = 0x0001;
         const uint SwpNoMove = 0x0002;
         const uint SwpNoZOrder = 0x0004;
         const uint SwpNoActivate = 0x0010;
-        const uint SwpFrameChanged = 0x0020;
         const uint SwpAsyncWindowPos = 0x4000;
         const nint HwndTop = 0;
-        const int SwHide = 0;
         const int SwShow = 5;
         const uint WmSize = 0x0005;
         const nint WmKeyDown = 0x0100;
@@ -688,9 +694,6 @@ namespace PommeBrowser.Legacy
         [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] static extern bool IsWindow(nint window);
         [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] static extern bool IsWindowVisible(nint window);
         [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] static extern bool IsChild(nint parent, nint window);
-        [DllImport("user32.dll")] static extern nint SetParent(nint child, nint parent);
-        [DllImport("user32.dll")] static extern int GetWindowLongW(nint window, int index);
-        [DllImport("user32.dll")] static extern int SetWindowLongW(nint window, int index, int value);
         [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] static extern bool SetWindowPos(nint window, nint insertAfter, int x, int y, int width, int height, uint flags);
         [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] static extern bool MoveWindow(nint window, int x, int y, int width, int height, [MarshalAs(UnmanagedType.Bool)] bool repaint);
         [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] static extern bool ShowWindow(nint window, int command);
@@ -702,7 +705,6 @@ namespace PommeBrowser.Legacy
         [DllImport("user32.dll")] static extern nint GetForegroundWindow();
         [DllImport("user32.dll")] static extern nint GetAncestor(nint window, uint flags);
         [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(nint window, out uint processId);
-        [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] static extern bool AttachThreadInput(uint attach, uint attachTo, [MarshalAs(UnmanagedType.Bool)] bool doAttach);
         [DllImport("user32.dll")] static extern short GetAsyncKeyState(int virtualKey);
         [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] static extern bool GetCursorPos(out Point point);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassNameW(nint window, char* name, int length);
@@ -711,7 +713,6 @@ namespace PommeBrowser.Legacy
         [DllImport("user32.dll", SetLastError = true)] static extern nint SetWindowsHookExW(int hookId, delegate* unmanaged<int, nint, nint, nint> callback, nint module, uint threadId);
         [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] static extern bool UnhookWindowsHookEx(nint hook);
         [DllImport("user32.dll")] static extern nint CallNextHookEx(nint hook, int code, nint wParam, nint lParam);
-        [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern nint GetModuleHandleW(string? name);
     }
 }

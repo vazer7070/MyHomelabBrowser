@@ -61,7 +61,12 @@ PommeBrowser ──(ligne de commande, stdin/stdout JSON)──► PommeFlashHos
   (`WindowWatch`). Sous Windows, un clic dans le
   contenu lui donne le clavier (`WM_MOUSEACTIVATE`, comme Firefox le faisait pour ses modules :
   Flash compte sur le navigateur), et PommeBrowser le reprend quand un de ses champs a le focus.
-  Contenu à sa place dans la page : la page web (WebView2) reste active sous le lecteur, et peut
+  La fenêtre logée par `SetParent` n'a pas la même file de saisie que PommeBrowser (Windows ne
+  relie de lui-même que les fenêtres créées enfants, comme celles de WebView2) : sans liaison, un
+  clic dans le lecteur réactive la fenêtre de PommeBrowser et les touches vont à la page.
+  PommeBrowser relie donc les deux (`AttachThreadInput`) tant que le lecteur est logé
+  (`Win32Embedding`), et un clic dans le lecteur lui donne le clavier même si Windows l'a mis
+  ailleurs. Contenu à sa place dans la page : la page web (WebView2) reste active sous le lecteur, et peut
   lui prendre le clavier. PommeBrowser suit chaque changement de focus de sa fenêtre
   (`EVENT_OBJECT_FOCUS`, ses propres fenêtres comprises) et le rend au lecteur qui l'avait quand il
   lui est pris sans clic de l'utilisateur ailleurs (au plus 10 fois en 5 s : une fenêtre qui le
