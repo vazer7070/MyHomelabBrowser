@@ -111,29 +111,52 @@ public sealed class FlashRectTests
         Assert.Equal((125, 125), (placement.Value.ClientWidth, placement.Value.ClientHeight));
     }
 
+    static FlashContent Content(string swf = "http://www.evony.com/Logo2.swf", string page = "http://na62.evony.com/s2.html", string? id = "flashClient")
+        => new(new Uri(swf), new Uri(page), null, 600, 248, id, Array.Empty<KeyValuePair<string, string>>());
+
     [Fact]
     public void The_tracker_script_posts_positions_on_the_ruffle_channel()
     {
-        string script = RuffleContent.FlashTrackerScript("send(status)");
+        string script = RuffleContent.FlashTrackerScript("send(status)", "f1", Content());
 
         Assert.Contains("send(status)", script);
-        Assert.Contains("'rect:' + message", script);
-        Assert.Contains("'rect:null'", script);
+        // Messages de l'emplacement : « rect:f1:… ».
+        Assert.Contains("const slot = \"f1\";", script);
+        Assert.Contains("post('rect:' + slot + ':' + payload)", script);
+        Assert.Contains("say('null')", script);
         Assert.DoesNotContain("__POST__", script);
         Assert.DoesNotContain("__RECT__", script);
-        // Les fonctions déclarées par le contenu suivent l'élément remplacé par l'emplacement.
-        Assert.Contains("root.__pommeFlashEquip(hole)", script);
+        // Élément retrouvé par son fichier et son identifiant.
+        Assert.Contains("const wanted = { swf: \"http://www.evony.com/Logo2.swf\", id: \"flashClient\" };", script);
+        Assert.DoesNotContain("__WANTED__", script);
+        Assert.DoesNotContain("__FIND__", script);
+        // Les fonctions du contenu suivent l'élément remplacé par l'emplacement.
+        Assert.Contains("root.__pommeFlashEquips && root.__pommeFlashEquips[slot]", script);
         // Contenu retiré par la page : signalé, le lecteur s'arrête.
-        Assert.Contains("'rect:gone'", script);
+        Assert.Contains("say('gone')", script);
         // Document principal : pas de recherche de cadre.
         Assert.Contains("const root = window;", script);
         Assert.DoesNotContain("__ROOT__", script);
+        Assert.DoesNotContain("__SLOT__", script);
+        // Contenu sans identifiant : seul le fichier compte.
+        Assert.Contains("id: null }", RuffleContent.FlashTrackerScript("send(status)", "f2", Content(id: null)));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("f1'")]
+    [InlineData("f1:x")]
+    [InlineData("abcdefghijklmnopq")]
+    public void Slot_keys_are_short_letters_and_digits(string slot)
+    {
+        Assert.Throws<ArgumentException>(() => RuffleContent.FlashTrackerScript("send(status)", slot, Content()));
+        Assert.Throws<ArgumentException>(() => RuffleContent.FlashBridgeScript(slot, Content(), RuffleContent.NewFlashBridgeToken()));
     }
 
     [Fact]
     public void The_tracker_script_finds_a_content_in_a_frame_of_the_page()
     {
-        string script = RuffleContent.FlashTrackerScript("send(status)", new Uri("http://na62.evony.com/s2.html?a='b'"));
+        string script = RuffleContent.FlashTrackerScript("send(status)", "f1", Content(), new Uri("http://na62.evony.com/s2.html?a='b'"));
 
         Assert.DoesNotContain("const root = window;", script);
         Assert.Contains("frameElement", script);
@@ -194,19 +217,25 @@ public sealed class FlashRectTests
     }
 
     [Fact]
-    public void The_bridge_script_gives_call_function_to_the_element_of_the_content()
+    public void The_bridge_script_gives_call_function_and_flash_methods_to_the_element_of_the_content()
     {
         string token = RuffleContent.NewFlashBridgeToken();
-        string script = RuffleContent.FlashBridgeScript("EmpireClient", token);
+        string script = RuffleContent.FlashBridgeScript("f2", Content(id: "EmpireClient"), token);
 
         Assert.Contains("chrome.webview.hostObjects.sync." + RuffleContent.FlashBridgeName, script);
         Assert.Contains("'CallFunction'", script);
-        Assert.Contains("[data-pomme-flash]", script);
-        Assert.Contains("const id = \"EmpireClient\";", script);
-        Assert.DoesNotContain("__BRIDGE__", script);
-        Assert.DoesNotContain("__ID__", script);
-        // Sous WebKitGTK, chaque requête au schéma du pont porte le jeton du lecteur.
-        Assert.Contains("'" + RuffleContent.FlashBridgeScheme + "://call/?t=" + token + "&r=' + encodeURIComponent(", script);
+        // Chaque requête porte la clé de l'emplacement : « f2|requête ».
+        Assert.Contains("const slot = \"f2\";", script);
+        Assert.Contains("const message = slot + '|' + String(request);", script);
+        Assert.Contains("id: \"EmpireClient\" }", script);
+        // Méthodes de Flash (PercentLoaded…), en JSON.
+        Assert.Contains("\"PercentLoaded\"", script);
+        Assert.Contains("JSON.stringify({ method: name, args })", script);
+        Assert.Contains("[data-pomme-flash-hole=\"' + slot + '\"]", script);
+        foreach (string placeholder in new[] { "__BRIDGE__", "__SLOT__", "__WANTED__", "__FIND__", "__METHODS__" })
+            Assert.DoesNotContain(placeholder, script);
+        // Sous WebKitGTK, chaque requête au schéma du pont porte le jeton du pont.
+        Assert.Contains("'" + RuffleContent.FlashBridgeScheme + "://call/?t=" + token + "&r=' + encodeURIComponent(message)", script);
         Assert.DoesNotContain("__TOKEN__", script);
     }
 
@@ -217,7 +246,7 @@ public sealed class FlashRectTests
         Assert.Matches("^[0-9a-f]{32}$", first);
         Assert.NotEqual(first, RuffleContent.NewFlashBridgeToken());
         // Un jeton qui ne serait pas hexadécimal n'entre jamais dans le script.
-        Assert.ThrowsAny<FormatException>(() => RuffleContent.FlashBridgeScript(null, "x'+alert(1)+'"));
+        Assert.ThrowsAny<FormatException>(() => RuffleContent.FlashBridgeScript("f1", Content(), "x'+alert(1)+'"));
     }
 
     [Fact]
@@ -240,12 +269,11 @@ public sealed class FlashRectTests
     }
 
     [Fact]
-    public void The_identifier_of_the_element_is_a_safe_javascript_string()
+    public void The_identifier_and_the_file_of_the_element_are_safe_javascript_strings()
     {
-        string script = RuffleContent.FlashBridgeScript("a\"b</script>'c", RuffleContent.NewFlashBridgeToken());
+        string script = RuffleContent.FlashBridgeScript("f1", Content(swf: "http://a.fr/x.swf?q=</script>", id: "a\"b</script>'c"), RuffleContent.NewFlashBridgeToken());
 
         Assert.DoesNotContain("a\"b", script);
         Assert.DoesNotContain("</script>", script);
-        Assert.Contains("const id = \"\";", RuffleContent.FlashBridgeScript(null, RuffleContent.NewFlashBridgeToken()));
     }
 }

@@ -125,8 +125,14 @@ seulement), ou sous WebKitGTK par une requête synchrone au schéma
 `pomme-flash://call/?t=<jeton>&r=<requête>`, puis par la commande `call` jusqu'à l'objet
 scriptable du module (`NPPVpluginScriptableNPObject`, méthode `CallFunction`). Pour un contenu
 d'un cadre de même origine, le script du pont est injecté dans ce cadre, qui passe par l'objet
-`pommeFlash` du document principal (`window.top`). Le jeton, tiré au hasard pour chaque lecteur,
-n'est connu que du script du pont injecté dans le document du contenu :
+`pommeFlash` du document principal (`window.top`). Chaque requête est précédée de la clé de
+l'emplacement du contenu (`f1|<invoke …>`) : avec plusieurs lecteurs dans la page, elle va au bon.
+L'élément reçoit aussi les **méthodes de Flash** (API JavaScript de Flash Player :
+`PercentLoaded`, `GetVariable`, `SetVariable`, `Play`, `TotalFrames`…, liste fermée,
+`PluginInstance.PageMethods`), souvent utilisées par les écrans de chargement : requête
+`{"method":"PercentLoaded","args":[]}`, appelée par l'hôte sur l'objet scriptable du module, et
+valeur rendue en JSON. Le jeton du pont, tiré au hasard pour chaque page, n'est connu que des
+scripts du pont injectés dans les documents des contenus :
 un cadre d'un autre site (publicité) qui appelle le schéma reçoit un refus (403) et n'atteint pas
 les fonctions du jeu. Une requête de plus de 4 Mio est refusée. La page attend la réponse (8 s au
 plus) ; PommeBrowser ne traite pendant ce temps que les messages que Windows envoie d'autres
@@ -235,16 +241,20 @@ Réglage **Paramètres › Avancé › Moteur Flash intégré (expérimental)**,
 
 1. Le script de détection de Ruffle décrit le contenu Flash principal de la page (le plus
    grand) : adresse du SWF, page, flashvars, taille, identifiant et paramètres
-   (`avalonia/Engine/FlashContent.cs`, données de la page bornées et vérifiées).
+   (`avalonia/Engine/FlashContent.cs`, données de la page bornées et vérifiées) ; il envoie aussi
+   la liste de tous les contenus de chaque document (`contents:`, 16 au plus), même cachés ou
+   minuscules, notée au journal.
 2. Quand Ruffle échoue (ou au clic sur ⚡), l'onglet lance `flash\PommeFlashHost.exe` avec le module
    Flash importé (`avalonia/Legacy/FlashHostProcess.cs`), dans un job Windows qui le ferme avec
    PommeBrowser.
 3. **Contenu du document principal : à sa place dans la page.** Le script de suivi
-   (`RuffleContent.FlashTrackerScript`) remplace l'élément repéré par la détection
-   (`data-pomme-flash`, gardé par Ruffle quand il remplace l'élément) par un emplacement noir de
-   même taille, ce qui arrête Ruffle, puis envoie sa position à chaque changement (défilement,
-   taille de la fenêtre, mise en page, zoom) : `rect:{x, y, w, h, dpr, visible}` en pixels CSS
-   (`FlashRect`, bornée). L'onglet loge la fenêtre de l'hôte dans une vue posée par-dessus la
+   (`RuffleContent.FlashTrackerScript`) retrouve l'élément du contenu par son fichier et son
+   identifiant (l'élément d'origine, ou celui de Ruffle qui l'a remplacé) et le remplace par un
+   emplacement noir de même taille, ce qui arrête Ruffle, puis envoie sa position à chaque
+   changement (défilement, taille de la fenêtre, mise en page, zoom) :
+   `rect:<clé>:{x, y, w, h, dpr, visible}` en pixels CSS (`FlashRect`, bornée). Les tailles que la
+   page donne ensuite à l'élément (`width`, `height`, attributs ou propriétés) passent à
+   l'emplacement, et un élément désigné par son nom (`document.nom`) reste joignable. L'onglet loge la fenêtre de l'hôte dans une vue posée par-dessus la
    page web (`BrowserTab.FlashOverlay.cs`) : la vue couvre la partie visible du contenu, et la
    fenêtre du lecteur y garde sa taille entière, décalée quand le contenu dépasse de la zone
    (`FlashRect.Place`, `Win32Dock.SetClientPlacement`). Les éléments de la page qui passent
@@ -254,13 +264,18 @@ Réglage **Paramètres › Avancé › Moteur Flash intégré (expérimental)**,
    le document principal, trouve le cadre (`RuffleContent.WindowOf`), ajoute à la position celle
    des cadres qui le contiennent (bordure et marge comprises) et joint la zone du cadre où le
    contenu est visible (`clip`) : seule cette partie est montrée.
-5. **Contenu retiré par la page** (logo remplacé par le jeu, cadre rechargé ou retiré ; un
+5. **Tous les contenus de la page, un lecteur chacun**, comme dans un navigateur avec Flash :
+   une page passée au moteur intégré y lit aussi ses autres contenus (dans les documents qu'elle
+   atteint), et ceux qu'elle ajoute ensuite, sans repasser par Ruffle (8 lecteurs au plus). Un
+   jeu peut ainsi charger son client à part, caché ou minuscule, pendant qu'il montre un logo
+   (Evony). Chaque contenu a sa clé d'emplacement (`f1`, `f2`…), gardée d'une relance à l'autre.
+6. **Contenu retiré par la page** (logo remplacé par le jeu, cadre rechargé ou retiré ; un
    emplacement retiré puis remis dans la seconde et demie ne compte pas) : le script envoie
-   `rect:gone`, le lecteur s'arrête, et le contenu que la page met à sa place est lu aussitôt
-   décrit, avec le même module, sans repasser par Ruffle.
-6. **Contenu d'un cadre d'un autre site, ou élément introuvable** : la fenêtre de l'hôte est logée
-   à la place de la page, par le même mécanisme que Basilisk.
-7. ⚡ ou « Lire avec Ruffle » revient à Ruffle pour le site pendant la session. Si le lecteur
+   `rect:<clé>:gone` et ce lecteur s'arrête ; le contenu que la page met à sa place est lu dès
+   qu'il est décrit, avec le même module.
+7. **Contenu d'un cadre d'un autre site, ou contenu principal introuvable** : la fenêtre de l'hôte
+   est logée à la place de la page, par le même mécanisme que Basilisk.
+8. ⚡ ou « Lire avec Ruffle » revient à Ruffle pour le site pendant la session. Si le lecteur
    s'arrête, « Relancer » reprend l'emplacement laissé dans la page.
 
 Sans le réglage, sans module Flash ou sans description du contenu, Basilisk reste le moteur de secours.

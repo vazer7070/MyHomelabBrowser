@@ -24,6 +24,15 @@ namespace PommeBrowser.Engine
         /// <summary>Préfixe du message envoyé par le script de détection.</summary>
         public const string MessagePrefix = "content:";
 
+        /// <summary>
+        /// Préfixe de la liste de tous les contenus d'un document (tableau JSON de descriptions),
+        /// envoyée par le script de détection à chaque changement.
+        /// </summary>
+        public const string ListPrefix = "contents:";
+
+        /// <summary>Contenus d'un document retenus au plus.</summary>
+        public const int MaxListed = 16;
+
         const int MaxFlashVars = 16 * 1024;
         const int MaxParams = 32;
         const int MaxParamValue = 2048;
@@ -58,9 +67,52 @@ namespace PommeBrowser.Engine
             return Area > current.Area;
         }
 
-        /// <summary>Même contenu : même fichier, même document, mêmes flashvars (taille et paramètres mis à part).</summary>
+        /// <summary>
+        /// Même contenu : même fichier, même document, même identifiant d'élément, mêmes flashvars
+        /// (taille et paramètres mis à part).
+        /// </summary>
         public bool IsSameAs(FlashContent other)
-            => Swf == other.Swf && Page == other.Page && string.Equals(FlashVars, other.FlashVars, StringComparison.Ordinal);
+            => Swf == other.Swf && Page == other.Page && string.Equals(Id, other.Id, StringComparison.Ordinal) &&
+               string.Equals(FlashVars, other.FlashVars, StringComparison.Ordinal);
+
+        /// <summary>Clé de l'identité du contenu (voir <see cref="IsSameAs"/>).</summary>
+        public string Identity => string.Join('\n', Page.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped),
+            Swf.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped), Id ?? string.Empty, FlashVars ?? string.Empty);
+
+        /// <summary>Pour le journal : fichier, taille et identifiant.</summary>
+        public override string ToString()
+            => $"{Swf.GetLeftPart(UriPartial.Path)} ({Width}×{Height}{(Id is { Length: > 0 } ? ", id " + Id : string.Empty)})";
+
+        /// <summary>
+        /// Liste des contenus d'un document (« contents: ») : descriptions valides, toutes du même
+        /// document, <see cref="MaxListed"/> au plus ; vide si la liste est invalide.
+        /// </summary>
+        public static IReadOnlyList<FlashContent> ParseList(string json)
+        {
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(json);
+                if (document.RootElement.ValueKind != JsonValueKind.Array)
+                    return Array.Empty<FlashContent>();
+                var list = new List<FlashContent>();
+                foreach (JsonElement item in document.RootElement.EnumerateArray())
+                {
+                    if (list.Count >= MaxListed)
+                        break;
+                    if (Parse(item.GetRawText()) is not { } content)
+                        continue;
+                    if (list.Count > 0 && content.Page != list[0].Page)
+                        return Array.Empty<FlashContent>();
+                    if (!list.Exists(c => c.IsSameAs(content)))
+                        list.Add(content);
+                }
+                return list;
+            }
+            catch (JsonException)
+            {
+                return Array.Empty<FlashContent>();
+            }
+        }
 
         [GeneratedRegex("^[a-z][a-z0-9_-]{0,63}$", RegexOptions.CultureInvariant)]
         private static partial Regex ParamName();

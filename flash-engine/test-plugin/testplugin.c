@@ -123,7 +123,54 @@ static void scriptableDeallocate(NPObject *obj)
 static bool scriptableHasMethod(NPObject *obj, void *name)
 {
     (void)obj;
-    return name == browser->getstringidentifier("CallFunction");
+    return name == browser->getstringidentifier("CallFunction") || name == browser->getstringidentifier("PercentLoaded") ||
+           name == browser->getstringidentifier("GetVariable") || name == browser->getstringidentifier("SetVariable");
+}
+
+/* Variable gardée par SetVariable, rendue par GetVariable (API JavaScript de Flash). */
+static char variableValue[256] = "vide";
+
+static bool stringResult(NPVariant *result, const char *value)
+{
+    uint32_t length = (uint32_t)strlen(value);
+    char *text = (char *)browser->memalloc(length + 1);
+    memcpy(text, value, length + 1);
+    result->type = NPVariantType_String;
+    result->value.stringValue.UTF8Characters = text;
+    result->value.stringValue.UTF8Length = length;
+    return true;
+}
+
+/* Méthodes de Flash appelées par la page : PercentLoaded, GetVariable, SetVariable. */
+static bool flashMethod(void *name, const NPVariant *args, uint32_t count, NPVariant *result)
+{
+    if (name == browser->getstringidentifier("PercentLoaded"))
+    {
+        report("method PercentLoaded count=%u", count);
+        result->type = NPVariantType_Int32;
+        result->value.intValue = 100;
+        return true;
+    }
+    if (name == browser->getstringidentifier("SetVariable"))
+    {
+        if (count < 2 || args[0].type != NPVariantType_String || args[1].type != NPVariantType_String)
+            return false;
+        const NPString *value = &args[1].value.stringValue;
+        uint32_t length = value->UTF8Length < sizeof(variableValue) - 1 ? value->UTF8Length : (uint32_t)sizeof(variableValue) - 1;
+        memcpy(variableValue, value->UTF8Characters, length);
+        variableValue[length] = 0;
+        report("method SetVariable %.*s=%s", (int)args[0].value.stringValue.UTF8Length, args[0].value.stringValue.UTF8Characters, variableValue);
+        result->type = NPVariantType_Void;
+        return true;
+    }
+    if (name == browser->getstringidentifier("GetVariable"))
+    {
+        if (count < 1 || args[0].type != NPVariantType_String)
+            return false;
+        report("method GetVariable");
+        return stringResult(result, variableValue);
+    }
+    return false;
 }
 
 /* ------------------------------------------------------------------ */
@@ -160,7 +207,9 @@ static void cycleStep(void)
 static bool scriptableInvoke(NPObject *obj, void *name, const NPVariant *args, uint32_t count, NPVariant *result)
 {
     (void)obj;
-    if (name != browser->getstringidentifier("CallFunction") || count < 1 || args[0].type != NPVariantType_String)
+    if (name != browser->getstringidentifier("CallFunction"))
+        return flashMethod(name, args, count, result);
+    if (count < 1 || args[0].type != NPVariantType_String)
         return false;
     const NPString *request = &args[0].value.stringValue;
     if (request->UTF8Length > 7 && memcmp(request->UTF8Characters, "boucle:", 7) == 0)

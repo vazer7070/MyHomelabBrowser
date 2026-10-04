@@ -147,11 +147,29 @@ public sealed class HostProtocolTests
         string request = "<invoke name=\"jeu\" returntype=\"javascript\"><arguments><string>été</string></arguments></invoke>";
         await host.SendAsync("call 7 " + JsonSerializer.Serialize(new { request }));
         await host.WaitForAsync(h => h.Events.Any(e => e.GetProperty("event").GetString() == "called"), TimeSpan.FromSeconds(20));
-        JsonElement called = host.Events.Single(e => e.GetProperty("event").GetString() == "called");
+        JsonElement called = host.Events.First(e => e.GetProperty("event").GetString() == "called");
         Assert.Equal(7, called.GetProperty("id").GetInt32());
         Assert.True(called.GetProperty("ok").GetBoolean());
         Assert.Equal("retour:" + request, called.GetProperty("value").GetString());
         Assert.Contains("call main=1 request=" + request, host.Reports);
+
+        // Méthodes de Flash appelées par la page (API JavaScript de Flash Player) : valeur en JSON.
+        // Une méthode hors de cette liste, ou des arguments invalides, sont refusés sans appel.
+        string Method(int id) => host.Events.Single(e => e.GetProperty("event").GetString() == "called" && e.GetProperty("id").GetInt32() == id)
+            .GetProperty("value").GetString()!;
+        await host.SendAsync("call 8 " + JsonSerializer.Serialize(new { request = """{"method":"PercentLoaded","args":[]}""" }));
+        await host.SendAsync("call 9 " + JsonSerializer.Serialize(new { request = """{"method":"SetVariable","args":["/:etat","prêt \"ok\""]}""" }));
+        await host.SendAsync("call 10 " + JsonSerializer.Serialize(new { request = """{"method":"GetVariable","args":["/:etat"]}""" }));
+        await host.SendAsync("call 11 " + JsonSerializer.Serialize(new { request = """{"method":"CallFunction","args":["<invoke/>"]}""" }));
+        await host.SendAsync("call 12 " + JsonSerializer.Serialize(new { request = """{"method":"GetVariable","args":[{"x":1}]}""" }));
+        await host.WaitForAsync(h => h.Events.Count(e => e.GetProperty("event").GetString() == "called") >= 6, TimeSpan.FromSeconds(20));
+        Assert.Equal("100", Method(8));
+        Assert.Equal("null", Method(9));
+        Assert.Equal("prêt \"ok\"", JsonSerializer.Deserialize<string>(Method(10)));
+        Assert.Contains("method SetVariable /:etat=prêt \"ok\"", host.Reports);
+        foreach (int refused in new[] { 11, 12 })
+            Assert.False(host.Events.Single(e => e.GetProperty("event").GetString() == "called" && e.GetProperty("id").GetInt32() == refused).GetProperty("ok").GetBoolean());
+        Assert.DoesNotContain(host.Reports, r => r.StartsWith("call main=1 request=<invoke/>", StringComparison.Ordinal));
 
         // Fin demandée par PommeBrowser : instance détruite, sortie normale.
         await host.SendAsync("close");

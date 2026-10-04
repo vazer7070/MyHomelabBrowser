@@ -25,8 +25,14 @@ namespace PommeBrowser.Views
         Uri? _legacyUri;
         // Contenu lu par le moteur intégré (null : Basilisk).
         FlashContent? _integrated;
-        // Lecteur que la page appelle (ExternalInterface.addCallback), le plus récent de l'onglet.
-        ILegacyBrowser? _flashBridgeHost;
+        // Lecteurs que la page appelle (ExternalInterface.addCallback, méthodes de Flash), par clé :
+        // celle de l'emplacement du contenu dans la page, ou « page » pour le lecteur à la place de la page.
+        readonly Dictionary<string, (FlashHostProcess Host, FlashContent Content)> _flashCallees = new(StringComparer.Ordinal);
+        // Jeton du pont de la page, tant qu'un de ses lecteurs peut être appelé.
+        string? _flashBridgeToken;
+
+        /// <summary>Clé du lecteur lu à la place de la page, pour le pont.</summary>
+        const string WholePageCallee = "page";
 
         /// <summary>Attente d'un appel de la page vers le contenu : l'interface reste figée pendant ce temps.</summary>
         static readonly TimeSpan FlashCallTimeout = TimeSpan.FromSeconds(8);
@@ -123,7 +129,7 @@ namespace PommeBrowser.Views
                 FlashContent content = _flashContent!;
                 // À sa place dans la page si possible, sinon à la place de la page.
                 if (CanPlaceInPage(content) && NextFlashModule(null) is { } module)
-                    OpenFlashInPage(content, module);
+                    PlayPageInIntegratedFlash(content, module);
                 else
                     OpenInIntegratedFlash(content);
             }
@@ -198,46 +204,66 @@ namespace PommeBrowser.Views
                     ShowLegacyPage(running: false);
             };
             WatchFlashResponsiveness(host, () => _basilisk == host, m => OpenInIntegratedFlash(content, m));
-            ConnectFlashHost(host, content);
+            ConnectFlashHost(host, content, WholePageCallee);
             host.SetBackground(!IsSelected);
             ShowEmbeddedLegacy(host, Tr("Ouverture du lecteur Flash…"), Tr("{0} s'ouvre avec votre module Flash.", content.Swf.Host), content.Page);
         }
 
-        /// <summary>Le lecteur agit sur la page comme un greffon de navigateur : pages demandées, scripts, cookies.</summary>
-        void ConnectFlashHost(FlashHostProcess host, FlashContent content)
+        /// <summary>
+        /// Le lecteur agit sur la page comme un greffon de navigateur : pages demandées, scripts,
+        /// cookies, et appels de la page vers lui (<paramref name="key"/> : son emplacement).
+        /// </summary>
+        void ConnectFlashHost(FlashHostProcess host, FlashContent content, string key)
         {
             host.NavigateRequested += OnFlashNavigate;
             host.ScriptRequested += (id, code) => RunFlashScript(host, content, id, code);
             host.CookiesRequested += (id, url, httpOnly) => GiveFlashCookies(host, content, id, url, httpOnly);
             host.CookieReceived += (url, cookie, fromHttp) => KeepFlashCookie(content, url, cookie, fromHttp);
 
-            // Appels de la page vers le contenu : l'élément du contenu reçoit CallFunction.
+            // Appels de la page vers le contenu : l'élément du contenu reçoit CallFunction et les méthodes de Flash.
             if (_engine is { } engine)
             {
-                _flashBridgeHost = host;
-                // Jeton propre à ce lecteur : seul le script du pont, dans le document principal, le connaît.
-                string token = RuffleContent.NewFlashBridgeToken();
-                engine.SetFlashBridge(request => CallFlash(host, content, request), token);
-                InstallFlashBridge(engine, content, token);
-                host.Exited += () =>
+                _flashCallees[key] = (host, content);
+                if (_flashBridgeToken == null)
                 {
-                    if (_flashBridgeHost != host)
-                        return;
-                    _flashBridgeHost = null;
-                    _engine?.SetFlashBridge(null, null);
-                };
+                    // Jeton propre à la page : seuls les scripts du pont, injectés par PommeBrowser, le connaissent.
+                    _flashBridgeToken = RuffleContent.NewFlashBridgeToken();
+                    engine.SetFlashBridge(CallFlash, _flashBridgeToken);
+                }
+                InstallFlashBridge(engine, content, key, _flashBridgeToken);
+                host.Exited += () => ForgetFlashCallee(key, host);
             }
         }
 
-        /// <summary>Appel de la page vers le contenu, sur le fil de l'interface (la page attend la réponse).</summary>
-        string? CallFlash(FlashHostProcess host, FlashContent content, string request)
-            => _flashBridgeHost == host && !host.HasExited && IsReachable(content) ? host.CallFunction(request, FlashCallTimeout) : null;
+        /// <summary>Lecteur arrêté : la page ne l'appelle plus ; sans lecteur, le pont est retiré.</summary>
+        void ForgetFlashCallee(string key, FlashHostProcess host)
+        {
+            if (!_flashCallees.TryGetValue(key, out var callee) || callee.Host != host)
+                return;
+            _flashCallees.Remove(key);
+            if (_flashCallees.Count > 0)
+                return;
+            _flashBridgeToken = null;
+            _engine?.SetFlashBridge(null, null);
+        }
 
-        async void InstallFlashBridge(IEngineTab engine, FlashContent content, string token)
+        /// <summary>
+        /// Appel de la page vers un contenu (« clé|requête », clé de son emplacement), sur le fil de
+        /// l'interface (la page attend la réponse).
+        /// </summary>
+        string? CallFlash(string message)
+        {
+            int separator = message.IndexOf('|', StringComparison.Ordinal);
+            if (separator <= 0 || separator > 16 || !_flashCallees.TryGetValue(message[..separator], out var callee))
+                return null;
+            return !callee.Host.HasExited && IsReachable(callee.Content) ? callee.Host.CallFunction(message[(separator + 1)..], FlashCallTimeout) : null;
+        }
+
+        async void InstallFlashBridge(IEngineTab engine, FlashContent content, string key, string token)
         {
             try
             {
-                await engine.EvaluateAsync(InDocumentOf(content, RuffleContent.FlashBridgeScript(content.Id, token)), isolated: false);
+                await engine.EvaluateAsync(InDocumentOf(content, RuffleContent.FlashBridgeScript(key, content, token)), isolated: false);
             }
             catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or
                                            System.Runtime.InteropServices.COMException or System.Threading.Tasks.TaskCanceledException)
@@ -505,7 +531,7 @@ namespace PommeBrowser.Views
         public void SyncLegacyKeyboard(bool force)
         {
             _legacyView?.SyncKeyboard(force);
-            _overlayView?.SyncKeyboard(force);
+            SyncFlashSlotsKeyboard(force);
         }
 
         void StopBasilisk() => _basilisk?.Close();

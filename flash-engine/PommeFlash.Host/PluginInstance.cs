@@ -383,24 +383,35 @@ namespace PommeFlash.Host
         }
 
         /// <summary>
+        /// Méthodes de Flash que la page peut appeler sur l'élément du contenu, comme dans un
+        /// navigateur (API JavaScript de Flash Player) : avancement du chargement, variables,
+        /// lecture et images. Les fonctions déclarées par ExternalInterface.addCallback passent,
+        /// elles, par CallFunction.
+        /// </summary>
+        public static readonly IReadOnlySet<string> PageMethods = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "PercentLoaded", "GetVariable", "SetVariable", "IsPlaying", "Play", "StopPlay", "Rewind",
+            "Back", "Forward", "GotoFrame", "CurrentFrame", "TotalFrames", "LoadMovie", "Zoom", "Pan",
+            "SetZoomRect", "TCallFrame", "TCallLabel", "TCurrentFrame", "TCurrentLabel", "TGetProperty",
+            "TGetPropertyAsNumber", "TGotoFrame", "TGotoLabel", "TPlay", "TSetProperty", "TStopPlay"
+        };
+
+        /// <summary>Arguments d'une méthode : au plus 8, nombres, textes, booléens ou null.</summary>
+        const int MaxMethodArguments = 8;
+
+        /// <summary>
         /// Appel de la page vers le contenu (fonction déclarée par ExternalInterface.addCallback) :
         /// la page appelle CallFunction avec la requête XML (&lt;invoke name="…"&gt;…) sur l'objet
-        /// scriptable du module, qui répond par du code JavaScript à évaluer dans la page.
+        /// scriptable du module, qui répond par du code JavaScript à évaluer dans la page. Une
+        /// requête JSON ({"method":"PercentLoaded","args":[]}) appelle une méthode de Flash
+        /// (<see cref="PageMethods"/>) : la réponse est sa valeur, en JSON.
         /// </summary>
         public (bool Ok, string? Value) CallFromPage(string request)
         {
-            if (!IsAlive)
+            if (!IsAlive || Scriptable() is not { } scriptable)
                 return (false, null);
-            if (_scriptable == 0)
-            {
-                nint scriptable = 0;
-                if (_library.GetValue(_npp, NPPVariable.PluginScriptableNPObject, &scriptable) != Np.NoError || scriptable == 0)
-                {
-                    HostChannel.Trace("call:none", "Le contenu n'offre pas d'objet scriptable : appels de la page refusés.");
-                    return (false, null);
-                }
-                _scriptable = scriptable;
-            }
+            if (request.StartsWith('{'))
+                return CallMethodFromPage(scriptable, request);
 
             HostChannel.Trace("call:" + HostChannel.Excerpt(request, 80), "Appel de la page vers le contenu : " + HostChannel.Excerpt(request, 160));
             NPVariant argument;
@@ -408,7 +419,7 @@ namespace PommeFlash.Host
             NPVariant result = default;
             try
             {
-                if (!NpObjects.Invoke(_scriptable, NpIdentifiers.FromString("CallFunction"), &argument, 1, &result))
+                if (!NpObjects.Invoke(scriptable, NpIdentifiers.FromString("CallFunction"), &argument, 1, &result))
                     return (false, null);
                 object? value = NpVariants.Read(&result);
                 return (true, value switch
@@ -423,6 +434,99 @@ namespace PommeFlash.Host
             finally
             {
                 NpVariants.Release(&argument);
+                NpVariants.Release(&result);
+            }
+        }
+
+        /// <summary>Objet scriptable du module (NPPVpluginScriptableNPObject), demandé une fois.</summary>
+        nint? Scriptable()
+        {
+            if (_scriptable == 0)
+            {
+                nint scriptable = 0;
+                if (_library.GetValue(_npp, NPPVariable.PluginScriptableNPObject, &scriptable) != Np.NoError || scriptable == 0)
+                {
+                    HostChannel.Trace("call:none", "Le contenu n'offre pas d'objet scriptable : appels de la page refusés.");
+                    return null;
+                }
+                _scriptable = scriptable;
+            }
+            return _scriptable;
+        }
+
+        /// <summary>Méthode de Flash appelée par la page : {"method":"…","args":[…]} ; valeur rendue en JSON.</summary>
+        (bool Ok, string? Value) CallMethodFromPage(nint scriptable, string request)
+        {
+            string? method = null;
+            var args = new List<object?>();
+            try
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(request);
+                System.Text.Json.JsonElement root = document.RootElement;
+                if (root.ValueKind != System.Text.Json.JsonValueKind.Object ||
+                    !root.TryGetProperty("method", out System.Text.Json.JsonElement name) || name.ValueKind != System.Text.Json.JsonValueKind.String)
+                    return (false, null);
+                method = name.GetString();
+                if (root.TryGetProperty("args", out System.Text.Json.JsonElement list))
+                {
+                    if (list.ValueKind != System.Text.Json.JsonValueKind.Array || list.GetArrayLength() > MaxMethodArguments)
+                        return (false, null);
+                    foreach (System.Text.Json.JsonElement item in list.EnumerateArray())
+                    {
+                        switch (item.ValueKind)
+                        {
+                            case System.Text.Json.JsonValueKind.String:
+                                args.Add(item.GetString());
+                                break;
+                            case System.Text.Json.JsonValueKind.Number:
+                                args.Add(item.TryGetInt32(out int whole) ? whole : item.GetDouble());
+                                break;
+                            case System.Text.Json.JsonValueKind.True:
+                            case System.Text.Json.JsonValueKind.False:
+                                args.Add(item.GetBoolean());
+                                break;
+                            case System.Text.Json.JsonValueKind.Null:
+                                args.Add(NpVariants.JsNull);
+                                break;
+                            default:
+                                return (false, null);
+                        }
+                    }
+                }
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return (false, null);
+            }
+            if (method == null || !PageMethods.Contains(method))
+            {
+                HostChannel.Trace("method:" + HostChannel.Excerpt(method, 40), "Méthode de Flash inconnue demandée par la page : " + HostChannel.Excerpt(method, 40));
+                return (false, null);
+            }
+
+            HostChannel.Trace("method:" + method, "Méthode de Flash appelée par la page : " + method + "()");
+            NPVariant* arguments = stackalloc NPVariant[Math.Max(1, args.Count)];
+            for (int i = 0; i < args.Count; i++)
+                NpVariants.Write(&arguments[i], args[i]);
+            NPVariant result = default;
+            try
+            {
+                if (!NpObjects.Invoke(scriptable, NpIdentifiers.FromString(method), arguments, (uint)args.Count, &result))
+                    return (false, null);
+                object? value = NpVariants.Read(&result);
+                return (true, value switch
+                {
+                    string text => "\"" + System.Text.Json.JsonEncodedText.Encode(text).ToString() + "\"",
+                    bool flag => flag ? "true" : "false",
+                    int number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    double number when double.IsFinite(number) => number.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+                    _ => "null"
+                });
+            }
+            finally
+            {
+                for (int i = 0; i < args.Count; i++)
+                    NpVariants.Release(&arguments[i]);
                 NpVariants.Release(&result);
             }
         }

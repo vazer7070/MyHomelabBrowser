@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -30,13 +31,21 @@ namespace PommeBrowser.Engine
         {
             if (channel != MessageHandler || body.StartsWith(RectPrefix, StringComparison.Ordinal))
                 return false;
+            if (body.StartsWith(FlashContent.ListPrefix, StringComparison.Ordinal))
+            {
+                // Liste des contenus : chacun de la page qui l'envoie.
+                IReadOnlyList<FlashContent> list = FlashContent.ParseList(body[FlashContent.ListPrefix.Length..]);
+                return list.Count > 0 && list.All(item => FromFrame(item, frameUrl));
+            }
             if (!body.StartsWith(FlashContent.MessagePrefix, StringComparison.Ordinal))
                 return true;
             // Description de contenu : seulement de la page qu'elle décrit (même origine que le cadre).
-            return FlashContent.Parse(body[FlashContent.MessagePrefix.Length..]) is { } content &&
-                   Uri.TryCreate(frameUrl, UriKind.Absolute, out Uri? frame) &&
-                   Uri.Compare(content.Page, frame, UriComponents.SchemeAndServer, UriFormat.UriEscaped, StringComparison.OrdinalIgnoreCase) == 0;
+            return FlashContent.Parse(body[FlashContent.MessagePrefix.Length..]) is { } content && FromFrame(content, frameUrl);
         }
+
+        static bool FromFrame(FlashContent content, string? frameUrl)
+            => Uri.TryCreate(frameUrl, UriKind.Absolute, out Uri? frame) &&
+               Uri.Compare(content.Page, frame, UriComponents.SchemeAndServer, UriFormat.UriEscaped, StringComparison.OrdinalIgnoreCase) == 0;
         public const string ScriptId = "ruffle-probe";
         public const string PluginScriptId = "ruffle-plugin";
 
@@ -83,7 +92,8 @@ namespace PommeBrowser.Engine
         /// Détection des contenus Flash, puis suivi des lecteurs. <paramref name="post"/> : expression
         /// qui envoie « status » à PommeBrowser (propre au moteur) : detected, loaded, blocked
         /// (Ruffle refusé par la page), playing (un contenu a démarré), failed (Ruffle s'est arrêté
-        /// sur une erreur), et « content: » suivi de la description du contenu principal (FlashContent).
+        /// sur une erreur), « content: » suivi de la description du contenu principal (FlashContent),
+        /// et « contents: » suivi de la liste de tous les contenus du document.
         /// </summary>
         public static string ProbeScript(string baseUrl, string post) => """
             (() => {
@@ -114,6 +124,12 @@ namespace PommeBrowser.Engine
                   if (status.startsWith('__CONTENT__')) {
                     try {
                       if (new URL(JSON.parse(status.slice('__CONTENT__'.length)).page).origin !== event.origin) return;
+                    } catch (e) { return; }
+                  }
+                  if (status.startsWith('__CONTENTS__')) {
+                    try {
+                      const list = JSON.parse(status.slice('__CONTENTS__'.length));
+                      if (!Array.isArray(list) || list.some(item => new URL(item.page).origin !== event.origin)) return;
                     } catch (e) { return; }
                   }
                   direct(status);
@@ -175,12 +191,14 @@ namespace PommeBrowser.Engine
                   for (const m of mutations) for (const node of m.addedNodes) scan(node);
                 }).observe(document.documentElement, { childList: true, subtree: true });
               };
-              // Contenu principal : décrit pour le moteur Flash intégré. Le plus grand, mais un format
-              // publicitaire courant passe après tout autre contenu, et un contenu déclaré minuscule
-              // (pixel de suivi, lecteur audio invisible : width="1") ne compte pas.
+              // Contenus du document, décrits pour le moteur Flash intégré : tous (un jeu peut charger
+              // son client à part, caché ou minuscule, pendant que la page montre un logo), et le
+              // principal : le plus grand, mais un format publicitaire courant passe après tout autre
+              // contenu, et un contenu déclaré minuscule (pixel de suivi, lecteur audio invisible :
+              // width="1") ne compte pas.
               const AD_SIZES = new Set(__AD_SIZES__);
-              const describe = () => {
-                let best = null;
+              const describeAll = () => {
+                const found = [];
                 for (const el of document.querySelectorAll('object, embed, ruffle-object, ruffle-embed')) {
                   if (!isFlash(el)) continue;
                   const parent = el.parentElement;
@@ -205,32 +223,42 @@ namespace PommeBrowser.Engine
                     return /^\d+(px)?$/i.test(value) ? parseInt(value, 10) : null;
                   };
                   const declaredWidth = declared('width'), declaredHeight = declared('height');
-                  if ((declaredWidth !== null && declaredWidth < 16) || (declaredHeight !== null && declaredHeight < 16)) continue;
+                  const tiny = (declaredWidth !== null && declaredWidth < 16) || (declaredHeight !== null && declaredHeight < 16);
                   const rect = el.getBoundingClientRect();
                   const width = declaredWidth ?? Math.round(rect.width);
                   const height = declaredHeight ?? Math.round(rect.height);
-                  const ad = AD_SIZES.has(width + 'x' + height);
-                  if (!best || (ad !== best.ad ? !ad : width * height > best.width * best.height)) best = { el, width, height, ad, swf, params };
+                  found.push({ el, width, height, tiny, ad: AD_SIZES.has(width + 'x' + height), swf, params });
                 }
-                if (!best) return null;
-                const el = best.el;
-                // Repère gardé par Ruffle quand il remplace l'élément : le moteur intégré le retrouve.
-                // Pas de nouveau repère tant que l'emplacement du moteur intégré est dans la page.
-                if (!document.querySelector('[data-pomme-flash-hole]')) el.setAttribute('data-pomme-flash', '');
-                const params = best.params;
+                return found;
+              };
+              const toContent = (item) => {
+                const el = item.el;
+                const params = Object.assign({}, item.params);
                 const flashvars = params.flashvars || el.getAttribute('flashvars') || null;
                 for (const name of ['movie', 'src', 'data', 'flashvars', 'width', 'height', 'type', 'id', 'name', 'classid', 'codebase', 'pluginspage', 'style', 'class']) delete params[name];
-                return { swf: best.swf, page: location.href, flashvars, width: best.width, height: best.height, id: el.id || el.getAttribute('name') || null, params };
+                return { swf: item.swf, page: location.href, flashvars, width: item.width, height: item.height, id: el.id || el.getAttribute('name') || null, params };
               };
-              // Contenu décrit au début, puis de nouveau à chaque lecteur Ruffle créé : un contenu
+              const describe = (found) => {
+                let best = null;
+                for (const item of found) {
+                  if (item.tiny) continue;
+                  if (!best || (item.ad !== best.ad ? !item.ad : item.width * item.height > best.width * best.height)) best = item;
+                }
+                return best ? toContent(best) : null;
+              };
+              // Contenus décrits au début, puis de nouveau à chaque lecteur Ruffle créé : un contenu
               // ajouté plus tard, ou qui n'avait pas encore de taille, est pris en compte.
-              let reported = '';
+              let reported = '', listed = '';
               const report = () => {
                 try {
-                  const content = describe();
-                  if (!content) return;
-                  const json = JSON.stringify(content);
-                  if (json !== reported) { reported = json; post('__CONTENT__' + json); }
+                  const found = describeAll();
+                  const content = describe(found);
+                  if (content) {
+                    const json = JSON.stringify(content);
+                    if (json !== reported) { reported = json; post('__CONTENT__' + json); }
+                  }
+                  const list = JSON.stringify(found.slice(0, 16).map(toContent));
+                  if (found.length && list !== listed) { listed = list; post('__CONTENTS__' + list); }
                 } catch (e) { }
               };
               let observer = null;
@@ -253,6 +281,7 @@ namespace PommeBrowser.Engine
               setTimeout(() => observer.disconnect(), 30000);
             })();
             """.Replace("__BASE__", baseUrl, StringComparison.Ordinal).Replace("__POST__", post, StringComparison.Ordinal)
+               .Replace("__CONTENTS__", FlashContent.ListPrefix, StringComparison.Ordinal)
                .Replace("__CONTENT__", FlashContent.MessagePrefix, StringComparison.Ordinal)
                .Replace("__RECT__", RectPrefix, StringComparison.Ordinal)
                .Replace("__AD_SIZES__", JsonSerializer.Serialize(FlashContent.AdSizes.Select(s => s.Width + "x" + s.Height)), StringComparison.Ordinal);
@@ -263,7 +292,7 @@ namespace PommeBrowser.Engine
         /// <summary>
         /// Expression JavaScript : la fenêtre de <paramref name="page"/>, document principal ou cadre
         /// de même origine (à toute profondeur) ; à défaut, le premier cadre de même origine qui
-        /// contient un contenu repéré (data-pomme-flash) ; null sinon (cadre d'un autre site).
+        /// contient un contenu Flash (ou l'emplacement du moteur intégré) ; null sinon (cadre d'un autre site).
         /// </summary>
         public static string WindowOf(Uri page) => """
             ((page) => {
@@ -272,7 +301,7 @@ namespace PommeBrowser.Engine
               const visit = (w) => {
                 let doc;
                 try { doc = w.document; if (strip(w.location.href) === strip(page)) return w; } catch (e) { return null; }
-                if (!fallback && w !== window && doc.querySelector('[data-pomme-flash]')) fallback = w;
+                if (!fallback && w !== window && doc.querySelector('object, embed, ruffle-object, ruffle-embed, [data-pomme-flash-hole]')) fallback = w;
                 for (let i = 0; i < w.frames.length; i++) { const found = visit(w.frames[i]); if (found) return found; }
                 return null;
               };
@@ -293,66 +322,125 @@ namespace PommeBrowser.Engine
                .Replace("__SCRIPT__", JsonSerializer.Serialize(script), StringComparison.Ordinal);
 
         /// <summary>
-        /// Moteur Flash intégré dans la page : le contenu repéré (data-pomme-flash, posé par le script
-        /// de détection) est remplacé par un emplacement vide de même taille, ce qui arrête Ruffle, et
-        /// sa position dans la fenêtre est envoyée à PommeBrowser à chaque changement (défilement,
-        /// taille, mise en page) : « rect: » suivi de x, y, largeur, hauteur (pixels CSS), du rapport
-        /// pixels CSS / pixels de l'écran et de sa visibilité ; « rect:null » s'il est introuvable,
-        /// « rect:gone » quand la page le retire (contenu remplacé, cadre rechargé).
+        /// Recherche, dans le document « doc », de l'élément d'un contenu (« wanted » : fichier SWF,
+        /// adresse complète, et identifiant de l'élément s'il en a un), tel que le script de
+        /// détection l'a décrit (élément d'origine ou celui de Ruffle qui l'a remplacé) ; « find() »
+        /// rend l'élément à remplacer, null s'il n'est pas (ou plus) dans le document.
+        /// </summary>
+        const string FindContentScript = """
+            const kind = (el) => el.localName.startsWith('ruffle-') ? el.localName.slice(7) : el.localName;
+            const sourceOf = (el) => {
+              if (kind(el) !== 'object') return el.getAttribute('src') || '';
+              if (el.getAttribute('data')) return el.getAttribute('data');
+              const movie = el.querySelector(':scope > param[name="movie" i], :scope > param[name="src" i]');
+              return movie ? movie.getAttribute('value') || '' : '';
+            };
+            const find = () => {
+              for (const el of doc.querySelectorAll('object, embed, ruffle-object, ruffle-embed')) {
+                const source = sourceOf(el);
+                if (!source) continue;
+                let href;
+                try { href = new URL(source, doc.baseURI).href; } catch (e) { continue; }
+                if (href !== wanted.swf) continue;
+                if (wanted.id !== null && (el.id || el.getAttribute('name') || null) !== wanted.id) continue;
+                // Un embed dans un object (forme courante) : l'object entier.
+                const parent = el.parentElement;
+                return kind(el) === 'embed' && parent && kind(parent) === 'object' ? parent : el;
+              }
+              return null;
+            };
+            """;
+
+        /// <summary>Contenu recherché par <see cref="FindContentScript"/> : fichier et identifiant, en JSON.</summary>
+        static string Wanted(FlashContent content)
+            => "{ swf: " + JsonSerializer.Serialize(content.Swf.OriginalString) + ", id: " + (content.Id is { } id ? JsonSerializer.Serialize(id) : "null") + " }";
+
+        /// <summary>
+        /// Moteur Flash intégré dans la page : l'élément du contenu (<paramref name="content"/>,
+        /// retrouvé par son fichier et son identifiant) est remplacé par un emplacement vide de même
+        /// taille, ce qui arrête Ruffle, et sa position dans la fenêtre est envoyée à PommeBrowser à
+        /// chaque changement (défilement, taille, mise en page) : « rect:clé: » (clé de l'emplacement,
+        /// <paramref name="slot"/> : un lecteur par contenu) suivi de x, y, largeur, hauteur (pixels
+        /// CSS), du rapport pixels CSS / pixels de l'écran et de sa visibilité ; « null » s'il est
+        /// introuvable, « gone » quand la page le retire (contenu remplacé, cadre rechargé).
         /// Le contenu peut être dans un cadre de même origine que la page (<paramref name="framePage"/>,
         /// jeu dans une iframe) : sa position tient compte de celle des cadres, et la zone du cadre
-        /// où il est visible est jointe (clip). Relancé, il reprend le même emplacement, sauf si la
-        /// page y a mis un nouveau contenu.
+        /// où il est visible est jointe (clip). Relancé, il reprend le même emplacement. Les tailles
+        /// que la page donne ensuite à l'élément (attributs width et height) passent à l'emplacement.
         /// </summary>
-        public static string FlashTrackerScript(string post, Uri? framePage = null) => """
+        public static string FlashTrackerScript(string post, string slot, FlashContent content, Uri? framePage = null) => """
             (() => {
               const post = (status) => { try { __POST__; } catch (e) { } };
+              const slot = __SLOT__;
+              const say = (payload) => post('__RECT__' + slot + ':' + payload);
               // Fenêtre du contenu : document principal, ou cadre de même origine.
               const root = __ROOT__;
-              if (!root) { post('__RECT__null'); return; }
+              if (!root) { say('null'); return; }
               const doc = root.document;
-              const previous = window.__pommeFlashTracker;
-              const marked = doc.querySelector('[data-pomme-flash]:not([data-pomme-flash-hole])');
-              if (previous && previous.doc === doc && previous.hole.isConnected && !marked) { previous.send(true); return; }
+              const wanted = __WANTED__;
+              __FIND__
+              const trackers = window.__pommeFlashTrackers || (window.__pommeFlashTrackers = {});
+              const previous = trackers[slot];
+              const target = find();
+              if (previous && previous.doc === doc && previous.hole.isConnected && !target) { previous.send(true); return; }
               if (previous) previous.stop();
-              const target = marked || doc.querySelector('[data-pomme-flash]');
-              if (!target) { post('__RECT__null'); return; }
-              let hole = target;
-              if (!target.hasAttribute('data-pomme-flash-hole')) {
-                const box = target.getBoundingClientRect();
-                const style = root.getComputedStyle(target);
-                const length = (name, measured) => {
-                  const value = (target.getAttribute(name) || '').trim();
-                  if (/^\d+(px)?$/i.test(value)) return parseInt(value, 10) + 'px';
-                  if (/^\d+(\.\d+)?%$/.test(value)) return value;
-                  return Math.round(measured) + 'px';
-                };
-                hole = doc.createElement('div');
-                for (const name of ['id', 'class', 'style']) {
-                  if (target.hasAttribute(name)) hole.setAttribute(name, target.getAttribute(name));
+              if (!target) { say('null'); return; }
+              const box = target.getBoundingClientRect();
+              const style = root.getComputedStyle(target);
+              // Taille d'un attribut width/height : pixels, pourcentage, sinon la taille affichée.
+              const length = (value, measured) => {
+                value = String(value == null ? '' : value).trim();
+                if (/^\d+(px)?$/i.test(value)) return parseInt(value, 10) + 'px';
+                if (/^\d+(\.\d+)?%$/.test(value)) return value;
+                return measured === null ? null : Math.round(measured) + 'px';
+              };
+              const hole = doc.createElement('div');
+              for (const name of ['id', 'name', 'class', 'style']) {
+                if (target.hasAttribute(name)) hole.setAttribute(name, target.getAttribute(name));
+              }
+              hole.setAttribute('data-pomme-flash-hole', slot);
+              hole.style.width = length(target.getAttribute('width'), box.width);
+              hole.style.height = length(target.getAttribute('height'), box.height);
+              hole.style.display = style.display === 'inline' ? 'inline-block' : style.display;
+              hole.style.background = '#000';
+              // Comme sur l'élément d'origine : width et height (propriétés et attributs) font sa taille.
+              for (const name of ['width', 'height']) {
+                if (target.hasAttribute(name)) hole.setAttribute(name, target.getAttribute(name));
+                try {
+                  Object.defineProperty(hole, name, {
+                    configurable: true,
+                    get: () => hole.getAttribute(name) || '',
+                    set: (value) => hole.setAttribute(name, String(value))
+                  });
+                } catch (e) { }
+              }
+              new root.MutationObserver(() => {
+                for (const name of ['width', 'height']) {
+                  const size = length(hole.getAttribute(name), null);
+                  if (size && hole.style[name] !== size) hole.style[name] = size;
                 }
-                hole.setAttribute('data-pomme-flash', '');
-                hole.setAttribute('data-pomme-flash-hole', '');
-                hole.style.width = length('width', box.width);
-                hole.style.height = length('height', box.height);
-                hole.style.display = style.display === 'inline' ? 'inline-block' : style.display;
-                hole.style.background = '#000';
-                // Fonctions déclarées par le contenu (ExternalInterface.addCallback) : gardées.
-                if (root.__pommeFlashEquip) {
-                  root.__pommeFlashEquip(target);
-                  root.__pommeFlashEquip(hole);
-                  for (const name of Object.keys(target)) {
-                    if (typeof target[name] === 'function' && !(name in hole)) hole[name] = target[name];
-                  }
-                }
-                target.replaceWith(hole);
+              }).observe(hole, { attributes: true, attributeFilter: ['width', 'height'] });
+              // Méthodes du contenu (pont de PommeBrowser, ExternalInterface.addCallback) : gardées.
+              const equip = root.__pommeFlashEquips && root.__pommeFlashEquips[slot];
+              if (equip) {
+                equip(target);
+                equip(hole);
+              }
+              for (const name of Object.keys(target)) {
+                if (typeof target[name] === 'function' && !(name in hole)) hole[name] = target[name];
+              }
+              target.replaceWith(hole);
+              // Élément désigné par son nom (document.nom, ancienne façon de joindre un contenu) : l'emplacement.
+              const named = target.getAttribute('name');
+              if (named && doc[named] === undefined) {
+                try { Object.defineProperty(doc, named, { configurable: true, writable: true, value: hole }); } catch (e) { }
               }
               // Cadres qui contiennent le contenu, du plus proche au document principal.
               const frames = [];
               for (let w = root; w !== window && w.frameElement; w = w.parent) frames.push(w.frameElement);
               // Contenu retiré par la page (remplacé par un autre, logo puis jeu) ou cadre rechargé,
-              // retiré : « rect:gone », le lecteur s'arrête. Un emplacement déplacé (retiré puis
-              // remis aussitôt) ne compte pas.
+              // retiré : « gone », le lecteur s'arrête. Un emplacement déplacé (retiré puis remis
+              // aussitôt) ne compte pas.
               let detached = 0;
               const isGone = () => {
                 try {
@@ -368,26 +456,26 @@ namespace PommeBrowser.Engine
                 if (stopped) return;
                 if (isGone()) {
                   tracker.stop();
-                  if (window.__pommeFlashTracker === tracker) delete window.__pommeFlashTracker;
-                  post('__RECT__gone');
+                  if (trackers[slot] === tracker) delete trackers[slot];
+                  say('gone');
                   return;
                 }
-                const box = hole.getBoundingClientRect();
-                let x = box.left, y = box.top;
-                let visible = hole.isConnected && box.width > 0 && box.height > 0 && root.getComputedStyle(hole).visibility !== 'hidden';
+                const area = hole.getBoundingClientRect();
+                let x = area.left, y = area.top;
+                let visible = hole.isConnected && area.width > 0 && area.height > 0 && root.getComputedStyle(hole).visibility !== 'hidden';
                 // Zone visible du cadre, ramenée de cadre en cadre dans la fenêtre principale.
                 let clip = null;
                 for (const frame of frames) {
                   const owner = frame.ownerDocument.defaultView;
-                  const area = frame.getBoundingClientRect();
-                  const style = owner.getComputedStyle(frame);
-                  const left = parseFloat(style.paddingLeft) || 0, top = parseFloat(style.paddingTop) || 0;
-                  const dx = area.left + frame.clientLeft + left;
-                  const dy = area.top + frame.clientTop + top;
+                  const bounds = frame.getBoundingClientRect();
+                  const frameStyle = owner.getComputedStyle(frame);
+                  const left = parseFloat(frameStyle.paddingLeft) || 0, top = parseFloat(frameStyle.paddingTop) || 0;
+                  const dx = bounds.left + frame.clientLeft + left;
+                  const dy = bounds.top + frame.clientTop + top;
                   const view = {
                     x: dx, y: dy,
-                    w: Math.max(0, frame.clientWidth - left - (parseFloat(style.paddingRight) || 0)),
-                    h: Math.max(0, frame.clientHeight - top - (parseFloat(style.paddingBottom) || 0))
+                    w: Math.max(0, frame.clientWidth - left - (parseFloat(frameStyle.paddingRight) || 0)),
+                    h: Math.max(0, frame.clientHeight - top - (parseFloat(frameStyle.paddingBottom) || 0))
                   };
                   if (clip) {
                     const cx = Math.max(view.x, clip.x + dx), cy = Math.max(view.y, clip.y + dy);
@@ -398,12 +486,12 @@ namespace PommeBrowser.Engine
                   }
                   x += dx;
                   y += dy;
-                  if (area.width <= 0 || area.height <= 0 || style.visibility === 'hidden') visible = false;
+                  if (bounds.width <= 0 || bounds.height <= 0 || frameStyle.visibility === 'hidden') visible = false;
                 }
                 const message = JSON.stringify(clip
-                  ? { x, y, w: box.width, h: box.height, dpr: window.devicePixelRatio || 1, visible, clip }
-                  : { x, y, w: box.width, h: box.height, dpr: window.devicePixelRatio || 1, visible });
-                if (force || message !== last) { last = message; post('__RECT__' + message); }
+                  ? { x, y, w: area.width, h: area.height, dpr: window.devicePixelRatio || 1, visible, clip }
+                  : { x, y, w: area.width, h: area.height, dpr: window.devicePixelRatio || 1, visible });
+                if (force || message !== last) { last = message; say(message); }
               };
               let queued = false;
               const schedule = () => {
@@ -438,11 +526,20 @@ namespace PommeBrowser.Engine
                   }
                 }
               };
-              window.__pommeFlashTracker = tracker;
+              trackers[slot] = tracker;
               send(true);
             })();
             """.Replace("__POST__", post, StringComparison.Ordinal).Replace("__RECT__", RectPrefix, StringComparison.Ordinal)
+               .Replace("__SLOT__", JsonSerializer.Serialize(SlotKey(slot)), StringComparison.Ordinal)
+               .Replace("__WANTED__", Wanted(content), StringComparison.Ordinal)
+               .Replace("__FIND__", FindContentScript, StringComparison.Ordinal)
                .Replace("__ROOT__", framePage != null ? WindowOf(framePage) : "window", StringComparison.Ordinal);
+
+        /// <summary>Clé d'emplacement sûre : lettres et chiffres, 16 au plus.</summary>
+        static string SlotKey(string slot)
+            => slot is { Length: > 0 and <= 16 } && slot.All(char.IsAsciiLetterOrDigit)
+                ? slot
+                : throw new ArgumentException("Clé d'emplacement invalide.", nameof(slot));
 
         /// <summary>Nom de l'objet de PommeBrowser par lequel la page appelle le contenu du moteur intégré.</summary>
         public const string FlashBridgeName = "pommeFlash";
@@ -494,46 +591,83 @@ namespace PommeBrowser.Engine
         }
 
         /// <summary>
-        /// Appels de la page vers le contenu lu par le moteur intégré (ExternalInterface.addCallback).
-        /// Flash déclare ses fonctions par __flash__addCallback(élément, nom) : elles appellent
-        /// élément.CallFunction(requête XML) et évaluent la réponse. L'élément du contenu (repéré par
-        /// data-pomme-flash ou son identifiant) reçoit ce CallFunction, qui passe par l'objet
-        /// <see cref="FlashBridgeName"/> de PommeBrowser (WebView2) ou par une requête synchrone au
-        /// schéma <see cref="FlashBridgeScheme"/> (WebKitGTK), appelé de façon synchrone comme un greffon.
-        /// Sans réponse, l'appel rend undefined. Le jeton (<see cref="NewFlashBridgeToken"/>)
-        /// accompagne chaque requête au schéma.
+        /// Méthodes de Flash que la page appelle sur l'élément du contenu (API JavaScript de Flash
+        /// Player : avancement du chargement, variables, lecture) ; les mêmes que l'hôte accepte
+        /// (PluginInstance.PageMethods).
         /// </summary>
-        public static string FlashBridgeScript(string? elementId, string token) => """
+        public static readonly IReadOnlyList<string> FlashMethods = new[]
+        {
+            "PercentLoaded", "GetVariable", "SetVariable", "IsPlaying", "Play", "StopPlay", "Rewind",
+            "Back", "Forward", "GotoFrame", "CurrentFrame", "TotalFrames", "LoadMovie", "Zoom", "Pan",
+            "SetZoomRect", "TCallFrame", "TCallLabel", "TCurrentFrame", "TCurrentLabel", "TGetProperty",
+            "TGetPropertyAsNumber", "TGotoFrame", "TGotoLabel", "TPlay", "TSetProperty", "TStopPlay"
+        };
+
+        /// <summary>
+        /// Appels de la page vers un contenu lu par le moteur intégré, comme vers un greffon :
+        /// fonctions déclarées par ExternalInterface.addCallback (Flash les déclare par
+        /// __flash__addCallback(élément, nom) ; elles appellent élément.CallFunction(requête XML) et
+        /// évaluent la réponse) et méthodes de Flash (<see cref="FlashMethods"/>, PercentLoaded…,
+        /// requête {"method":…,"args":[…]} dont la réponse est la valeur en JSON). L'élément du
+        /// contenu (retrouvé par son fichier et son identifiant, puis l'emplacement qui le remplace)
+        /// reçoit ces fonctions ; chaque requête, précédée de la clé de l'emplacement
+        /// (<paramref name="slot"/>, « clé|requête »), passe par l'objet <see cref="FlashBridgeName"/>
+        /// de PommeBrowser (WebView2) ou par une requête synchrone au schéma
+        /// <see cref="FlashBridgeScheme"/> (WebKitGTK), avec le jeton du pont
+        /// (<see cref="NewFlashBridgeToken"/>). Sans réponse, l'appel rend undefined.
+        /// </summary>
+        public static string FlashBridgeScript(string slot, FlashContent content, string token) => """
             (() => {
+              const slot = __SLOT__;
+              const doc = document;
+              const wanted = __WANTED__;
+              __FIND__
               const hostObject = (w) => {
                 try { return w.chrome && w.chrome.webview && w.chrome.webview.hostObjects && w.chrome.webview.hostObjects.sync.__BRIDGE__; }
                 catch (e) { return null; }
               };
-              const call = (request) => {
+              const send = (request) => {
                 try {
+                  const message = slot + '|' + String(request);
                   // Dans un cadre de même origine, l'objet de PommeBrowser est celui du document
                   // principal (WebView2 ne l'offre qu'à lui).
                   const bridge = (window !== window.top && hostObject(window.top)) || hostObject(window);
-                  if (bridge) return bridge.CallFunction(String(request));
+                  if (bridge) return bridge.CallFunction(message);
                   const xhr = new XMLHttpRequest();
-                  xhr.open('GET', '__SCHEME__://call/?t=__TOKEN__&r=' + encodeURIComponent(String(request)), false);
+                  xhr.open('GET', '__SCHEME__://call/?t=__TOKEN__&r=' + encodeURIComponent(message), false);
                   xhr.send();
                   return xhr.status === 200 ? xhr.responseText : undefined;
                 } catch (e) { return undefined; }
               };
+              const call = (request) => send(request);
+              const method = (name) => function () {
+                const args = Array.prototype.slice.call(arguments, 0, 8)
+                  .map(v => typeof v === 'number' || typeof v === 'boolean' || v === null ? v : String(v));
+                const answer = send(JSON.stringify({ method: name, args }));
+                if (answer === undefined || answer === null || answer === '') return undefined;
+                try { const value = JSON.parse(answer); return value === null ? undefined : value; } catch (e) { return undefined; }
+              };
+              const methods = {};
+              for (const name of __METHODS__) methods[name] = method(name);
               const equip = (element) => {
                 if (!element || element.CallFunction === call) return;
-                try { Object.defineProperty(element, 'CallFunction', { value: call, configurable: true, writable: true }); } catch (e) { }
+                try {
+                  Object.defineProperty(element, 'CallFunction', { value: call, configurable: true, writable: true });
+                  for (const name of Object.keys(methods)) Object.defineProperty(element, name, { value: methods[name], configurable: true, writable: true });
+                } catch (e) { }
               };
-              window.__pommeFlashEquip = equip;
-              document.querySelectorAll('[data-pomme-flash]').forEach(equip);
-              const id = __ID__;
-              if (id) equip(document.getElementById(id));
+              const equips = window.__pommeFlashEquips || (window.__pommeFlashEquips = {});
+              equips[slot] = equip;
+              equip(find());
+              document.querySelectorAll('[data-pomme-flash-hole="' + slot + '"]').forEach(equip);
             })();
             """.Replace("__BRIDGE__", FlashBridgeName, StringComparison.Ordinal)
                .Replace("__SCHEME__", FlashBridgeScheme, StringComparison.Ordinal)
                .Replace("__TOKEN__", Convert.ToHexString(Convert.FromHexString(token)).ToLowerInvariant(), StringComparison.Ordinal)
-               .Replace("__ID__", JsonSerializer.Serialize(elementId ?? string.Empty), StringComparison.Ordinal);
+               .Replace("__SLOT__", JsonSerializer.Serialize(SlotKey(slot)), StringComparison.Ordinal)
+               .Replace("__WANTED__", Wanted(content), StringComparison.Ordinal)
+               .Replace("__FIND__", FindContentScript, StringComparison.Ordinal)
+               .Replace("__METHODS__", JsonSerializer.Serialize(FlashMethods), StringComparison.Ordinal);
 
         /// <summary>Fichier demandé par la page (nom seul) : contenu et type, ou null s'il n'existe pas.</summary>
         public static (byte[] Data, string ContentType)? Read(string name, string baseUrl)

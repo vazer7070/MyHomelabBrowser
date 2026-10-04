@@ -130,7 +130,7 @@ namespace PommeBrowser.Views
                     return;
                 Set(ref _isSelected, value);
                 _basilisk?.SetBackground(!value);
-                _overlayHost?.SetBackground(!value);
+                SetFlashSlotsBackground(!value);
             }
         }
 

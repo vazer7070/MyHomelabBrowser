@@ -92,8 +92,12 @@ public sealed class FlashContentTests
 
         // Seule une taille déclarée minuscule écarte un contenu : un contenu encore caché ou en
         // pourcentage (taille affichée nulle) reste candidat.
-        Assert.Contains("if ((declaredWidth !== null && declaredWidth < 16) || (declaredHeight !== null && declaredHeight < 16)) continue;", script);
+        Assert.Contains("const tiny = (declaredWidth !== null && declaredWidth < 16) || (declaredHeight !== null && declaredHeight < 16);", script);
+        Assert.Contains("if (item.tiny) continue;", script);
         Assert.DoesNotContain("if (width < 16 || height < 16) continue;", script);
+        // Tous les contenus du document sont aussi décrits (client d'un jeu caché ou minuscule).
+        Assert.Contains("post('" + FlashContent.ListPrefix + "' + list)", script);
+        Assert.DoesNotContain("__CONTENTS__", script);
         // Les éléments déjà remplacés par Ruffle comptent, et la description est refaite à chaque lecteur.
         Assert.Contains("'object, embed, ruffle-object, ruffle-embed'", script);
         Assert.Contains("report();", script);
@@ -103,8 +107,39 @@ public sealed class FlashContentTests
         Assert.Contains("\"728x90\"", script);
         Assert.Contains("\"160x600\"", script);
         Assert.DoesNotContain("__AD_SIZES__", script);
-        // Emplacement du moteur intégré dans la page : pas de nouveau repère (le contenu lu reste le même).
-        Assert.Contains("if (!document.querySelector('[data-pomme-flash-hole]')) el.setAttribute('data-pomme-flash', '');", script);
+    }
+
+    [Fact]
+    public void A_list_describes_every_content_of_one_document()
+    {
+        const string logo = """{"swf":"http://www.evony.com/Logo2.swf","page":"http://na62.evony.com/s2.html","width":600,"height":248,"id":"flashClient"}""";
+        const string client = """{"swf":"http://cdn.evony.com/EvonyClient.swf","page":"http://na62.evony.com/s2.html","width":1,"height":1,"id":"client"}""";
+
+        IReadOnlyList<FlashContent> list = FlashContent.ParseList("[" + logo + "," + client + "," + logo + ",{\"swf\":\"file:///c:/x.swf\"}]");
+
+        // Les deux contenus, une fois chacun ; une description invalide est ignorée.
+        Assert.Equal(new[] { "flashClient", "client" }, list.Select(c => c.Id));
+        Assert.Equal(new Uri("http://cdn.evony.com/EvonyClient.swf"), list[1].Swf);
+        // Contenus de documents différents : liste refusée ; pas un tableau : vide.
+        Assert.Empty(FlashContent.ParseList("[" + logo + "," + logo.Replace("s2.html", "s3.html") + "]"));
+        Assert.Empty(FlashContent.ParseList(logo));
+        Assert.Empty(FlashContent.ParseList("pas du json"));
+        // Bornée.
+        string many = "[" + string.Join(",", Enumerable.Range(0, 40).Select(i => logo.Replace("Logo2", "Logo" + i))) + "]";
+        Assert.Equal(FlashContent.MaxListed, FlashContent.ParseList(many).Count);
+    }
+
+    [Fact]
+    public void Two_elements_of_the_same_file_with_different_identifiers_are_different_contents()
+    {
+        FlashContent first = Sized(600, 248) with { Id = "a" };
+
+        Assert.True(first.IsSameAs(first with { Width = 800 }));
+        Assert.False(first.IsSameAs(first with { Id = "b" }));
+        Assert.False(first.IsSameAs(first with { Id = null }));
+        Assert.Equal(first.Identity, (first with { Height = 10 }).Identity);
+        Assert.NotEqual(first.Identity, (first with { Id = "b" }).Identity);
+        Assert.Equal("https://jeu.exemple.com/jeu.swf (600×248, id a)", first.ToString());
     }
 
     [Fact]
@@ -119,6 +154,11 @@ public sealed class FlashContentTests
         // Un cadre d'un autre site ne décrit pas le contenu d'une autre page (cookies de la page).
         Assert.False(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, content, "https://pub.exemple.net/cadre.html"));
         Assert.False(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, content, null));
+        // Liste des contenus : chacun de la page du cadre.
+        string list = FlashContent.ListPrefix + "[" + content["content:".Length..] + "]";
+        Assert.True(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, list, frame));
+        Assert.False(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, list, "https://pub.exemple.net/cadre.html"));
+        Assert.False(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, FlashContent.ListPrefix + "[]", frame));
         // Position de suivi : document principal seulement ; autres canaux : jamais depuis un cadre.
         Assert.False(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, RuffleContent.RectPrefix + "{}", frame));
         Assert.False(RuffleContent.IsFrameMessage("pommeCredentials", "{}", frame));

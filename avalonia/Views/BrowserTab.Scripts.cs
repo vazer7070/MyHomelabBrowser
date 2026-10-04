@@ -95,12 +95,6 @@ namespace PommeBrowser.Views
             {
                 if (PommeBrowser.Engine.FlashContent.Parse(status[PommeBrowser.Engine.FlashContent.MessagePrefix.Length..]) is not { } content)
                     return;
-                // Moteur intégré en cours dans la page : contenu qui prend la place du sien.
-                if (NoteFlashContent(content))
-                {
-                    RaiseChanged();
-                    return;
-                }
                 if (content.IsPreferredOver(_flashContent))
                 {
                     if (_flashContent?.Swf != content.Swf)
@@ -108,6 +102,11 @@ namespace PommeBrowser.Views
                     _flashContent = content;
                     RaiseChanged();
                 }
+                return;
+            }
+            if (status.StartsWith(PommeBrowser.Engine.FlashContent.ListPrefix, StringComparison.Ordinal))
+            {
+                OnFlashContents(status[PommeBrowser.Engine.FlashContent.ListPrefix.Length..]);
                 return;
             }
             if (status.StartsWith(RuffleContent.RectPrefix, StringComparison.Ordinal))
@@ -138,9 +137,9 @@ namespace PommeBrowser.Views
         /// </summary>
         void OnRuffleFailed()
         {
-            // Contenu déjà lu par le moteur intégré dans la page, ou contenu retiré par la page dont le
-            // remplaçant sera lu par lui dès qu'il est décrit : l'erreur d'un lecteur Ruffle n'y change rien.
-            if (Page != TabPage.Web || HasFlashOverlay || _successorModule != null || !BasiliskInstall.IsOpenable(WebUrl, out Uri uri))
+            // Page déjà passée au moteur intégré (ses contenus, même ajoutés ensuite, sont lus par
+            // lui) : l'erreur d'un lecteur Ruffle n'y change rien.
+            if (Page != TabPage.Web || HasFlashOverlay || _inPageModule != null || !BasiliskInstall.IsOpenable(WebUrl, out Uri uri))
                 return;
 
             RuntimeLogBuffer.Append("[Ruffle] Contenu Flash illisible sur " + uri.Host);
