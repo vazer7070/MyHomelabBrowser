@@ -45,6 +45,8 @@ namespace PommeBrowser.Engine.WebView2
         double _zoom = 1;
         string? _navigationUri;
         bool _certificateShown;
+        // La navigation en cours affiche la page d'erreur de WebView2.
+        bool _errorPage;
         string? _hoveredLink;
         bool _findAttached;
 
@@ -239,6 +241,7 @@ namespace PommeBrowser.Engine.WebView2
         {
             _navigationUri = e.Uri;
             _certificateShown = false;
+            _errorPage = false;
             _loading = true;
             _progress = 0.1;
             StateChanged?.Invoke();
@@ -249,6 +252,7 @@ namespace PommeBrowser.Engine.WebView2
         {
             _progress = 0.5;
             // Page d'erreur de WebView2 : la page de PommeBrowser la remplace (voir OnNavigationCompleted).
+            _errorPage = e.IsErrorPage;
             if (!e.IsErrorPage)
                 LoadChanged?.Invoke(LoadStage.Committed, Uri);
             StateChanged?.Invoke();
@@ -263,7 +267,9 @@ namespace PommeBrowser.Engine.WebView2
             {
                 LoadChanged?.Invoke(LoadStage.Finished, Uri);
             }
-            else if (!_certificateShown && IsNetworkFailure(e))
+            // WebView2 affiche sa propre page d'erreur : c'est un échec, même quand son code est
+            // « inconnu » (réponse TLS invalide, ERR_SSL_PROTOCOL_ERROR…).
+            else if (!_certificateShown && (IsNetworkFailure(e) || (_errorPage && e.WebErrorStatus != CoreWebView2WebErrorStatus.OperationCanceled)))
             {
                 string uri = _navigationUri ?? Uri ?? string.Empty;
                 LoadFailed?.Invoke(uri, DescribeError(e.WebErrorStatus));
@@ -303,6 +309,7 @@ namespace PommeBrowser.Engine.WebView2
                 => Tr("Le certificat du site a été refusé."),
             CoreWebView2WebErrorStatus.ErrorHttpInvalidServerResponse => Tr("Le serveur a envoyé une réponse invalide."),
             CoreWebView2WebErrorStatus.RedirectFailed => Tr("Trop de redirections, ou redirection impossible."),
+            CoreWebView2WebErrorStatus.Unknown => Tr("La connexion au serveur a échoué (réponse invalide ou connexion sécurisée impossible)."),
             _ => Tr("Erreur réseau ({0}).", status.ToString())
         };
 

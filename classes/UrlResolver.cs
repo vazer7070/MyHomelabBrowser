@@ -93,6 +93,23 @@ namespace MyHomelabBrowser.classes
             return "https://" + text;
         }
 
+        /// <summary>
+        /// Adresse saisie sans schéma (« exemple.com/page ») et ouverte en https:// par
+        /// <see cref="TryResolveUrl"/>, sur le port par défaut : comme Chrome et Firefox, elle peut
+        /// revenir en http:// si le site ne propose pas HTTPS. Faux pour une adresse avec son
+        /// schéma (https:// tapé exprès), un port explicite ou une recherche.
+        /// </summary>
+        public static bool IsImplicitHttps(string? input)
+        {
+            string text = (input ?? string.Empty).Trim();
+            if (text.Contains("://", StringComparison.Ordinal) || TryResolveUrl(text) is not { } url ||
+                !Uri.TryCreate(url, UriKind.Absolute, out Uri? uri))
+            {
+                return false;
+            }
+            return uri.Scheme == Uri.UriSchemeHttps && uri.IsDefaultPort;
+        }
+
         public static string ResolveOrSearch(string input, BrowserSettings.SearchEngine engine)
             => TryResolveUrl(input) ?? BuildSearchUrl(input, engine);
 

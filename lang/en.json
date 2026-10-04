@@ -637,6 +637,7 @@
   "La clé est vide.": "The key is empty.",
   "La compatibilité apprise a été réinitialisée.": "The learned compatibility has been reset.",
   "La connexion a été interrompue.": "The connection was interrupted.",
+  "La connexion au serveur a échoué (réponse invalide ou connexion sécurisée impossible).": "Could not connect to the server (invalid response or secure connection impossible).",
   "La connexion à {0} est chiffrée avec un certificat que vous avez approuvé vous-même.": "The connection to {0} is encrypted with a certificate you trusted yourself.",
   "La connexion à {0} est chiffrée et son certificat est valide.": "The connection to {0} is encrypted and its certificate is valid.",
   "La connexion à {0} n'est pas chiffrée : évitez d'y saisir des mots de passe.": "The connection to {0} is not encrypted: avoid entering passwords there.",

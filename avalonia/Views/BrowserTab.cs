@@ -377,8 +377,12 @@ namespace PommeBrowser.Views
         // Navigation
         // ---------------------------------------------------------------
 
-        /// <summary>Ouvre une adresse (déjà résolue) dans l'onglet.</summary>
-        public void Navigate(string url)
+        /// <summary>
+        /// Ouvre une adresse (déjà résolue) dans l'onglet. <paramref name="httpsFallback"/> : adresse
+        /// saisie sans schéma et ouverte en https:// (voir UrlResolver.IsImplicitHttps), qui revient
+        /// en http:// si le site ne propose pas HTTPS.
+        /// </summary>
+        public void Navigate(string url, bool httpsFallback = false)
         {
             _pendingTitle = null;
             if (WantsBasilisk(url, out Uri? legacy))
@@ -386,7 +390,11 @@ namespace PommeBrowser.Views
                 OpenInBasilisk(legacy);
                 return;
             }
-            TryUpgrade(ref url);
+            if (!TryUpgrade(ref url) && httpsFallback &&
+                System.Uri.TryCreate(url, UriKind.Absolute, out Uri? typed) && typed.Scheme == System.Uri.UriSchemeHttps)
+            {
+                _upgradedHosts.Add(typed.IdnHost);
+            }
             ShowWeb();
             if (_engine != null)
             {
@@ -571,9 +579,10 @@ namespace PommeBrowser.Views
 
         void OnLoadFailed(string url, string message)
         {
-            if (System.Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) && _upgradedHosts.Contains(uri.IdnHost))
+            if (System.Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) && _upgradedHosts.Contains(uri.IdnHost) &&
+                uri.Scheme == System.Uri.UriSchemeHttps)
             {
-                ShowHttpsUnavailable(uri);
+                FallBackToHttp(uri, message);
                 return;
             }
 
@@ -583,19 +592,21 @@ namespace PommeBrowser.Views
                 (Tr("Retour"), false, GoBackOrHome));
         }
 
-        void ShowHttpsUnavailable(Uri httpsUri)
+        /// <summary>
+        /// HTTPS essayé par PommeBrowser (adresse http:// passée en https://, ou saisie sans
+        /// schéma) sur un site qui ne le propose pas (pas de réponse, réponse TLS invalide,
+        /// certificat refusé) : la page est ouverte en http://, comme le font Chrome et Firefox,
+        /// sans page d'erreur. La barre d'adresse la montre « non sécurisée ». Le site n'est plus
+        /// essayé en HTTPS pendant la session.
+        /// </summary>
+        void FallBackToHttp(Uri httpsUri, string reason)
         {
             var http = new UriBuilder(httpsUri) { Scheme = System.Uri.UriSchemeHttp, Port = -1 }.Uri;
             string host = httpsUri.IdnHost;
-            ShowError(http.AbsoluteUri, Tr("Ce site ne propose pas de connexion sécurisée"),
-                Tr("{0} n'a pas répondu en HTTPS. En HTTP, ce que vous envoyez et recevez peut être lu ou modifié sur le réseau.", host),
-                (Tr("Retour"), true, GoBackOrHome),
-                (Tr("Continuer en HTTP"), false, () =>
-                {
-                    _app.SiteSecurity.Set(host, SiteSecurityStore.InsecureHttp, true);
-                    _upgradedHosts.Remove(host);
-                    Navigate(http.AbsoluteUri);
-                }));
+            _upgradedHosts.Remove(host);
+            _app.HttpOnlyHosts.Add(host);
+            RuntimeLogBuffer.Append($"[HTTPS] {host} ne répond pas en HTTPS ({reason}) : ouvert en HTTP.");
+            Navigate(http.AbsoluteUri);
         }
 
         void OnCertificateError(CertificateProblem problem)
@@ -603,10 +614,10 @@ namespace PommeBrowser.Views
             if (!System.Uri.TryCreate(problem.Uri, UriKind.Absolute, out Uri? uri))
                 return;
 
-            // Passage automatique en HTTPS sur un site sans certificat valide : on propose HTTP.
-            if (_upgradedHosts.Contains(uri.IdnHost))
+            // HTTPS essayé par PommeBrowser sur un site sans certificat valide : retour en HTTP.
+            if (_upgradedHosts.Contains(uri.IdnHost) && uri.Scheme == System.Uri.UriSchemeHttps)
             {
-                ShowHttpsUnavailable(uri);
+                FallBackToHttp(uri, "certificat refusé");
                 return;
             }
 

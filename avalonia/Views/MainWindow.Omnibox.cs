@@ -142,11 +142,14 @@ namespace PommeBrowser.Views
                 return;
             }
 
-            string url = UrlResolver.ResolveOrSearch(input.TrimStart('*').Trim(), App.Settings.Search);
+            string typed = input.TrimStart('*').Trim();
+            string url = UrlResolver.ResolveOrSearch(typed, App.Settings.Search);
+            // Saisie sans schéma ouverte en https:// : retour en http:// si le site ne propose pas HTTPS.
+            bool httpsFallback = UrlResolver.IsImplicitHttps(typed);
             if (newTab || _selected == null)
-                NewTab(url, select: true);
+                NewTab(url, select: true, httpsFallback: httpsFallback);
             else
-                _selected.Navigate(url);
+                _selected.Navigate(url, httpsFallback);
             _selected?.FocusPage();
         }
 

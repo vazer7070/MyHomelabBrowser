@@ -85,12 +85,12 @@ namespace PommeBrowser.Views
         // ---------------------------------------------------------------
 
         /// <summary>Nouvel onglet : adresse donnée, ou page d'accueil.</summary>
-        public BrowserTab NewTab(string? url, bool select, bool isPrivate = false, int? index = null)
+        public BrowserTab NewTab(string? url, bool select, bool isPrivate = false, int? index = null, bool httpsFallback = false)
         {
             var tab = new BrowserTab(this, isPrivate);
             AddTab(tab, index ?? _tabs.Count);
             if (url != null)
-                tab.Navigate(url);
+                tab.Navigate(url, httpsFallback);
             else
                 tab.ShowHome();
             if (select || _selected == null)
