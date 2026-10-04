@@ -86,6 +86,9 @@ public sealed class FlashContentTests
         // Les éléments déjà remplacés par Ruffle comptent, et la description est refaite à chaque lecteur.
         Assert.Contains("'object, embed, ruffle-object, ruffle-embed'", script);
         Assert.Contains("report();", script);
+        // Messages d'un cadre relayés par le document principal.
+        Assert.Contains("window.top.postMessage({ __pommeRuffle: String(status) }, '*')", script);
+        Assert.DoesNotContain("__RECT__", script);
         Assert.Contains("\"728x90\"", script);
         Assert.Contains("\"160x600\"", script);
         Assert.DoesNotContain("__AD_SIZES__", script);
@@ -94,12 +97,17 @@ public sealed class FlashContentTests
     [Fact]
     public void Only_ruffle_messages_about_the_content_are_accepted_from_a_frame()
     {
-        // Jeu dans un cadre (Evony…) : contenu décrit, lecture, échec de Ruffle.
-        Assert.True(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, "content:{}"));
-        Assert.True(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, "failed"));
-        Assert.True(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, "playing"));
+        const string frame = "http://na62.evony.com/s2.html";
+        string content = "content:" + """{"swf":"http://www.evony.com/Logo2.swf","page":"http://na62.evony.com/s2.html","width":550,"height":400}""";
+        // Jeu dans un cadre (Evony…) : contenu de sa propre page, lecture, échec de Ruffle.
+        Assert.True(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, content, frame));
+        Assert.True(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, "failed", frame));
+        Assert.True(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, "playing", frame));
+        // Un cadre d'un autre site ne décrit pas le contenu d'une autre page (cookies de la page).
+        Assert.False(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, content, "https://pub.exemple.net/cadre.html"));
+        Assert.False(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, content, null));
         // Position de suivi : document principal seulement ; autres canaux : jamais depuis un cadre.
-        Assert.False(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, RuffleContent.RectPrefix + "{}"));
-        Assert.False(RuffleContent.IsFrameMessage("pommeCredentials", "{}"));
+        Assert.False(RuffleContent.IsFrameMessage(RuffleContent.MessageHandler, RuffleContent.RectPrefix + "{}", frame));
+        Assert.False(RuffleContent.IsFrameMessage("pommeCredentials", "{}", frame));
     }
 }

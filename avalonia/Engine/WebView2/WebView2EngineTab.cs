@@ -866,7 +866,7 @@ namespace PommeBrowser.Engine.WebView2
                 string body = root.TryGetProperty("body", out JsonElement bodyElement)
                     ? bodyElement.ValueKind == JsonValueKind.String ? bodyElement.GetString() ?? string.Empty : bodyElement.GetRawText()
                     : string.Empty;
-                if (fromFrame && !RuffleContent.IsFrameMessage(channel, body))
+                if (fromFrame && !RuffleContent.IsFrameMessage(channel, body, e.Source))
                     return;
                 ScriptMessage?.Invoke(channel, body);
             }

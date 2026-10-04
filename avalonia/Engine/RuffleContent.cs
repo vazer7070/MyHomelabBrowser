@@ -22,12 +22,21 @@ namespace PommeBrowser.Engine
         public const string MessageHandler = "pommeRuffle";
 
         /// <summary>
-        /// Message accepté d'un cadre (iframe) de la page : ceux de Ruffle sur le contenu Flash
-        /// (description, lecture, échec), pas la position de suivi (document principal seulement)
-        /// ni les autres canaux.
+        /// Message accepté d'un cadre (iframe) de la page, d'adresse <paramref name="frameUrl"/> : ceux
+        /// de Ruffle sur le contenu Flash (description de sa propre page, lecture, échec), pas la
+        /// position de suivi (document principal seulement) ni les autres canaux.
         /// </summary>
-        public static bool IsFrameMessage(string channel, string body)
-            => channel == MessageHandler && !body.StartsWith(RectPrefix, StringComparison.Ordinal);
+        public static bool IsFrameMessage(string channel, string body, string? frameUrl)
+        {
+            if (channel != MessageHandler || body.StartsWith(RectPrefix, StringComparison.Ordinal))
+                return false;
+            if (!body.StartsWith(FlashContent.MessagePrefix, StringComparison.Ordinal))
+                return true;
+            // Description de contenu : seulement de la page qu'elle décrit (même origine que le cadre).
+            return FlashContent.Parse(body[FlashContent.MessagePrefix.Length..]) is { } content &&
+                   Uri.TryCreate(frameUrl, UriKind.Absolute, out Uri? frame) &&
+                   Uri.Compare(content.Page, frame, UriComponents.SchemeAndServer, UriFormat.UriEscaped, StringComparison.OrdinalIgnoreCase) == 0;
+        }
         public const string ScriptId = "ruffle-probe";
         public const string PluginScriptId = "ruffle-plugin";
 
@@ -83,7 +92,33 @@ namespace PommeBrowser.Engine
               const FLASH_TYPES = ['application/x-shockwave-flash', 'application/futuresplash', 'application/vnd.adobe.flash.movie'];
               const CLSID = 'clsid:d27cdb6e-ae6d-11cf-96b8-444553540000';
               const PLAYERS = 'ruffle-object, ruffle-embed, ruffle-player';
-              const post = (status) => { try { __POST__; } catch (e) { } };
+              const direct = (status) => { try { __POST__; } catch (e) { } };
+              // Dans un cadre (jeu dans une iframe) : message envoyé directement, et aussi relayé par le
+              // document principal, qui le transmet à PommeBrowser (le moteur ne remet pas toujours
+              // ceux d'un cadre). Doublons sans effet.
+              const post = (status) => {
+                direct(status);
+                if (window !== window.top) {
+                  try { window.top.postMessage({ __pommeRuffle: String(status) }, '*'); } catch (e) { }
+                }
+              };
+              // Document principal : relais des messages de ses cadres. Une description de contenu n'est
+              // acceptée que de la page qu'elle décrit (même origine que le cadre qui l'envoie) ; jamais
+              // de position de suivi.
+              if (window === window.top) {
+                addEventListener('message', (event) => {
+                  const data = event.data;
+                  if (!data || typeof data.__pommeRuffle !== 'string' || event.source === window) return;
+                  const status = data.__pommeRuffle;
+                  if (status.startsWith('__RECT__')) return;
+                  if (status.startsWith('__CONTENT__')) {
+                    try {
+                      if (new URL(JSON.parse(status.slice('__CONTENT__'.length)).page).origin !== event.origin) return;
+                    } catch (e) { return; }
+                  }
+                  direct(status);
+                });
+              }
               const isSwf = (value) => {
                 try { const path = new URL(value, document.baseURI).pathname.toLowerCase(); return path.endsWith('.swf') || path.endsWith('.spl'); }
                 catch (e) { return false; }
@@ -218,6 +253,7 @@ namespace PommeBrowser.Engine
             })();
             """.Replace("__BASE__", baseUrl, StringComparison.Ordinal).Replace("__POST__", post, StringComparison.Ordinal)
                .Replace("__CONTENT__", FlashContent.MessagePrefix, StringComparison.Ordinal)
+               .Replace("__RECT__", RectPrefix, StringComparison.Ordinal)
                .Replace("__AD_SIZES__", JsonSerializer.Serialize(FlashContent.AdSizes.Select(s => s.Width + "x" + s.Height)), StringComparison.Ordinal);
 
         /// <summary>Préfixe des messages de position du contenu lu par le moteur intégré.</summary>

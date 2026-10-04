@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Flash;
 using MyHomelabBrowser.classes.Profiles.Credentials;
@@ -95,6 +96,8 @@ namespace PommeBrowser.Views
                 if (PommeBrowser.Engine.FlashContent.Parse(status[PommeBrowser.Engine.FlashContent.MessagePrefix.Length..]) is { } content &&
                     content.IsPreferredOver(_flashContent))
                 {
+                    if (_flashContent?.Swf != content.Swf)
+                        RuntimeLogBuffer.Append($"[Flash] Contenu de la page : {content.Swf.GetLeftPart(UriPartial.Path)} ({content.Width}×{content.Height}){(IsTopDocument(content) ? string.Empty : ", dans un cadre")}.");
                     _flashContent = content;
                     RaiseChanged();
                 }
@@ -137,6 +140,7 @@ namespace PommeBrowser.Views
                              HasFlashFallback && !_app.SessionRuffleHosts.Contains(uri.Host);
             if (!automatic)
             {
+                RuntimeLogBuffer.Append("[Ruffle] Pas de bascule d'office : " + FallbackDiagnosis(uri) + ".");
                 OfferFlashFallback(Tr("Ruffle n'a pas pu lire le contenu Flash de cette page."));
                 return;
             }
@@ -157,6 +161,27 @@ namespace PommeBrowser.Views
                 Window.ShowToast(Tr("Ruffle n'a pas pu lire ce contenu : {0} s'ouvre dans Basilisk. L'ouvrir toujours ainsi ?", uri.Host),
                     Tr("Toujours"), () => FlashDomainRules.SetRule(uri, FlashRuleMode.Legacy), timeout: 10);
             }
+        }
+
+        /// <summary>Pourquoi la bascule d'office n'a pas lieu (journal).</summary>
+        string FallbackDiagnosis(Uri uri)
+        {
+            var reasons = new List<string>();
+            if (!_app.Settings.FlashAutoFallback)
+                reasons.Add("bascule d'office désactivée");
+            if (_rufflePlaying)
+                reasons.Add("un autre contenu est déjà lu par Ruffle");
+            if (_app.SessionRuffleHosts.Contains(uri.Host))
+                reasons.Add("retour à Ruffle choisi pour ce site");
+            if (!HasFlashFallback)
+            {
+                string integrated = !_app.Settings.FlashIntegratedEngine ? "désactivé"
+                    : _flashContent == null ? "aucun contenu décrit par la page"
+                    : NextFlashModule(null) == null ? "aucun module Flash" : "indisponible sur ce système";
+                string basilisk = !_app.BasiliskAllowed ? "désactivé" : "introuvable";
+                reasons.Add($"aucun moteur de secours (moteur intégré : {integrated} ; Basilisk : {basilisk})");
+            }
+            return string.Join(", ", reasons);
         }
 
         /// <summary>
