@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -32,8 +31,7 @@ namespace PommeBrowser.Legacy
         // Écritures sur l'entrée de l'hôte (réponses aux scripts, fermeture) : une à la fois.
         readonly SemaphoreSlim _input = new(1, 1);
         Task _reading = Task.CompletedTask;
-        // Scripts de la page que l'hôte attend (eval), et appels de la page vers le contenu en cours.
-        readonly ConcurrentDictionary<int, byte> _pendingScripts = new();
+        // Appels de la page vers le contenu en cours.
         readonly Dictionary<int, CallSlot> _calls = new();
         int _nextCall;
         volatile bool _calling;
@@ -224,12 +222,14 @@ namespace PommeBrowser.Legacy
                         if (_calling)
                         {
                             // La page attend la réponse du contenu : elle ne peut pas exécuter de script
-                            // maintenant. Refus immédiat, sans quoi chacun attendrait l'autre.
-                            Reply(id, false, null);
-                            RuntimeLogBuffer.Append("[Flash] Script du contenu refusé pendant un appel de la page vers le contenu.");
+                            // maintenant, et chacun attendrait l'autre. Le contenu reçoit « undefined »
+                            // aussitôt, et le script est exécuté dès que l'appel de la page a répondu
+                            // (la plupart des ExternalInterface.call n'attendent pas de résultat).
+                            Reply(id, true, DeferredResult(evaluated));
+                            Dispatcher.UIThread.Post(() => ScriptRequested?.Invoke(null, evaluated));
+                            RuntimeLogBuffer.Append("[Flash] Script du contenu demandé pendant un appel de la page : exécuté après cet appel.");
                             break;
                         }
-                        _pendingScripts[id] = 0;
                         Dispatcher.UIThread.Post(() =>
                         {
                             if (ScriptRequested is { } handler)
@@ -242,6 +242,15 @@ namespace PommeBrowser.Legacy
                         bool withHttpOnly = root.TryGetProperty("http", out JsonElement httpOnly) && httpOnly.ValueKind == JsonValueKind.True;
                         if (!Uri.TryCreate(Text(root, "url"), UriKind.Absolute, out Uri? cookieUrl))
                         {
+                            Reply(cookieQuestion, false, null);
+                            break;
+                        }
+                        if (_calling && !withHttpOnly)
+                        {
+                            // Le contenu attend ces cookies sur son fil (NPN_GetValueForURL) pendant un
+                            // appel de la page, qui attend le contenu : réponse aussitôt, sans cookies.
+                            // Les chargements (HttpOnly compris) n'attendent pas sur ce fil : ils sont
+                            // servis après l'appel.
                             Reply(cookieQuestion, false, null);
                             break;
                         }
@@ -285,13 +294,19 @@ namespace PommeBrowser.Legacy
             }
         }
 
+        /// <summary>
+        /// Résultat donné au contenu pour un script exécuté plus tard : « &lt;undefined/&gt; » pour
+        /// un appel d'ExternalInterface (le contenu le lit comme undefined), rien sinon.
+        /// </summary>
+        internal static string? DeferredResult(string code)
+            => code.Contains("__flash__toXML", StringComparison.Ordinal) ? "<undefined/>" : null;
+
         static string Text(JsonElement root, string name)
             => root.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty;
 
         /// <summary>Réponse à une question de l'hôte (script de la page, cookies) : « result &lt;id&gt; {"ok":…,"value":…} ».</summary>
         public void Reply(int id, bool ok, string? value)
         {
-            _pendingScripts.TryRemove(id, out _);
             using var buffer = new MemoryStream();
             using (var writer = new Utf8JsonWriter(buffer))
             {
@@ -340,18 +355,14 @@ namespace PommeBrowser.Legacy
         /// ExternalInterface.addCallback), sur le fil de l'interface et de façon synchrone, comme
         /// un greffon de navigateur : la page attend la réponse (code JavaScript à évaluer).
         /// Pendant l'attente, seuls les messages que Windows envoie d'autres processus sont traités
-        /// (la fenêtre du lecteur est logée dans celle de PommeBrowser). Null si l'hôte refuse,
-        /// ne répond pas à temps, ou attend lui-même un script de la page (chacun attendrait l'autre).
+        /// (la fenêtre du lecteur est logée dans celle de PommeBrowser). Le contenu peut attendre
+        /// lui-même un script de la page (le script appelle le contenu) : l'hôte exécute l'appel
+        /// pendant cette attente, comme un navigateur. Null si l'hôte refuse ou ne répond pas à temps.
         /// </summary>
         public string? CallFunction(string request, TimeSpan timeout)
         {
             if (HasExited)
                 return null;
-            if (!_pendingScripts.IsEmpty)
-            {
-                RuntimeLogBuffer.Append("[Flash] Appel de la page vers le contenu refusé : le contenu attend un script de la page.");
-                return null;
-            }
 
             int id = Interlocked.Increment(ref _nextCall);
             var slot = new CallSlot();

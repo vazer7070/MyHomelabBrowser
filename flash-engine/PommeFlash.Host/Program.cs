@@ -67,6 +67,7 @@ namespace PommeFlash.Host
             // Commandes lues dès maintenant : le module peut demander un script à la page dès sa création.
             HostChannel.StartReading(
                 command => UiThread.Post(() => OnCommand(command)),
+                CallFromPage,
                 () => UiThread.Post(Close));
 
             try
@@ -103,12 +104,6 @@ namespace PommeFlash.Host
 
         static void OnCommand(string command)
         {
-            // « call <id> {"request":"<invoke …>"} » : appel de la page vers le contenu.
-            if (command.StartsWith("call ", StringComparison.Ordinal))
-            {
-                CallFromPage(command);
-                return;
-            }
             switch (command)
             {
                 case "close":
@@ -120,6 +115,7 @@ namespace PommeFlash.Host
             }
         }
 
+        /// <summary>« call &lt;id&gt; {"request":"&lt;invoke …&gt;"} » : appel de la page vers le contenu, sur le fil du module.</summary>
         static void CallFromPage(string command)
         {
             string[] parts = command.Split(' ', 3);

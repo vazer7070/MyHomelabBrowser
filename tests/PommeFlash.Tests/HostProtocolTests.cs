@@ -160,6 +160,58 @@ public sealed class HostProtocolTests
     }
 
     [Fact(Timeout = 180_000)]
+    public async Task A_page_call_made_while_the_content_waits_for_a_script_is_answered_from_that_wait()
+    {
+        HostRun.SkipIfUnavailable();
+
+        byte[] movie = new byte[20_000];
+        new Random(5).NextBytes(movie);
+        using var server = new TestServer();
+        server.Add("movie.swf", movie, "application/x-shockwave-flash");
+        server.Add("jeu/data.txt", "x"u8.ToArray(), "text/plain");
+        const string request = "<invoke name=\"imbrique\" returntype=\"javascript\"><arguments></arguments></invoke>";
+
+        // Comme dans un navigateur : le script demandé par le contenu (ExternalInterface.call)
+        // appelle le contenu (fonction déclarée par addCallback) avant de rendre son résultat.
+        static async Task<(bool Ok, string? Value)> CallBackIntoTheContent(HostRun run)
+        {
+            await run.SendAsync("call 11 " + JsonSerializer.Serialize(new { request }));
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            while (!run.Events.Any(e => e.GetProperty("event").GetString() == "called"))
+            {
+                if (clock.Elapsed > TimeSpan.FromSeconds(15))
+                    return (false, null);
+                await Task.Delay(20);
+            }
+            return (true, "<number>5</number>");
+        }
+
+        await using HostRun host = HostRun.Start(new[]
+        {
+            "--plugin", HostRun.HostVisiblePath(HostRun.PluginPath!),
+            "--swf", server.Url("movie.swf"),
+            "--page", server.Url("jeu/page.html"),
+            "--hidden"
+        }, _ => (false, null), slowScripts: (run, code) => code.Contains("pommeAdd(2,3)", StringComparison.Ordinal) ? CallBackIntoTheContent(run) : null);
+
+        await host.WaitForAsync(h => h.Reports.Contains("done"), Scenario);
+        IReadOnlyList<string> reports = host.Reports;
+
+        // L'appel a été exécuté par le contenu pendant qu'il attendait le script, sur son fil,
+        // puis le script a rendu son résultat.
+        JsonElement called = host.Events.Single(e => e.GetProperty("event").GetString() == "called");
+        Assert.Equal(11, called.GetProperty("id").GetInt32());
+        Assert.True(called.GetProperty("ok").GetBoolean());
+        Assert.Equal("retour:" + request, called.GetProperty("value").GetString());
+        int call = reports.ToList().IndexOf("call main=1 request=" + request);
+        int script = reports.ToList().IndexOf("script=<number>5</number>");
+        Assert.True(call >= 0 && script > call, string.Join("\n", reports));
+
+        await host.SendAsync("close");
+        Assert.Equal(0, await host.WaitForExitAsync(TimeSpan.FromSeconds(30)));
+    }
+
+    [Fact(Timeout = 180_000)]
     public async Task With_shared_cookies_requests_carry_those_of_the_page()
     {
         HostRun.SkipIfUnavailable();

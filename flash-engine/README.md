@@ -100,9 +100,17 @@ page) : il passe par l'objet WebView2 `pommeFlash` (`AddHostObjectToScript`, doc
 seulement), appelé de façon synchrone, puis par la commande `call` jusqu'à l'objet scriptable du
 module (`NPPVpluginScriptableNPObject`, méthode `CallFunction`). La page attend la réponse
 (8 s au plus) ; PommeBrowser ne traite pendant ce temps que les messages que Windows envoie
-d'autres processus. Pour éviter que chacun attende l'autre : un script demandé par le contenu
-pendant un appel est refusé aussitôt, et un appel de la page est refusé tant que le contenu attend
-un script de la page.
+d'autres processus.
+
+**Appels imbriqués.** Comme dans un navigateur, un script de la page demandé par le contenu peut
+appeler le contenu avant de rendre son résultat (contenu → page → contenu) : pendant qu'il attend
+un script, l'hôte exécute les appels de la page qui arrivent (`HostChannel.RunCalls`, 8 niveaux
+au plus), au lieu de les laisser attendre la fin du script, qui les attend. Dans l'autre sens
+(page → contenu → page), la page est bloquée par son appel et ne peut rien exécuter : le contenu
+reçoit aussitôt `undefined` (`<undefined/>`), et son script est exécuté dans la page dès que
+l'appel a répondu (la plupart des `ExternalInterface.call` n'attendent pas de résultat). Une
+question de cookies du fil du module (`NPN_GetValueForURL`) pendant un appel de la page reçoit
+aussitôt une réponse vide.
 
 **Cookies partagés avec la page** (`--share-cookies`, `PageCookieHandler.cs`) : comme dans un
 navigateur, chaque chargement du module porte les cookies de la page pour son adresse, HttpOnly
