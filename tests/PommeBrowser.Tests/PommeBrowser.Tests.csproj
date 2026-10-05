@@ -51,6 +51,7 @@
     <Compile Include="..\..\classes\AppearanceSettings.cs" Link="App\AppearanceSettings.cs" />
     <Compile Include="..\..\classes\Profiles\AppDataContext.cs" Link="App\Profiles\AppDataContext.cs" />
     <Compile Include="..\..\classes\Security\HttpsUpgradePolicy.cs" Link="App\Security\HttpsUpgradePolicy.cs" />
+    <Compile Include="..\..\classes\Security\HttpsReturnGuard.cs" Link="App\Security\HttpsReturnGuard.cs" />
     <Compile Include="..\..\classes\Security\SiteSecurityStore.cs" Link="App\Security\SiteSecurityStore.cs" />
     <Compile Include="..\..\classes\HistoryEntry.cs" Link="App\HistoryEntry.cs" />
     <Compile Include="..\..\classes\History\HistoryStore.cs" Link="App\History\HistoryStore.cs" />

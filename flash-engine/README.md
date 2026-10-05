@@ -285,8 +285,16 @@ Réglage **Paramètres › Avancé › Moteur Flash intégré (expérimental)**,
    `rect:<clé>:gone` et ce lecteur s'arrête ; le contenu que la page met à sa place est lu dès
    qu'il est décrit, avec le même module.
 7. **Contenu d'un cadre d'un autre site, ou contenu principal introuvable** : la fenêtre de l'hôte
-   est logée à la place de la page, par le même mécanisme que Basilisk.
-8. ⚡ ou « Lire avec Ruffle » revient à Ruffle pour le site pendant la session. Si le lecteur
+   est logée à la place de la page, par le même mécanisme que Basilisk. La page reste chargée
+   derrière : ses lecteurs Ruffle, cadres compris, sont mis en pause et muets
+   (`RuffleContent.StopRuffleScript`, message transmis de parent en cadre), sinon le contenu
+   serait lu deux fois (un jeu s'y connecterait deux fois).
+8. **Moteur intégré retenu pour le site pendant la session** (choisi avec ⚡, ou après un échec
+   de Ruffle) : sur ce site (hôte de la page de l'onglet, vu aussi depuis ses cadres par
+   `location.ancestorOrigins`), le script de détection décrit les contenus sans charger Ruffle,
+   et le moteur intégré les lit d'office. Si Ruffle lisait déjà un contenu au moment du choix, la
+   page est rechargée : un jeu ne se connecte pas deux fois avec la même session.
+9. ⚡ ou « Lire avec Ruffle » revient à Ruffle pour le site pendant la session. Si le lecteur
    s'arrête, « Relancer » reprend l'emplacement laissé dans la page.
 
 Sans le réglage, sans module Flash ou sans description du contenu, Basilisk reste le moteur de secours.

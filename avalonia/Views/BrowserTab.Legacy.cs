@@ -150,10 +150,27 @@ namespace PommeBrowser.Views
         /// Contenu que Ruffle ne lit pas : moteur intégré s'il est prêt (à sa place dans la page si
         /// possible, sinon à la place de la page), sinon Basilisk.
         /// </summary>
-        public void OpenFlashFallback(Uri uri)
+        public void OpenFlashFallback(Uri uri, bool automatic = false)
         {
             if (UsesIntegratedFlash)
             {
+                // Retenu pour le site pendant la session : Ruffle n'y lancera plus les contenus.
+                _app.PreferIntegratedFlash(uri.Host, true);
+                if (_rufflePlaying)
+                {
+                    if (!automatic)
+                    {
+                        // Choix de l'utilisateur alors que Ruffle lit déjà un contenu de la page (un jeu
+                        // s'y est peut-être déjà connecté) : la page est rechargée, une fois le script de
+                        // détection mis à jour, et le moteur intégré sera seul à la lire.
+                        RuntimeLogBuffer.Append($"[Flash] Ruffle lisait déjà {uri.Host} : page rechargée pour le moteur intégré seul.");
+                        if (IsSelected)
+                            Window.ShowToast(Tr("Ruffle lisait déjà ce contenu : la page est rechargée pour que votre module Flash soit seul à le lire."));
+                        Avalonia.Threading.DispatcherTimer.RunOnce(() => Reload(), TimeSpan.FromMilliseconds(300));
+                        return;
+                    }
+                    StopRuffleInPage();
+                }
                 FlashContent content = _flashContent!;
                 // À sa place dans la page si possible, sinon à la place de la page.
                 if (CanPlaceInPage(content) && NextFlashModule(null) is { } module)
@@ -198,6 +215,9 @@ namespace PommeBrowser.Views
 
             StopBasilisk();
             _engine?.Stop();
+            // La page reste chargée derrière (scripts du contenu) : ses lecteurs Ruffle, cadres
+            // compris, s'arrêtent, sinon le contenu serait lu deux fois.
+            StopRuffleInPage();
             _legacyUri = content.Page;
             _integrated = content;
             FlashHostProcess host;
@@ -417,6 +437,21 @@ namespace PommeBrowser.Views
                 host.Reply(request, ok, value);
         }
 
+        async void StopRuffleInPage()
+        {
+            if (_engine is not { } engine)
+                return;
+            try
+            {
+                await engine.EvaluateAsync(RuffleContent.StopRuffleScript, isolated: false);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or
+                                           System.Runtime.InteropServices.COMException or System.Threading.Tasks.TaskCanceledException)
+            {
+                RuntimeLogBuffer.Append("[Flash] Arrêt de Ruffle dans la page impossible : " + ex.Message);
+            }
+        }
+
         /// <summary>Site réglé sur « toujours dans Basilisk », et Basilisk installé.</summary>
         bool WantsBasilisk(string? url, [NotNullWhen(true)] out Uri? uri)
         {
@@ -592,6 +627,7 @@ namespace PommeBrowser.Views
             if (FlashDomainRules.GetRule(uri) == FlashRuleMode.Legacy)
                 FlashDomainRules.RemoveRule(uri);
             _app.SessionRuffleHosts.Add(uri.Host);
+            _app.PreferIntegratedFlash(PageHost ?? uri.Host, false);
             StopBasilisk();
             CloseFlashOverlay();
             _basilisk = null;

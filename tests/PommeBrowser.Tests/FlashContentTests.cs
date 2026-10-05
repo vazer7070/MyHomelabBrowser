@@ -143,6 +143,26 @@ public sealed class FlashContentTests
     }
 
     [Fact]
+    public void On_a_site_read_by_the_integrated_engine_contents_are_only_described_and_ruffle_can_be_stopped()
+    {
+        string script = RuffleContent.ProbeScript("https://pomme.invalid/", "post", new[] { "Game.FR.Demon.Koramgame.com" });
+
+        // Sites retenus (hôte de la page principale, vu aussi depuis un cadre d'un autre site).
+        Assert.Contains("const INTEGRATED = new Set([\"game.fr.demon.koramgame.com\"]);", script);
+        Assert.Contains("location.ancestorOrigins", script);
+        Assert.DoesNotContain("__INTEGRATED__", script);
+        // Contenus décrits, Ruffle pas chargé.
+        Assert.Contains("if (detectOnly || window.__pommeRuffleStopped) {", script);
+        // Arrêt demandé par le document parent (ou lui-même), transmis aux cadres ; jamais par un cadre enfant.
+        Assert.Contains("event.data.__pommeStopRuffle === true && (event.source === window.parent || event.source === window)", script);
+        Assert.Contains("window[i].postMessage({ __pommeStopRuffle: true }, '*')", script);
+        Assert.Contains("player.pause()", script);
+        Assert.Contains("__pommeStopRuffle", RuffleContent.StopRuffleScript);
+        // Sans site retenu : liste vide.
+        Assert.Contains("const INTEGRATED = new Set([]);", RuffleContent.ProbeScript("https://pomme.invalid/", "post"));
+    }
+
+    [Fact]
     public void Messages_of_a_frame_reach_the_browser_through_the_main_document_after_an_origin_check()
     {
         string script = RuffleContent.ProbeScript("https://pomme.invalid/", "post");

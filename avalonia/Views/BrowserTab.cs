@@ -53,6 +53,9 @@ namespace PommeBrowser.Views
         readonly Grid _host = new();
         readonly HashSet<string> _upgradedHosts = new(StringComparer.OrdinalIgnoreCase);
 
+        // Site passé en HTTPS par PommeBrowser qui repart de lui-même en HTTP (voir OnLoadChanged).
+        readonly HttpsReturnGuard _httpsReturn = new();
+
         NativeWebView? _web;
         IEngineTab? _engine;
         Control? _page;
@@ -512,6 +515,13 @@ namespace PommeBrowser.Views
                         return;
                     }
 
+                    // Page passée en HTTPS par PommeBrowser qui repart d'elle-même vers http:// (script
+                    // de la page, pas une redirection du serveur) : le site veut HTTP, il le garde.
+                    // Sinon, chaque retour serait de nouveau passé en HTTPS, sans fin.
+                    if (System.Uri.TryCreate(url, UriKind.Absolute, out Uri? started) &&
+                        _httpsReturn.ReturnsToHttp(started, Environment.TickCount64) && _app.HttpOnlyHosts.Add(started.IdnHost))
+                        RuntimeLogBuffer.Append($"[HTTPS] {started.IdnHost} revient de lui-même en HTTP : laissé en HTTP pour la session.");
+
                     // Page atteinte par un lien : même passage en HTTPS qu'une adresse saisie.
                     if (url != null && url != _expectedMainUrl)
                     {
@@ -540,10 +550,15 @@ namespace PommeBrowser.Views
 
                 case LoadStage.Committed:
                     // Repère du journal (arrêt brutal) : le site seulement, rien d'une page privée.
-                    RuntimeLogBuffer.Append("[Page] " + (IsPrivate ? "navigation privée" :
-                        System.Uri.TryCreate(url, UriKind.Absolute, out Uri? committed) ? committed.Host : "?"));
+                    System.Uri.TryCreate(url, UriKind.Absolute, out Uri? committed);
+                    RuntimeLogBuffer.Append("[Page] " + (IsPrivate ? "navigation privée" : committed?.Host ?? "?"));
+                    // Page ouverte en HTTPS par PommeBrowser : un retour en HTTP juste après vient du site.
+                    if (committed is { } page && page.Scheme == System.Uri.UriSchemeHttps && _upgradedHosts.Contains(page.IdnHost) &&
+                        _httpsReturn.UpgradedPageOpened(page.IdnHost, Environment.TickCount64) && _app.HttpOnlyHosts.Add(page.IdnHost))
+                        RuntimeLogBuffer.Append($"[HTTPS] {page.IdnHost} : allers-retours entre HTTPS et HTTP, laissé en HTTP pour la session.");
                     _upgradedHosts.Clear();
                     _rufflePlaying = false;
+                    _integratedStartPlanned = false;
                     _flashContent = null;
                     CloseFlashOverlay();
                     Window.OnTabCommitted(this);

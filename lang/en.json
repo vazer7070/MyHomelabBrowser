@@ -1164,6 +1164,7 @@
   "Ruffle est absent de cette installation": "Ruffle is missing from this installation",
   "Ruffle est chargé, mais aucun lecteur Flash n'a été créé.": "Ruffle is loaded, but no Flash player was created.",
   "Ruffle intégré est toujours essayé avant le moteur Legacy": "Built-in Ruffle is always tried before the Legacy engine",
+  "Ruffle lisait déjà ce contenu : la page est rechargée pour que votre module Flash soit seul à le lire.": "Ruffle was already playing this content: the page is reloaded so that only your Flash module plays it.",
   "Ruffle n'a pas créé de lecteur utilisable.": "Ruffle did not create a usable player.",
   "Ruffle n'a pas pu lire ce contenu : il est lu avec votre module Flash.": "Ruffle could not play this content: it is played with your Flash module.",
   "Ruffle n'a pas pu lire ce contenu : {0} s'ouvre dans Basilisk. L'ouvrir toujours ainsi ?": "Ruffle could not play this content: {0} opens in Basilisk. Always open it this way?",

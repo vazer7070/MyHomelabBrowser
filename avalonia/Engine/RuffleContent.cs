@@ -70,14 +70,40 @@ namespace PommeBrowser.Engine
         /// (Ruffle refusé par la page), playing (un contenu a démarré), failed (Ruffle s'est arrêté
         /// sur une erreur), « content: » suivi de la description du contenu principal (FlashContent),
         /// et « contents: » suivi de la liste de tous les contenus du document.
+        /// <paramref name="integratedSites"/> : sites (hôte de la page principale) dont le Flash est
+        /// lu par le moteur intégré : leurs contenus sont seulement décrits, Ruffle ne les lance pas
+        /// (un jeu ne doit pas se connecter deux fois). Un message { __pommeStopRuffle: true } du
+        /// document parent (ou du document lui-même) arrête les lecteurs Ruffle du document et de ses
+        /// cadres : moteur intégré à la place de la page.
         /// </summary>
-        public static string ProbeScript(string baseUrl, string post) => """
+        public static string ProbeScript(string baseUrl, string post, IEnumerable<string>? integratedSites = null) => """
             (() => {
               if (window.__pommeRuffleProbe) return;
               window.__pommeRuffleProbe = true;
               const FLASH_TYPES = ['application/x-shockwave-flash', 'application/futuresplash', 'application/vnd.adobe.flash.movie'];
               const CLSID = 'clsid:d27cdb6e-ae6d-11cf-96b8-444553540000';
               const PLAYERS = 'ruffle-object, ruffle-embed, ruffle-player';
+              // Site de la page principale (celle de l'onglet), vu aussi depuis un cadre d'un autre site.
+              const INTEGRATED = new Set(__INTEGRATED__);
+              const topHost = (() => {
+                try { const a = location.ancestorOrigins; if (a && a.length) return new URL(a[a.length - 1]).hostname; } catch (e) { }
+                try { return window.top.location.hostname; } catch (e) { return location.hostname; }
+              })().toLowerCase();
+              const detectOnly = INTEGRATED.has(topHost);
+              // Lecteurs Ruffle du document mis en pause et muets (l'élément reste : la page peut s'y
+              // adresser), puis ceux des cadres ; plus de nouveau lecteur Ruffle ensuite.
+              const stopRuffle = () => {
+                window.__pommeRuffleStopped = true;
+                try { window.RufflePlayer = window.RufflePlayer || {}; window.RufflePlayer.config = Object.assign(window.RufflePlayer.config || {}, { polyfills: false, autoplay: 'off' }); } catch (e) { }
+                for (const player of document.querySelectorAll(PLAYERS)) {
+                  try { player.volume = 0; } catch (e) { }
+                  try { if (typeof player.pause === 'function') player.pause(); } catch (e) { }
+                }
+                for (let i = 0; i < window.length; i++) { try { window[i].postMessage({ __pommeStopRuffle: true }, '*'); } catch (e) { } }
+              };
+              addEventListener('message', (event) => {
+                if (event.data && event.data.__pommeStopRuffle === true && (event.source === window.parent || event.source === window)) stopRuffle();
+              });
               const direct = (status) => { try { __POST__; } catch (e) { } };
               // Dans un cadre (jeu dans une iframe) : message envoyé directement, et aussi relayé par le
               // document principal, qui le transmet à PommeBrowser (le moteur ne remet pas toujours
@@ -244,9 +270,22 @@ namespace PommeBrowser.Engine
                 window.__pommeRuffleInjected = true;
                 report();
                 post('detected');
+                if (detectOnly || window.__pommeRuffleStopped) {
+                  // Moteur intégré : contenus ajoutés ensuite décrits aussi (aucun lecteur Ruffle ne le fera).
+                  let pending = 0;
+                  const later = new MutationObserver(() => { clearTimeout(pending); pending = setTimeout(report, 200); });
+                  later.observe(document.documentElement, { childList: true, subtree: true });
+                  setTimeout(() => later.disconnect(), 60000);
+                  return;
+                }
                 load('__BASE__pomme-config.js')
                   .then(() => load('__BASE__ruffle.js'))
-                  .then(() => { post('loaded'); watch(); }, () => post('blocked'));
+                  .then(() => {
+                    post('loaded');
+                    // Arrêté pendant le chargement : les lecteurs que Ruffle vient de créer aussi.
+                    if (window.__pommeRuffleStopped) { setTimeout(stopRuffle, 0); return; }
+                    watch();
+                  }, () => post('blocked'));
               };
               if (contains(document.documentElement)) { inject(); return; }
               // Les contenus ajoutés après coup (SWFObject…) sont aussi détectés, pendant 30 secondes.
@@ -260,7 +299,14 @@ namespace PommeBrowser.Engine
                .Replace("__CONTENTS__", FlashContent.ListPrefix, StringComparison.Ordinal)
                .Replace("__CONTENT__", FlashContent.MessagePrefix, StringComparison.Ordinal)
                .Replace("__RECT__", RectPrefix, StringComparison.Ordinal)
-               .Replace("__AD_SIZES__", JsonSerializer.Serialize(FlashContent.AdSizes.Select(s => s.Width + "x" + s.Height)), StringComparison.Ordinal);
+               .Replace("__AD_SIZES__", JsonSerializer.Serialize(FlashContent.AdSizes.Select(s => s.Width + "x" + s.Height)), StringComparison.Ordinal)
+               .Replace("__INTEGRATED__", JsonSerializer.Serialize((integratedSites ?? Array.Empty<string>()).Select(host => host.ToLowerInvariant()).Distinct().ToArray()), StringComparison.Ordinal);
+
+        /// <summary>
+        /// Lecteurs Ruffle de la page (document principal et cadres, même d'un autre site) mis en
+        /// pause : le moteur intégré lit son contenu à la place de la page.
+        /// </summary>
+        public const string StopRuffleScript = "window.postMessage({ __pommeStopRuffle: true }, '*')";
 
         /// <summary>Préfixe des messages de position du contenu lu par le moteur intégré.</summary>
         public const string RectPrefix = "rect:";

@@ -67,6 +67,33 @@ namespace PommeBrowser
         /// <summary>Hôtes ramenés sur Ruffle après une bascule automatique : plus de bascule pendant la session.</summary>
         public HashSet<string> SessionRuffleHosts { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>
+        /// Sites (hôte de la page de l'onglet) dont le Flash est lu par le moteur intégré pendant
+        /// cette session : Ruffle n'y lance plus les contenus (il les décrit seulement), et le
+        /// moteur intégré démarre d'office. Voir <see cref="PreferIntegratedFlash"/>.
+        /// </summary>
+        public IReadOnlySet<string> SessionIntegratedHosts => _integratedHosts;
+
+        readonly HashSet<string> _integratedHosts = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Moteur intégré choisi (ou abandonné) pour un site : le script de détection de chaque
+        /// onglet est mis à jour, pour les pages chargées ensuite.
+        /// </summary>
+        public void PreferIntegratedFlash(string host, bool preferred)
+        {
+            if (string.IsNullOrEmpty(host) || (preferred ? !_integratedHosts.Add(host) : !_integratedHosts.Remove(host)))
+                return;
+            MyHomelabBrowser.classes.RuntimeLogBuffer.Append(preferred
+                ? $"[Flash] {host} : moteur intégré retenu pour la session (Ruffle n'y lance plus les contenus)."
+                : $"[Flash] {host} : retour à Ruffle pour la session.");
+            foreach (Views.MainWindow window in _windows)
+            {
+                foreach (Views.BrowserTab tab in window.Tabs)
+                    tab.RefreshRuffleProbe();
+            }
+        }
+
         /// <summary>Hôtes qui ne répondent pas en HTTPS (pas de nouvel essai pendant la session).</summary>
         public HashSet<string> HttpOnlyHosts { get; } = new(StringComparer.OrdinalIgnoreCase);
 

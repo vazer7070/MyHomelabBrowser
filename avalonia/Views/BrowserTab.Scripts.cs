@@ -64,9 +64,7 @@ namespace PommeBrowser.Views
                 // Flash annoncé avant les scripts de la page, qui n'ajoutent souvent leur contenu qu'à cette condition.
                 engine.AddUserScript(RuffleContent.PluginScriptId, RuffleContent.PluginScript,
                     allFrames: true, atDocumentStart: true, pageWorld: true);
-                engine.AddUserScript(RuffleContent.ScriptId,
-                    RuffleContent.ProbeScript(EngineHost.RuffleBaseUrl, EngineHost.ScriptPost(RuffleContent.MessageHandler, "status")),
-                    allFrames: true, atDocumentStart: false);
+                AddRuffleProbe(engine);
             }
             else
             {
@@ -74,6 +72,43 @@ namespace PommeBrowser.Views
                 engine.RemoveUserScript(RuffleContent.ScriptId);
             }
             _ruffleAttached = wanted;
+        }
+
+        void AddRuffleProbe(IEngineTab engine)
+            => engine.AddUserScript(RuffleContent.ScriptId,
+                RuffleContent.ProbeScript(EngineHost.RuffleBaseUrl, EngineHost.ScriptPost(RuffleContent.MessageHandler, "status"), _app.SessionIntegratedHosts),
+                allFrames: true, atDocumentStart: false);
+
+        /// <summary>Sites lus par le moteur intégré modifiés : script de détection mis à jour (pages suivantes).</summary>
+        public void RefreshRuffleProbe()
+        {
+            if (_engine is { } engine && _ruffleAttached)
+                AddRuffleProbe(engine);
+        }
+
+        // Moteur intégré déjà lancé d'office pour la page affichée (remis à zéro à chaque page).
+        bool _integratedStartPlanned;
+
+        /// <summary>Hôte de la page de l'onglet (site retenu pour le moteur intégré).</summary>
+        string? PageHost => System.Uri.TryCreate(WebUrl, UriKind.Absolute, out Uri? page) ? page.Host : null;
+
+        /// <summary>
+        /// Contenu Flash décrit sur un site retenu pour le moteur intégré (Ruffle ne l'a pas lancé) :
+        /// le moteur intégré le lit d'office, une fois la liste des contenus de la page arrivée.
+        /// </summary>
+        void StartIntegratedIfPreferred()
+        {
+            if (_integratedStartPlanned || PageHost is not { } host || !_app.SessionIntegratedHosts.Contains(host))
+                return;
+            _integratedStartPlanned = true;
+            Avalonia.Threading.DispatcherTimer.RunOnce(() =>
+            {
+                if (Page != TabPage.Web || HasFlashOverlay || _inPageModule != null || _flashContent == null ||
+                    !UsesIntegratedFlash || PageHost != host || !System.Uri.TryCreate(WebUrl, UriKind.Absolute, out Uri? uri))
+                    return;
+                RuntimeLogBuffer.Append($"[Flash] {host} : lu d'office par le moteur intégré (retenu pour la session).");
+                OpenFlashFallback(uri, automatic: true);
+            }, TimeSpan.FromMilliseconds(400));
         }
 
         void OnScriptMessage(string channel, string body)
@@ -102,6 +137,7 @@ namespace PommeBrowser.Views
                     _flashContent = content;
                     RaiseChanged();
                 }
+                StartIntegratedIfPreferred();
                 return;
             }
             if (status.StartsWith(PommeBrowser.Engine.FlashContent.ListPrefix, StringComparison.Ordinal))
@@ -152,7 +188,7 @@ namespace PommeBrowser.Views
                 return;
             }
 
-            OpenFlashFallback(uri);
+            OpenFlashFallback(uri, automatic: true);
             if (!IsSelected)
                 return;
             if (HasFlashOverlay)
