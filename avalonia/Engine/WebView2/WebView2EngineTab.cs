@@ -763,6 +763,63 @@ namespace PommeBrowser.Engine.WebView2
             return FromJson(json);
         }
 
+        // Cadre de chaque contenu (adresse → identifiant du protocole DevTools), et monde isolé de
+        // PommeBrowser dans chaque cadre (identifiant → contexte d'exécution) : deux échanges de
+        // moins par appel. Un document remplacé emporte son monde : tout est relu une fois.
+        readonly Dictionary<string, string> _flashFrames = new(StringComparer.Ordinal);
+        readonly Dictionary<string, int> _flashFrameWorlds = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Voir <see cref="IEngineTab.EvaluateInFrameAsync"/> : par le protocole DevTools (arbre des
+        /// cadres, monde isolé du cadre, puis évaluation dans ce monde), sans abonnement aux cadres
+        /// de WebView2 (voir <see cref="OnWebMessageReceived"/>). Un cadre d'un autre site, tenu par
+        /// un autre processus, n'est pas dans l'arbre : refus.
+        /// </summary>
+        public async Task<(bool Ok, string? Value)> EvaluateInFrameAsync(Uri frame, string script)
+        {
+            if (frame.Scheme is not ("http" or "https"))
+                return (false, null);
+            string expression = FlashFrames.InFrameScript(frame, script);
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                if (_disposed)
+                    return (false, null);
+                try
+                {
+                    if (!_flashFrames.TryGetValue(frame.AbsoluteUri, out string? frameId))
+                    {
+                        using JsonDocument tree = JsonDocument.Parse(await _core.CallDevToolsProtocolMethodAsync("Page.getFrameTree", "{}"));
+                        if (!tree.RootElement.TryGetProperty("frameTree", out JsonElement root) || FlashFrames.FindFrameId(root, frame) is not { } found)
+                            return (false, null);
+                        _flashFrames[frame.AbsoluteUri] = frameId = found;
+                    }
+                    if (!_flashFrameWorlds.TryGetValue(frameId, out int context))
+                    {
+                        using JsonDocument world = JsonDocument.Parse(await _core.CallDevToolsProtocolMethodAsync("Page.createIsolatedWorld",
+                            "{\"frameId\":" + JsonSerializer.Serialize(frameId) + ",\"worldName\":\"PommeBrowser\"}"));
+                        if (!world.RootElement.TryGetProperty("executionContextId", out JsonElement id) || !id.TryGetInt32(out context))
+                            throw new InvalidOperationException("monde isolé du cadre non créé");
+                        _flashFrameWorlds[frameId] = context;
+                    }
+                    string reply = await _core.CallDevToolsProtocolMethodAsync("Runtime.evaluate",
+                        "{\"expression\":" + JsonSerializer.Serialize(expression) + ",\"contextId\":" +
+                        context.ToString(System.Globalization.CultureInfo.InvariantCulture) + ",\"returnByValue\":true}");
+                    if (FlashFrames.ReadResult(reply) is { } result)
+                        return result;
+                    throw new InvalidOperationException("contexte du cadre disparu");
+                }
+                catch (Exception ex) when (ex is COMException or InvalidOperationException or JsonException or ArgumentException)
+                {
+                    // Cadre rechargé ou retiré depuis : son monde et son identifiant sont relus.
+                    _flashFrames.Remove(frame.AbsoluteUri);
+                    _flashFrameWorlds.Clear();
+                    if (attempt == 1)
+                        throw new InvalidOperationException(ex.Message, ex);
+                }
+            }
+            return (false, null);
+        }
+
         static string? FromJson(string? json)
         {
             if (string.IsNullOrEmpty(json))

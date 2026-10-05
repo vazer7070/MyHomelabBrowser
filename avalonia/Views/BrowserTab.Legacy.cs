@@ -413,8 +413,9 @@ namespace PommeBrowser.Views
         /// Script demandé par le contenu (ExternalInterface.call, adresse javascript:) : exécuté
         /// dans la page, comme dans un navigateur, et son résultat renvoyé au lecteur. Le lecteur
         /// applique lui-même allowScriptAccess. Exécuté dans le document du contenu : le document
-        /// principal, ou le cadre de même origine qui le contient ; un contenu d'un cadre d'un autre
-        /// site n'agit pas sur la page (il reçoit un refus).
+        /// principal, le cadre de même origine qui le contient, ou un cadre d'une autre origine,
+        /// où le moteur l'exécute lui-même (WebView2) ; jamais dans un autre document (un contenu
+        /// d'un cadre d'un autre site n'agit pas sur la page), sinon refus.
         /// </summary>
         async void RunFlashScript(FlashHostProcess host, FlashContent content, int? id, string code)
         {
@@ -433,8 +434,36 @@ namespace PommeBrowser.Views
                     RuntimeLogBuffer.Append("[Flash] Script de la page impossible : " + ex.Message);
                 }
             }
+            else if (_engine is { } frameEngine && !IsTopDocument(content))
+            {
+                string? problem = null;
+                try
+                {
+                    (ok, value) = await frameEngine.EvaluateInFrameAsync(content.Page, code);
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or
+                                               System.Runtime.InteropServices.COMException or System.Threading.Tasks.TaskCanceledException)
+                {
+                    problem = ex.Message;
+                }
+                NoteFrameScripts(content, ok, problem);
+            }
             if (id is { } request)
                 host.Reply(request, ok, value);
+        }
+
+        // Cadres dont l'exécution des scripts (réussie ou non) est déjà notée au journal.
+        readonly HashSet<string> _frameScriptsNoted = new(StringComparer.Ordinal);
+
+        /// <summary>Une ligne au journal par cadre et par issue : exécutés dans le cadre, ou refusés et pourquoi.</summary>
+        void NoteFrameScripts(FlashContent content, bool ok, string? problem)
+        {
+            string origin = FlashFrames.Origin(content.Page);
+            if (!_frameScriptsNoted.Add(origin + (ok ? " ok" : " refus")))
+                return;
+            RuntimeLogBuffer.Append(ok
+                ? $"[Flash] Scripts du contenu exécutés dans son cadre ({content.Page.Host}, autre origine que la page), comme dans un navigateur."
+                : $"[Flash] Scripts du contenu refusés : son cadre ({content.Page.Host}, autre origine que la page) est hors d'atteinte{(problem != null ? " (" + problem + ")" : " (cadre introuvable ou d'un autre site, ou moteur sans accès aux cadres)")}.");
         }
 
         async void StopRuffleInPage()

@@ -702,6 +702,7 @@ namespace PommeBrowser.Views
 
         const string BlankPage = "about:blank";
         const long LoopStopHold = 3_000;
+        const int ForgetHttpsTimeout = 5_000;
         long _loopStoppedAt = long.MinValue / 2;
 
         /// <summary>
@@ -715,7 +716,7 @@ namespace PommeBrowser.Views
             long now = Environment.TickCount64;
             RuntimeLogBuffer.Append($"[Page] Boucle : {NavigationLoopGuard.LoopCount} pages ouvertes en moins de {NavigationLoopGuard.LoopPeriod / 1000} s. Trajet : {_loopGuard.Trail}");
             List<string> upgraded = _loopGuard.UpgradedHosts(now).Where(host => !_app.HttpOnlyHosts.Contains(host)).ToList();
-            Uri? forced = _loopGuard.ForcedToHttps(now);
+            Uri? forced = _loopGuard.ForcedToHttps();
             _loopGuard.Reset();
             foreach (string host in upgraded)
                 _app.HttpOnlyHosts.Add(host);
@@ -733,10 +734,15 @@ namespace PommeBrowser.Views
             {
                 _app.HttpOnlyHosts.Add(forced.IdnHost);
                 _engine?.Navigate(BlankPage);
-                bool forgotten = await EngineHost.ForgetHttpsMemoryAsync(IsPrivate, TimeSpan.FromHours(1));
+                RuntimeLogBuffer.Append($"[HTTPS] {forced.IdnHost} : la page veut HTTP mais revient aussitôt en HTTPS sans PommeBrowser (mémoire HSTS du moteur, ou serveur) : effacement de la mémoire HTTPS de la dernière heure.");
+                // Borné : le moteur ne répond pas toujours (la page restait blanche).
+                Task<bool> forget = EngineHost.ForgetHttpsMemoryAsync(IsPrivate, TimeSpan.FromHours(1));
+                bool forgotten = await Task.WhenAny(forget, Task.Delay(ForgetHttpsTimeout)) == forget && await forget;
                 RuntimeLogBuffer.Append(forgotten
-                    ? $"[HTTPS] {forced.IdnHost} : la page veut HTTP mais le moteur impose HTTPS (mémoire HSTS) ; mémoire HTTPS de la dernière heure effacée, page rouverte en HTTP."
-                    : $"[HTTPS] {forced.IdnHost} : la page veut HTTP mais le moteur impose HTTPS (mémoire HSTS), qui n'a pas pu être effacée.");
+                    ? $"[HTTPS] {forced.IdnHost} : mémoire HTTPS effacée, page rouverte en HTTP."
+                    : forget.IsCompleted
+                        ? $"[HTTPS] {forced.IdnHost} : mémoire HTTPS non effacée."
+                        : $"[HTTPS] {forced.IdnHost} : le moteur n'a pas effacé sa mémoire HTTPS en {ForgetHttpsTimeout / 1000} s.");
                 if (forgotten)
                 {
                     Navigate(forced.AbsoluteUri);

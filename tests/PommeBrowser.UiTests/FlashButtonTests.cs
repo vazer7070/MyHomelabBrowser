@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.Styling;
+using PommeBrowser;
 using PommeBrowser.Views;
 
 namespace PommeBrowser.UiTests;
@@ -39,6 +40,29 @@ public sealed class FlashButtonTests
         Assert.False(button.IsVisible);
         Assert.Equal(FlashEngine.Ruffle, window.SelectedTab!.FlashEngine);
         window.Close();
+    }
+
+    [AvaloniaFact]
+    public void The_integrated_engine_chosen_on_a_page_is_kept_for_the_whole_site()
+    {
+        BrowserApp app = TestBrowser.App;
+
+        // Choisi sur l'accueil du jeu : sa page de jeu (autre sous-domaine) démarre aussi avec lui,
+        // sans que Ruffle s'y connecte d'abord.
+        app.PreferIntegratedFlash("fr.demon.koramgame.com", true);
+        Assert.Contains("koramgame.com", app.SessionIntegratedSites);
+        Assert.True(app.PrefersIntegratedFlash("game.fr.demon.koramgame.com"));
+        Assert.True(app.PrefersIntegratedFlash("s81fr.sq.koramgame.com"));
+        Assert.True(app.PrefersIntegratedFlash("koramgame.com"));
+        // Un autre site, même s'il finit pareil : non.
+        Assert.False(app.PrefersIntegratedFlash("notkoramgame.com"));
+        Assert.False(app.PrefersIntegratedFlash("koramgame.com.exemple.fr"));
+        Assert.False(app.PrefersIntegratedFlash(null));
+
+        // Retour à Ruffle depuis n'importe quelle page du site : tout le site.
+        app.PreferIntegratedFlash("game.fr.demon.koramgame.com", false);
+        Assert.False(app.PrefersIntegratedFlash("fr.demon.koramgame.com"));
+        Assert.Empty(app.SessionIntegratedSites);
     }
 
     static string Coverage(Geometry shape)

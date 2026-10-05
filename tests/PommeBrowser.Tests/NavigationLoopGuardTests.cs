@@ -35,19 +35,45 @@ public sealed class NavigationLoopGuardTests
             loop = guard.Opened(https, i * 100);
         }
         Assert.True(loop);
-        Assert.Equal(http, guard.ForcedToHttps(800));
+        Assert.Equal(http, guard.ForcedToHttps());
         Assert.StartsWith("→ http://www.koramgame.com/fr/ ↪ https://www.koramgame.com/fr/ ✓ https://www.koramgame.com/fr/", guard.Trail);
 
-        // Passage en HTTPS voulu par PommeBrowser : ce n'est pas le moteur qui l'impose.
+        // Passage en HTTPS voulu par PommeBrowser, encore dans le trajet : ce n'est pas le moteur qui l'impose.
         guard.Upgraded(https, 900);
-        Assert.Null(guard.ForcedToHttps(950));
+        Assert.Null(guard.ForcedToHttps());
         // Redirection vers un autre site, ou vers http : pas ce cas.
         var other = new NavigationLoopGuard();
         other.Started(http);
         other.Redirected(new Uri("https://login.koramgame.com/"));
         other.Started(https);
         other.Redirected(http);
-        Assert.Null(other.ForcedToHttps(0));
+        Assert.Null(other.ForcedToHttps());
+    }
+
+    [Fact]
+    public void A_site_upgraded_once_then_left_in_http_that_keeps_being_sent_back_to_https_is_recognised()
+    {
+        // Journal de 07:14 : www.koramgame.com passé en HTTPS par PommeBrowser au début, puis
+        // laissé en HTTP (il y revenait de lui-même) ; la page tourne encore entre http:// et
+        // https://, sans PommeBrowser : c'est le moteur (HSTS) ou le serveur.
+        var guard = new NavigationLoopGuard();
+        var http = new Uri("http://www.koramgame.com/fr/");
+        var https = new Uri("https://www.koramgame.com/fr/");
+        guard.Started(http);
+        guard.Upgraded(https, 0);
+        guard.Started(https);
+        guard.Opened(https, 50);
+        Assert.Null(guard.ForcedToHttps());
+        bool loop = false;
+        for (int i = 1; i <= NavigationLoopGuard.LoopCount; i++)
+        {
+            guard.Started(http);
+            guard.Redirected(https);
+            loop |= guard.Opened(https, 50 + i * 100);
+        }
+        Assert.True(loop);
+        Assert.DoesNotContain("⇧", guard.Trail);
+        Assert.Equal(http, guard.ForcedToHttps());
     }
 
     [Fact]

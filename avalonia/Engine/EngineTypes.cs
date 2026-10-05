@@ -218,6 +218,15 @@ namespace PommeBrowser.Engine
         Task<string?> EvaluateAsync(string script, bool isolated);
 
         /// <summary>
+        /// Exécute un script dans le document d'un cadre d'une autre origine que la page : celui
+        /// d'un contenu Flash (<paramref name="frame"/> : son adresse), comme un navigateur y
+        /// exécute ses ExternalInterface.call ; seulement si ce document a toujours l'origine de
+        /// cette adresse (voir <see cref="FlashFrames"/>). Ok faux : cadre introuvable ou document
+        /// changé, ou moteur qui n'atteint pas les cadres d'une autre origine (WebKit).
+        /// </summary>
+        Task<(bool Ok, string? Value)> EvaluateInFrameAsync(Uri frame, string script);
+
+        /// <summary>
         /// Cookies du profil de la page pour une adresse, au format de l'en-tête Cookie (vide s'il
         /// n'y en a pas) ; sans les HttpOnly si <paramref name="includeHttpOnly"/> est faux. Null :
         /// ce moteur ne les partage pas (moteur Flash intégré, Windows seulement).

@@ -76,7 +76,7 @@ namespace PommeBrowser.Views
 
         void AddRuffleProbe(IEngineTab engine)
             => engine.AddUserScript(RuffleContent.ScriptId,
-                RuffleContent.ProbeScript(EngineHost.RuffleBaseUrl, EngineHost.ScriptPost(RuffleContent.MessageHandler, "status"), _app.SessionIntegratedHosts),
+                RuffleContent.ProbeScript(EngineHost.RuffleBaseUrl, EngineHost.ScriptPost(RuffleContent.MessageHandler, "status"), _app.SessionIntegratedSites),
                 allFrames: true, atDocumentStart: false);
 
         /// <summary>Sites lus par le moteur intégré modifiés : script de détection mis à jour (pages suivantes).</summary>
@@ -89,7 +89,7 @@ namespace PommeBrowser.Views
         // Moteur intégré déjà lancé d'office pour la page affichée (remis à zéro à chaque page).
         bool _integratedStartPlanned;
 
-        /// <summary>Hôte de la page de l'onglet (site retenu pour le moteur intégré).</summary>
+        /// <summary>Hôte de la page de l'onglet (son site est celui retenu pour le moteur intégré).</summary>
         string? PageHost => System.Uri.TryCreate(WebUrl, UriKind.Absolute, out Uri? page) ? page.Host : null;
 
         /// <summary>
@@ -98,7 +98,7 @@ namespace PommeBrowser.Views
         /// </summary>
         void StartIntegratedIfPreferred()
         {
-            if (_integratedStartPlanned || PageHost is not { } host || !_app.SessionIntegratedHosts.Contains(host))
+            if (_integratedStartPlanned || PageHost is not { } host || !_app.PrefersIntegratedFlash(host))
                 return;
             _integratedStartPlanned = true;
             Avalonia.Threading.DispatcherTimer.RunOnce(() =>

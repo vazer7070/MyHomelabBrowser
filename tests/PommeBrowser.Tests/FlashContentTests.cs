@@ -145,11 +145,14 @@ public sealed class FlashContentTests
     [Fact]
     public void On_a_site_read_by_the_integrated_engine_contents_are_only_described_and_ruffle_can_be_stopped()
     {
-        string script = RuffleContent.ProbeScript("https://pomme.invalid/", "post", new[] { "Game.FR.Demon.Koramgame.com" });
+        string script = RuffleContent.ProbeScript("https://pomme.invalid/", "post", new[] { "Koramgame.com" });
 
-        // Sites retenus (hôte de la page principale, vu aussi depuis un cadre d'un autre site).
-        Assert.Contains("const INTEGRATED = new Set([\"game.fr.demon.koramgame.com\"]);", script);
+        // Sites retenus (domaine de la page principale, vu aussi depuis un cadre d'un autre site),
+        // sous-domaines compris : l'accueil fr.demon.koramgame.com et la page de jeu
+        // game.fr.demon.koramgame.com sont un même site.
+        Assert.Contains("const INTEGRATED = new Set([\"koramgame.com\"]);", script);
         Assert.Contains("location.ancestorOrigins", script);
+        Assert.Contains("topHost === site || topHost.endsWith('.' + site)", script);
         Assert.DoesNotContain("__INTEGRATED__", script);
         // Contenus décrits, Ruffle pas chargé.
         Assert.Contains("if (detectOnly || window.__pommeRuffleStopped) {", script);

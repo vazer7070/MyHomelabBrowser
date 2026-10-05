@@ -124,8 +124,14 @@ comme dans un navigateur. L'hôte envoie `eval` puis attend la réponse (20 s au
 messages que Windows lui envoie d'autres fils : PommeBrowser place et affiche la fenêtre du module
 pendant ce temps, et les deux processus s'attendraient sinon l'un l'autre. PommeBrowser exécute le
 script dans le document du contenu : le document principal, ou le cadre de même origine qui le
-contient (`RuffleContent.InWindowOf`, par l'`eval` de la fenêtre du cadre) ; un contenu venu d'un
-cadre d'un autre site reçoit un refus. Le module applique lui-même `allowScriptAccess`.
+contient (`RuffleContent.InWindowOf`, par l'`eval` de la fenêtre du cadre), ou un cadre d'une autre
+origine (Demon Slayer : jeu de `s81fr.sq.koramgame.com` dans `game.fr.demon.koramgame.com`), où
+WebView2 l'exécute lui-même (`FlashFrames`, protocole DevTools : arbre des cadres, monde isolé de
+PommeBrowser dans ce cadre, qui vérifie l'origine du document puis fait exécuter le script dans le
+monde de la page par un élément `<script>`). Jamais dans un autre document ; un cadre d'un autre
+site tenu par un autre processus, ou WebKit, reçoit un refus. Le module applique lui-même
+`allowScriptAccess`. Le journal note la forme des petites réponses texte (`ResponseShape` : taille,
+XML et son élément, JSON et ses clés, champs d'un formulaire, nombre seul), jamais leurs valeurs.
 
 **Appels de la page vers le contenu** (`ExternalInterface.addCallback`) : Flash déclare ses
 fonctions dans la page par `__flash__addCallback(élément, nom)` ; elles appellent
@@ -290,8 +296,10 @@ Réglage **Paramètres › Avancé › Moteur Flash intégré (expérimental)**,
    (`RuffleContent.StopRuffleScript`, message transmis de parent en cadre), sinon le contenu
    serait lu deux fois (un jeu s'y connecterait deux fois).
 8. **Moteur intégré retenu pour le site pendant la session** (choisi avec ⚡, ou après un échec
-   de Ruffle) : sur ce site (hôte de la page de l'onglet, vu aussi depuis ses cadres par
-   `location.ancestorOrigins`), le script de détection décrit les contenus sans charger Ruffle,
+   de Ruffle) : sur ce site (domaine enregistrable de la page de l'onglet, sous-domaines compris :
+   l'accueil `fr.demon.koramgame.com` et la page de jeu `game.fr.demon.koramgame.com` sont un même
+   site ; vu aussi depuis ses cadres par `location.ancestorOrigins`), le script de détection décrit
+   les contenus sans charger Ruffle,
    et le moteur intégré les lit d'office. Si Ruffle lisait déjà un contenu au moment du choix, la
    page est rechargée : un jeu ne se connecte pas deux fois avec la même session.
 9. ⚡ ou « Lire avec Ruffle » revient à Ruffle pour le site pendant la session. Si le lecteur

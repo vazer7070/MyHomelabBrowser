@@ -456,6 +456,9 @@ namespace PommeBrowser.Engine.Apple
         {
         }
 
+        /// <summary>Cadres d'une autre origine hors d'atteinte depuis l'application (WebKit) : refus.</summary>
+        public Task<(bool Ok, string? Value)> EvaluateInFrameAsync(Uri frame, string script) => Task.FromResult((false, (string?)null));
+
         public unsafe Task<string?> EvaluateAsync(string script, bool isolated)
         {
             var completion = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);

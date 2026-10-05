@@ -28,6 +28,7 @@
 
   <ItemGroup Label="Logique de l'hôte sans code natif">
     <Compile Include="..\..\flash-engine\PommeFlash.Host\HostOptions.cs" Link="Host\HostOptions.cs" />
+    <Compile Include="..\..\flash-engine\PommeFlash.Host\ResponseShape.cs" Link="Host\ResponseShape.cs" />
   </ItemGroup>
 
 </Project>

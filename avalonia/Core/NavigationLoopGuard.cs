@@ -48,9 +48,11 @@ namespace PommeBrowser.Core
         /// Boucle où la page demande http:// et se retrouve aussitôt en https:// sur le même site,
         /// sans que le navigateur l'ait voulu : HTTPS imposé par le moteur (HSTS, retenu d'une
         /// visite en HTTPS) ou par le serveur, alors que la page veut HTTP. Rend l'adresse http://
-        /// demandée par la page, ou null.
+        /// demandée par la page, ou null. Un passage en HTTPS de PommeBrowser encore dans le trajet
+        /// (⇧) explique la boucle : pas ce cas. Un passage plus ancien, non : koramgame.com, passé
+        /// en HTTPS une fois puis laissé en HTTP, tournait encore entre http:// et https://.
         /// </summary>
-        public Uri? ForcedToHttps(long now)
+        public Uri? ForcedToHttps()
         {
             (char Kind, Uri Url)[] steps = _steps.ToArray();
             for (int i = steps.Length - 2; i >= 0; i--)
@@ -58,12 +60,13 @@ namespace PommeBrowser.Core
                 (char kind, Uri asked) = steps[i];
                 (char next, Uri given) = steps[i + 1];
                 if (kind == '→' && next == '↪' && asked.Scheme == Uri.UriSchemeHttp && given.Scheme == Uri.UriSchemeHttps &&
-                    string.Equals(asked.IdnHost, given.IdnHost, StringComparison.OrdinalIgnoreCase) &&
-                    !(_upgraded.TryGetValue(asked.IdnHost, out long at) && now - at <= LoopPeriod))
+                    SameHost(asked, given) && !steps.Any(step => step.Kind == '⇧' && SameHost(step.Url, asked)))
                     return asked;
             }
             return null;
         }
+
+        static bool SameHost(Uri a, Uri b) => string.Equals(a.IdnHost, b.IdnHost, StringComparison.OrdinalIgnoreCase);
 
         /// <summary>Sites passés en HTTPS par le navigateur pendant la boucle.</summary>
         public IReadOnlyList<string> UpgradedHosts(long now)

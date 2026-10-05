@@ -70,9 +70,9 @@ namespace PommeBrowser.Engine
         /// (Ruffle refusé par la page), playing (un contenu a démarré), failed (Ruffle s'est arrêté
         /// sur une erreur), « content: » suivi de la description du contenu principal (FlashContent),
         /// et « contents: » suivi de la liste de tous les contenus du document.
-        /// <paramref name="integratedSites"/> : sites (hôte de la page principale) dont le Flash est
-        /// lu par le moteur intégré : leurs contenus sont seulement décrits, Ruffle ne les lance pas
-        /// (un jeu ne doit pas se connecter deux fois). Un message { __pommeStopRuffle: true } du
+        /// <paramref name="integratedSites"/> : sites (domaine enregistrable de la page principale,
+        /// sous-domaines compris) dont le Flash est lu par le moteur intégré : leurs contenus sont
+        /// seulement décrits, Ruffle ne les lance pas (un jeu ne doit pas se connecter deux fois). Un message { __pommeStopRuffle: true } du
         /// document parent (ou du document lui-même) arrête les lecteurs Ruffle du document et de ses
         /// cadres : moteur intégré à la place de la page.
         /// </summary>
@@ -89,7 +89,7 @@ namespace PommeBrowser.Engine
                 try { const a = location.ancestorOrigins; if (a && a.length) return new URL(a[a.length - 1]).hostname; } catch (e) { }
                 try { return window.top.location.hostname; } catch (e) { return location.hostname; }
               })().toLowerCase();
-              const detectOnly = INTEGRATED.has(topHost);
+              const detectOnly = [...INTEGRATED].some(site => topHost === site || topHost.endsWith('.' + site));
               // Lecteurs Ruffle du document mis en pause et muets (l'élément reste : la page peut s'y
               // adresser), puis ceux des cadres ; plus de nouveau lecteur Ruffle ensuite.
               const stopRuffle = () => {
