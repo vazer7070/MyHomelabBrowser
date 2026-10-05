@@ -94,6 +94,12 @@ namespace PommeBrowser
             }
         }
 
+        /// <summary>
+        /// Hôtes dont la mémoire HTTPS du moteur (HSTS) a été effacée pendant la session, après une
+        /// boucle : une fois seulement par hôte.
+        /// </summary>
+        public HashSet<string> HttpsMemoryForgotten { get; } = new(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>Hôtes qui ne répondent pas en HTTPS (pas de nouvel essai pendant la session).</summary>
         public HashSet<string> HttpOnlyHosts { get; } = new(StringComparer.OrdinalIgnoreCase);
 

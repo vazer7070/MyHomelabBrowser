@@ -350,9 +350,16 @@ namespace PommeBrowser.Engine.Gtk
             // Cache : mémoire, disque, cache hors ligne, cache DOM ; le reste : cookies et stockage des sites.
             const int CacheTypes = 1 | 2 | 4 | 8192;
             int types = (cache ? CacheTypes : 0) | (cookiesAndSiteData ? WebsiteDataAll & ~CacheTypes : 0);
-            if (types == 0)
-                return Task.CompletedTask;
+            return types == 0 ? Task.CompletedTask : ClearAsync(types, since);
+        }
 
+        /// <summary>Mémoire HTTPS (HSTS : « ce site est toujours en HTTPS ») des sites vus depuis <paramref name="since"/>.</summary>
+        public static Task ForgetHttpsMemoryAsync(TimeSpan since) => ClearAsync(WebsiteDataHstsCache, since);
+
+        const int WebsiteDataHstsCache = 1 << 10;
+
+        static Task ClearAsync(int types, TimeSpan? since)
+        {
             var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             GCHandle handle = GCHandle.Alloc(completion);
             long microseconds = since is { } span ? (long)span.TotalMilliseconds * 1000 : 0;

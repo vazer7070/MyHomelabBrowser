@@ -18,30 +18,51 @@ namespace PommeBrowser.Core
         public const long LoopPeriod = 6_000;
         const int MaxSteps = 12;
 
-        readonly Queue<string> _steps = new();
+        readonly Queue<(char Kind, Uri Url)> _steps = new();
         readonly List<long> _opened = new();
         readonly Dictionary<string, long> _upgraded = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Navigation commencée (lien, script, redirection côté page).</summary>
-        public void Started(Uri url) => Add("→ " + Short(url));
+        public void Started(Uri url) => Add('→', url);
 
-        /// <summary>Redirection du serveur.</summary>
-        public void Redirected(Uri url) => Add("↪ " + Short(url));
+        /// <summary>Redirection (du serveur, ou du moteur : HTTPS imposé).</summary>
+        public void Redirected(Uri url) => Add('↪', url);
 
         /// <summary>Adresse passée en HTTPS par le navigateur.</summary>
         public void Upgraded(Uri url, long now)
         {
             _upgraded[url.IdnHost] = now;
-            Add("⇧ " + Short(url));
+            Add('⇧', url);
         }
 
         /// <summary>Page ouverte. Vrai : boucle (voir la classe).</summary>
         public bool Opened(Uri url, long now)
         {
-            Add("✓ " + Short(url));
+            Add('✓', url);
             _opened.Add(now);
             _opened.RemoveAll(at => now - at > LoopPeriod);
             return _opened.Count >= LoopCount;
+        }
+
+        /// <summary>
+        /// Boucle où la page demande http:// et se retrouve aussitôt en https:// sur le même site,
+        /// sans que le navigateur l'ait voulu : HTTPS imposé par le moteur (HSTS, retenu d'une
+        /// visite en HTTPS) ou par le serveur, alors que la page veut HTTP. Rend l'adresse http://
+        /// demandée par la page, ou null.
+        /// </summary>
+        public Uri? ForcedToHttps(long now)
+        {
+            (char Kind, Uri Url)[] steps = _steps.ToArray();
+            for (int i = steps.Length - 2; i >= 0; i--)
+            {
+                (char kind, Uri asked) = steps[i];
+                (char next, Uri given) = steps[i + 1];
+                if (kind == '→' && next == '↪' && asked.Scheme == Uri.UriSchemeHttp && given.Scheme == Uri.UriSchemeHttps &&
+                    string.Equals(asked.IdnHost, given.IdnHost, StringComparison.OrdinalIgnoreCase) &&
+                    !(_upgraded.TryGetValue(asked.IdnHost, out long at) && now - at <= LoopPeriod))
+                    return asked;
+            }
+            return null;
         }
 
         /// <summary>Sites passés en HTTPS par le navigateur pendant la boucle.</summary>
@@ -49,7 +70,7 @@ namespace PommeBrowser.Core
             => _upgraded.Where(entry => now - entry.Value <= LoopPeriod).Select(entry => entry.Key).ToList();
 
         /// <summary>Dernières navigations, pour le journal.</summary>
-        public string Trail => string.Join(" ", _steps);
+        public string Trail => string.Join(" ", _steps.Select(step => step.Kind + " " + Short(step.Url)));
 
         /// <summary>Boucle traitée, ou navigation voulue par l'utilisateur : tout repart de zéro.</summary>
         public void Reset()
@@ -59,9 +80,9 @@ namespace PommeBrowser.Core
             _upgraded.Clear();
         }
 
-        void Add(string step)
+        void Add(char kind, Uri url)
         {
-            _steps.Enqueue(step);
+            _steps.Enqueue((kind, url));
             while (_steps.Count > MaxSteps)
                 _steps.Dequeue();
         }

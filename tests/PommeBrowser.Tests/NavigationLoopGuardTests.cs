@@ -20,6 +20,37 @@ public sealed class NavigationLoopGuardTests
     }
 
     [Fact]
+    public void A_page_that_asks_for_http_and_is_sent_back_to_https_by_the_engine_is_recognised()
+    {
+        // Trajet du journal de koramgame : la page demande http://, aussitôt redirigée en https://
+        // sans passage par PommeBrowser (HSTS du moteur), puis redemande http://…
+        var guard = new NavigationLoopGuard();
+        var http = new Uri("http://www.koramgame.com/fr/");
+        var https = new Uri("https://www.koramgame.com/fr/");
+        bool loop = false;
+        for (int i = 0; i < NavigationLoopGuard.LoopCount; i++)
+        {
+            guard.Started(http);
+            guard.Redirected(https);
+            loop = guard.Opened(https, i * 100);
+        }
+        Assert.True(loop);
+        Assert.Equal(http, guard.ForcedToHttps(800));
+        Assert.StartsWith("→ http://www.koramgame.com/fr/ ↪ https://www.koramgame.com/fr/ ✓ https://www.koramgame.com/fr/", guard.Trail);
+
+        // Passage en HTTPS voulu par PommeBrowser : ce n'est pas le moteur qui l'impose.
+        guard.Upgraded(https, 900);
+        Assert.Null(guard.ForcedToHttps(950));
+        // Redirection vers un autre site, ou vers http : pas ce cas.
+        var other = new NavigationLoopGuard();
+        other.Started(http);
+        other.Redirected(new Uri("https://login.koramgame.com/"));
+        other.Started(https);
+        other.Redirected(http);
+        Assert.Null(other.ForcedToHttps(0));
+    }
+
+    [Fact]
     public void Pages_opened_at_a_human_pace_are_not_a_loop()
     {
         var guard = new NavigationLoopGuard();

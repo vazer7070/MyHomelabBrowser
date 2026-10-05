@@ -102,6 +102,28 @@ namespace PommeBrowser.Engine.WebView2
                 await profile.ClearBrowsingDataAsync(kinds);
         }
 
+        /// <summary>
+        /// Mémoire HTTPS du moteur (HSTS : « ce site est toujours en HTTPS ») des sites vus depuis
+        /// <paramref name="since"/>. Chromium l'efface avec l'historique de navigation (elle peut
+        /// servir de traceur) ; l'historique de PommeBrowser, tenu à part, n'est pas touché.
+        /// </summary>
+        public static async Task<bool> ForgetHttpsMemoryAsync(bool isPrivate, TimeSpan since)
+        {
+            CoreWebView2Profile? profile = Tabs.FirstOrDefault(t => t.IsPrivate == isPrivate)?.Profile;
+            if (profile == null)
+                return false;
+            try
+            {
+                await profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.BrowsingHistory, DateTime.Now - since, DateTime.Now);
+                return true;
+            }
+            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException or ArgumentException or NotImplementedException)
+            {
+                RuntimeLogBuffer.Append("[WebView2] Mémoire HTTPS non effacée : " + ex.Message);
+                return false;
+            }
+        }
+
         /// <summary>Processus de WebView2 (navigateur, pages, GPU…) de la session.</summary>
         public static IReadOnlyList<int> Processes()
         {

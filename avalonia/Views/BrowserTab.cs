@@ -710,23 +710,45 @@ namespace PommeBrowser.Views
         /// boucle vient sans doute de là) ; si elle continue, ou sans passage en HTTPS, la page est
         /// quittée (ses scripts la relanceraient) et expliquée, avec de quoi réessayer.
         /// </summary>
-        void OnNavigationLoop(Uri page)
+        async void OnNavigationLoop(Uri page)
         {
             long now = Environment.TickCount64;
             RuntimeLogBuffer.Append($"[Page] Boucle : {NavigationLoopGuard.LoopCount} pages ouvertes en moins de {NavigationLoopGuard.LoopPeriod / 1000} s. Trajet : {_loopGuard.Trail}");
             List<string> upgraded = _loopGuard.UpgradedHosts(now).Where(host => !_app.HttpOnlyHosts.Contains(host)).ToList();
+            Uri? forced = _loopGuard.ForcedToHttps(now);
             _loopGuard.Reset();
+            foreach (string host in upgraded)
+                _app.HttpOnlyHosts.Add(host);
             if (upgraded.Count > 0)
-            {
-                foreach (string host in upgraded)
-                    _app.HttpOnlyHosts.Add(host);
                 RuntimeLogBuffer.Append("[HTTPS] Boucle avec le passage en HTTPS : " + string.Join(", ", upgraded) + " laissé en HTTP pour la session.");
-                return;
-            }
 
             string url = page.AbsoluteUri;
             string site = page.Host;
             _loopStoppedAt = now;
+
+            // La page demande http:// et le moteur la repasse aussitôt en https:// : HTTPS imposé par
+            // sa mémoire (HSTS), sans doute retenue quand PommeBrowser a ouvert le site en HTTPS.
+            // Elle est effacée (une fois par site et par session), puis la page est rouverte en HTTP.
+            if (forced != null && _app.HttpsMemoryForgotten.Add(forced.IdnHost))
+            {
+                _app.HttpOnlyHosts.Add(forced.IdnHost);
+                _engine?.Navigate(BlankPage);
+                bool forgotten = await EngineHost.ForgetHttpsMemoryAsync(IsPrivate, TimeSpan.FromHours(1));
+                RuntimeLogBuffer.Append(forgotten
+                    ? $"[HTTPS] {forced.IdnHost} : la page veut HTTP mais le moteur impose HTTPS (mémoire HSTS) ; mémoire HTTPS de la dernière heure effacée, page rouverte en HTTP."
+                    : $"[HTTPS] {forced.IdnHost} : la page veut HTTP mais le moteur impose HTTPS (mémoire HSTS), qui n'a pas pu être effacée.");
+                if (forgotten)
+                {
+                    Navigate(forced.AbsoluteUri);
+                    return;
+                }
+            }
+            else if (upgraded.Count > 0 && forced == null)
+            {
+                // La boucle venait sans doute du passage en HTTPS : elle continue en HTTP, ou s'arrête.
+                return;
+            }
+
             _engine?.Navigate(BlankPage);
             var blocker = _app.AdBlock;
             bool filtered = AdBlockService.IsSupported && blocker.Settings.Enabled &&

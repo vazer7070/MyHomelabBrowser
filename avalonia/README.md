@@ -89,7 +89,7 @@ Elle porte le même nom que celle de l'édition GTK. Gardez-la dans un dossier m
 - Désactivable par site. Le réseau local n'est pas filtré par défaut.
 
 **Sécurité**
-- HTTPS automatique, avec une page claire quand un site ne le propose pas. Un site qui repart de lui-même en HTTP (script de la page) reste en HTTP pour la session, sans boucle. Une page qui se recharge sans fin (8 pages en moins de 6 s) est arrêtée, avec une page d'explication pour réessayer (ou sans la protection web), et son trajet est noté au journal.
+- HTTPS automatique, avec une page claire quand un site ne le propose pas. Un site qui repart de lui-même en HTTP (script de la page) reste en HTTP pour la session, sans boucle. Une page qui se recharge sans fin (8 pages en moins de 6 s) est arrêtée, avec une page d'explication pour réessayer (ou sans la protection web), et son trajet est noté au journal. Cas particulier : la page demande http:// et le moteur la repasse aussitôt en https:// (mémoire HSTS retenue d'une visite en HTTPS, alors que le site veut HTTP) : cette mémoire est effacée (dernière heure, une fois par site et par session) et la page rouverte en HTTP.
 - Certificats du homelab : la page de PommeBrowser montre l'émetteur et l'empreinte, vous pouvez les approuver, et vous êtes prévenu s'ils changent.
 - Autorisations des sites (position, caméra, micro, notifications…) mémorisées par site.
 - Protection contre le pistage.
