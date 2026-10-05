@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
@@ -55,6 +56,9 @@ namespace PommeBrowser.Views
 
         // Site passé en HTTPS par PommeBrowser qui repart de lui-même en HTTP (voir OnLoadChanged).
         readonly HttpsReturnGuard _httpsReturn = new();
+
+        // Page qui se recharge sans fin (voir OnNavigationLoop).
+        readonly NavigationLoopGuard _loopGuard = new();
 
         NativeWebView? _web;
         IEngineTab? _engine;
@@ -388,6 +392,8 @@ namespace PommeBrowser.Views
         public void Navigate(string url, bool httpsFallback = false)
         {
             _pendingTitle = null;
+            _loopGuard.Reset();
+            _loopStoppedAt = long.MinValue / 2;
             if (WantsBasilisk(url, out Uri? legacy))
             {
                 OpenInBasilisk(legacy);
@@ -437,6 +443,7 @@ namespace PommeBrowser.Views
 
         public void GoBack()
         {
+            _loopStoppedAt = long.MinValue / 2;
             if (Page != TabPage.Web)
             {
                 if (_webShownOnce)
@@ -449,12 +456,14 @@ namespace PommeBrowser.Views
 
         public void GoForward()
         {
+            _loopStoppedAt = long.MinValue / 2;
             _expectedMainUrl = null;
             _engine?.GoForward();
         }
 
         public void Reload(bool bypassCache = false)
         {
+            _loopStoppedAt = long.MinValue / 2;
             if (Page != TabPage.Web)
             {
                 if (Page == TabPage.Error && WebUrl.Length > 0)
@@ -515,12 +524,22 @@ namespace PommeBrowser.Views
                         return;
                     }
 
+                    // Boucle arrêtée à l'instant : la page quittée ne relance pas sa navigation.
+                    if (url != BlankPage && Environment.TickCount64 - _loopStoppedAt < LoopStopHold)
+                    {
+                        _engine?.Navigate(BlankPage);
+                        return;
+                    }
+
                     // Page passée en HTTPS par PommeBrowser qui repart d'elle-même vers http:// (script
                     // de la page, pas une redirection du serveur) : le site veut HTTP, il le garde.
                     // Sinon, chaque retour serait de nouveau passé en HTTPS, sans fin.
-                    if (System.Uri.TryCreate(url, UriKind.Absolute, out Uri? started) &&
-                        _httpsReturn.ReturnsToHttp(started, Environment.TickCount64) && _app.HttpOnlyHosts.Add(started.IdnHost))
-                        RuntimeLogBuffer.Append($"[HTTPS] {started.IdnHost} revient de lui-même en HTTP : laissé en HTTP pour la session.");
+                    if (System.Uri.TryCreate(url, UriKind.Absolute, out Uri? started))
+                    {
+                        _loopGuard.Started(started);
+                        if (_httpsReturn.ReturnsToHttp(started, Environment.TickCount64) && _app.HttpOnlyHosts.Add(started.IdnHost))
+                            RuntimeLogBuffer.Append($"[HTTPS] {started.IdnHost} revient de lui-même en HTTP : laissé en HTTP pour la session.");
+                    }
 
                     // Page atteinte par un lien : même passage en HTTPS qu'une adresse saisie.
                     if (url != null && url != _expectedMainUrl)
@@ -528,30 +547,32 @@ namespace PommeBrowser.Views
                         string upgraded = url;
                         if (TryUpgrade(ref upgraded))
                         {
+                            _loopGuard.Upgraded(new Uri(upgraded), Environment.TickCount64);
                             _expectedMainUrl = upgraded;
                             _engine?.Navigate(upgraded);
                             return;
                         }
                     }
                     _expectedMainUrl = null;
-                    if (Page == TabPage.Error)
+                    // Page blanche d'une boucle arrêtée : la page d'explication reste affichée.
+                    if (Page == TabPage.Error && url != BlankPage)
                         ShowWeb();
                     break;
 
                 case LoadStage.Redirected:
                     // Un site qui renvoie de https:// vers http:// ne propose pas HTTPS : pas de boucle.
-                    if (System.Uri.TryCreate(url, UriKind.Absolute, out Uri? redirected) &&
-                        redirected.Scheme == System.Uri.UriSchemeHttp &&
-                        _upgradedHosts.Contains(redirected.IdnHost))
+                    if (System.Uri.TryCreate(url, UriKind.Absolute, out Uri? redirected))
                     {
-                        _app.HttpOnlyHosts.Add(redirected.IdnHost);
+                        _loopGuard.Redirected(redirected);
+                        if (redirected.Scheme == System.Uri.UriSchemeHttp && _upgradedHosts.Contains(redirected.IdnHost))
+                            _app.HttpOnlyHosts.Add(redirected.IdnHost);
                     }
                     break;
 
                 case LoadStage.Committed:
                     // Repère du journal (arrêt brutal) : le site seulement, rien d'une page privée.
                     System.Uri.TryCreate(url, UriKind.Absolute, out Uri? committed);
-                    RuntimeLogBuffer.Append("[Page] " + (IsPrivate ? "navigation privée" : committed?.Host ?? "?"));
+                    RuntimeLogBuffer.Append("[Page] " + (IsPrivate ? "navigation privée" : committed is { Host.Length: > 0 } shown ? shown.Host : url ?? "?"));
                     // Page ouverte en HTTPS par PommeBrowser : un retour en HTTP juste après vient du site.
                     if (committed is { } page && page.Scheme == System.Uri.UriSchemeHttps && _upgradedHosts.Contains(page.IdnHost) &&
                         _httpsReturn.UpgradedPageOpened(page.IdnHost, Environment.TickCount64) && _app.HttpOnlyHosts.Add(page.IdnHost))
@@ -567,6 +588,8 @@ namespace PommeBrowser.Views
                         _engine.Zoom = ZoomFor(url);
                     if (!IsPrivate && url != null)
                         _app.History.Record(url, _engine?.Title);
+                    if (committed != null && _loopGuard.Opened(committed, Environment.TickCount64))
+                        OnNavigationLoop(committed);
                     break;
 
                 case LoadStage.Finished:
@@ -675,6 +698,55 @@ namespace PommeBrowser.Views
         {
             _app.SessionTrustedHosts.Add(uri.Authority);
             _engine?.AllowCertificate(problem);
+        }
+
+        const string BlankPage = "about:blank";
+        const long LoopStopHold = 3_000;
+        long _loopStoppedAt = long.MinValue / 2;
+
+        /// <summary>
+        /// La page se recharge sans fin (voir NavigationLoopGuard) : son trajet est noté au journal.
+        /// Si PommeBrowser a passé des sites en HTTPS pendant la boucle, ils restent en HTTP (la
+        /// boucle vient sans doute de là) ; si elle continue, ou sans passage en HTTPS, la page est
+        /// quittée (ses scripts la relanceraient) et expliquée, avec de quoi réessayer.
+        /// </summary>
+        void OnNavigationLoop(Uri page)
+        {
+            long now = Environment.TickCount64;
+            RuntimeLogBuffer.Append($"[Page] Boucle : {NavigationLoopGuard.LoopCount} pages ouvertes en moins de {NavigationLoopGuard.LoopPeriod / 1000} s. Trajet : {_loopGuard.Trail}");
+            List<string> upgraded = _loopGuard.UpgradedHosts(now).Where(host => !_app.HttpOnlyHosts.Contains(host)).ToList();
+            _loopGuard.Reset();
+            if (upgraded.Count > 0)
+            {
+                foreach (string host in upgraded)
+                    _app.HttpOnlyHosts.Add(host);
+                RuntimeLogBuffer.Append("[HTTPS] Boucle avec le passage en HTTPS : " + string.Join(", ", upgraded) + " laissé en HTTP pour la session.");
+                return;
+            }
+
+            string url = page.AbsoluteUri;
+            string site = page.Host;
+            _loopStoppedAt = now;
+            _engine?.Navigate(BlankPage);
+            var blocker = _app.AdBlock;
+            bool filtered = AdBlockService.IsSupported && blocker.Settings.Enabled &&
+                            !blocker.IsLocal(site) && !blocker.IsSiteAllowed(site);
+            (string, bool, Action) retry = (Tr("Réessayer"), true, () => Navigate(url));
+            (string, bool, Action) other = filtered
+                ? (Tr("Réessayer sans la protection web"), false, () =>
+                {
+                    blocker.SetSiteAllowed(site, true);
+                    RuntimeLogBuffer.Append("[Page] Protection web en pause sur " + site + " après une boucle.");
+                    Navigate(url);
+                })
+                : (Tr("Retour"), false, () =>
+                {
+                    _loopStoppedAt = long.MinValue / 2;
+                    GoBackOrHome();
+                });
+            ShowError(url, Tr("Cette page se recharge sans arrêt"),
+                Tr("{0} s'est rechargée plusieurs fois par seconde : PommeBrowser l'a arrêtée pour que l'onglet reste utilisable. La protection web ou un réglage du site peut en être la cause.", site),
+                retry, other, warning: true);
         }
 
         void GoBackOrHome()
