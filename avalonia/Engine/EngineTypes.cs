@@ -157,6 +157,13 @@ namespace PommeBrowser.Engine
         /// <summary>Étape du chargement de la page principale, avec son adresse.</summary>
         event Action<LoadStage, string?>? LoadChanged;
 
+        /// <summary>
+        /// La navigation que LoadChanged(Started) annonce envoie des données (formulaire envoyé,
+        /// POST) : la relancer à une autre adresse (passage en HTTPS) les perdrait, le serveur
+        /// recevrait un formulaire vide. Lu pendant cet appel ; faux si le moteur ne le sait pas.
+        /// </summary>
+        bool StartedWithData { get; }
+
         /// <summary>Échec du chargement de la page principale (adresse, message).</summary>
         event Action<string, string>? LoadFailed;
 

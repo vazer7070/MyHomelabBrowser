@@ -486,16 +486,21 @@ namespace PommeBrowser.Views
         /// <summary>http:// devient https:// (hors réseau local et sites autorisés en HTTP).</summary>
         bool TryUpgrade(ref string url)
         {
-            if (!_app.Settings.HttpsUpgrade || !System.Uri.TryCreate(url, UriKind.Absolute, out Uri? uri))
-                return false;
-
-            if (!HttpsUpgradePolicy.ShouldUpgrade(uri, host => _app.SiteSecurity.IsHttpAllowed(host) || _app.HttpOnlyHosts.Contains(host)))
+            if (!System.Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) || !WouldUpgrade(uri))
                 return false;
 
             _upgradedHosts.Add(uri.IdnHost);
             url = HttpsUpgradePolicy.Upgrade(uri).AbsoluteUri;
             return true;
         }
+
+        /// <summary>Adresse que le passage automatique en HTTPS changerait (réglage actif, site non exclu).</summary>
+        bool WouldUpgrade(Uri uri)
+            => _app.Settings.HttpsUpgrade &&
+               HttpsUpgradePolicy.ShouldUpgrade(uri, host => _app.SiteSecurity.IsHttpAllowed(host) || _app.HttpOnlyHosts.Contains(host));
+
+        // Sites dont un formulaire envoyé en HTTP est déjà noté au journal.
+        readonly HashSet<string> _formsKeptInHttp = new(StringComparer.OrdinalIgnoreCase);
 
         double ZoomFor(string? url)
             => System.Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) ? _app.Zoom.Get(uri) : 1;
@@ -541,8 +546,15 @@ namespace PommeBrowser.Views
                             RuntimeLogBuffer.Append($"[HTTPS] {started.IdnHost} revient de lui-même en HTTP : laissé en HTTP pour la session.");
                     }
 
-                    // Page atteinte par un lien : même passage en HTTPS qu'une adresse saisie.
-                    if (url != null && url != _expectedMainUrl)
+                    // Page atteinte par un lien : même passage en HTTPS qu'une adresse saisie. Pas un
+                    // formulaire envoyé : relancée en HTTPS, la navigation perdrait ce qu'il envoie (le
+                    // serveur de koramgame recevait une connexion sans identifiant).
+                    if (url != null && url != _expectedMainUrl && _engine is { StartedWithData: true })
+                    {
+                        if (System.Uri.TryCreate(url, UriKind.Absolute, out Uri? form) && WouldUpgrade(form) && _formsKeptInHttp.Add(form.IdnHost))
+                            RuntimeLogBuffer.Append($"[HTTPS] Formulaire envoyé à {form.IdnHost} en HTTP : laissé tel quel (passé en HTTPS, il perdrait ce qu'il envoie).");
+                    }
+                    else if (url != null && url != _expectedMainUrl)
                     {
                         string upgraded = url;
                         if (TryUpgrade(ref upgraded))

@@ -166,6 +166,7 @@ namespace PommeBrowser.Engine.Gtk
         [DllImport(WebKit)] public static extern uint webkit_navigation_action_get_modifiers(nint action);
         [DllImport(WebKit)] public static extern int webkit_navigation_action_is_user_gesture(nint action);
         [DllImport(WebKit)] public static extern nint webkit_uri_request_get_uri(nint request);
+        [DllImport(WebKit)] public static extern nint webkit_uri_request_get_http_method(nint request);
         [DllImport(WebKit)] public static extern nint webkit_response_policy_decision_get_response(nint decision);
         [DllImport(WebKit)] public static extern int webkit_response_policy_decision_is_mime_type_supported(nint decision);
         [DllImport(WebKit)] public static extern int webkit_response_policy_decision_is_main_frame_main_resource(nint decision);

@@ -245,7 +245,35 @@ namespace PommeBrowser.Engine.WebView2
             _loading = true;
             _progress = 0.1;
             StateChanged?.Invoke();
-            LoadChanged?.Invoke(e.IsRedirected ? LoadStage.Redirected : LoadStage.Started, e.Uri);
+            _startedWithData = !e.IsRedirected && SendsData(e.RequestHeaders);
+            try
+            {
+                LoadChanged?.Invoke(e.IsRedirected ? LoadStage.Redirected : LoadStage.Started, e.Uri);
+            }
+            finally
+            {
+                _startedWithData = false;
+            }
+        }
+
+        bool _startedWithData;
+
+        public bool StartedWithData => _startedWithData;
+
+        /// <summary>
+        /// WebView2 ne donne pas la méthode d'une navigation : un formulaire envoyé se reconnaît à
+        /// ses en-têtes (type de son contenu ; Origin, que Chromium n'envoie pas pour un lien).
+        /// </summary>
+        static bool SendsData(CoreWebView2HttpRequestHeaders headers)
+        {
+            try
+            {
+                return headers.Contains("Content-Type") || headers.Contains("Origin");
+            }
+            catch (Exception ex) when (ex is COMException or InvalidOperationException or ArgumentException)
+            {
+                return false;
+            }
         }
 
         void OnContentLoading(object? sender, CoreWebView2ContentLoadingEventArgs e)

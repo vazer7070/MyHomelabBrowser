@@ -69,6 +69,12 @@ namespace PommeBrowser.Engine.Gtk
         bool _filterApplied;
         string? _hoveredLink;
         string? _tlsFailedUri;
+        // Adresse de la navigation de la page en cours de décision qui envoie des données (POST),
+        // notée sur le fil de GLib (decide-policy) et lue à son démarrage (load-changed).
+        volatile string? _dataNavigation;
+        bool _startedWithData;
+
+        public bool StartedWithData => _startedWithData;
         volatile bool _disposed;
         volatile Snapshot _state = new(null, null, false, 0, false, false);
         volatile bool _pageHasKeyboard;
@@ -389,13 +395,29 @@ namespace PommeBrowser.Engine.Gtk
                 return;
 
             string? uri = String(webkit_web_view_get_uri(view));
+            bool withData = false;
             if (loadEvent == 0)
+            {
                 tab._tlsFailedUri = null;
+                withData = uri != null && tab._dataNavigation == uri;
+                tab._dataNavigation = null;
+            }
             // Le filtre suit la page qui s'affiche, avant ses premières ressources.
             if (loadEvent is 0 or 1)
                 tab.ApplyContentFilterOnGlib(pageUri: uri);
             tab.UpdateState();
-            tab.Post(() => tab.LoadChanged?.Invoke((LoadStage)loadEvent, uri));
+            tab.Post(() =>
+            {
+                tab._startedWithData = withData;
+                try
+                {
+                    tab.LoadChanged?.Invoke((LoadStage)loadEvent, uri);
+                }
+                finally
+                {
+                    tab._startedWithData = false;
+                }
+            });
         }
 
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
@@ -485,9 +507,17 @@ namespace PommeBrowser.Engine.Gtk
                 }
 
                 nint action = webkit_navigation_policy_decision_get_navigation_action(decision);
-                string? target = String(webkit_uri_request_get_uri(webkit_navigation_action_get_request(action)));
+                nint navigationRequest = webkit_navigation_action_get_request(action);
+                string? target = String(webkit_uri_request_get_uri(navigationRequest));
                 if (string.IsNullOrEmpty(target))
                     return 0;
+                // Formulaire envoyé (POST…) : ne pas le relancer ailleurs (voir StartedWithData).
+                if (type == PolicyNavigationAction)
+                {
+                    string? method = String(webkit_uri_request_get_http_method(navigationRequest));
+                    tab._dataNavigation = method != null && !method.Equals("GET", StringComparison.OrdinalIgnoreCase) &&
+                                          !method.Equals("HEAD", StringComparison.OrdinalIgnoreCase) ? target : null;
+                }
 
                 bool linkClicked = webkit_navigation_action_get_navigation_type(action) == NavigationLinkClicked;
                 bool middle = webkit_navigation_action_get_mouse_button(action) == MouseMiddle;
