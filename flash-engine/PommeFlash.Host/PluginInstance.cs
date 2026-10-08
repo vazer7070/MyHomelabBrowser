@@ -221,7 +221,7 @@ namespace PommeFlash.Host
             HostChannel.Trace("url:" + (post != null ? "POST " : "GET ") + uri.GetLeftPart(UriPartial.Path),
                 "Chargement demandé : " + (post != null ? "POST " : "GET ") + uri.GetLeftPart(UriPartial.Path));
             if (post != null)
-                HostChannel.Trace("post:" + uri.GetLeftPart(UriPartial.Path), ResponseShape.DescribePost(uri, post.Body, post.Headers.Select(header => header.Key), post.Dropped));
+                HostChannel.Trace("post:" + uri.GetLeftPart(UriPartial.Path), ResponseShape.DescribePost(uri, post.Body, post.Headers.Select(header => header.Key), post.Dropped, post.Layout));
             var stream = new PluginStream(this, url, uri, post, notify, notifyData);
             _streams.Add(stream);
             stream.Start();

@@ -55,13 +55,15 @@ namespace PommeFlash.Host
         /// donnés par le module, octets retirés après la longueur annoncée, et un caractère de
         /// contrôle final (qui fausserait le dernier champ). Jamais les valeurs.
         /// </summary>
-        public static string DescribePost(Uri url, ReadOnlySpan<byte> body, IEnumerable<string> headers, int dropped)
+        public static string DescribePost(Uri url, ReadOnlySpan<byte> body, IEnumerable<string> headers, int dropped, string? layout = null)
         {
             var text = new StringBuilder($"Envoi POST vers {url.GetLeftPart(UriPartial.Path)} : {body.Length} octets");
             if (url.Query.Length > 1)
                 text.Append(", paramètres de l'adresse : ").Append(Names(url.Query[1..].Split('&').Select(pair => Uri.UnescapeDataString(pair.Split('=', 2)[0]))));
             text.Append(", ").Append(body.Length <= Limit ? Describe(body) : "trop long pour être décrit");
             text.Append(", en-têtes du module : ").Append(Names(headers));
+            if (layout != null)
+                text.Append(" — ").Append(layout);
             if (dropped > 0)
                 text.Append($", {dropped} octet(s) après la longueur annoncée, retirés");
             if (!body.IsEmpty && body[^1] < 0x20)

@@ -55,8 +55,8 @@ public sealed class ResponseShapeTests
         Assert.DoesNotContain("SECRET", post);
         Assert.DoesNotContain("fr_0158", post);
 
-        string clean = ResponseShape.DescribePost(new Uri("http://jeu.exemple.com/login"), Encoding.UTF8.GetBytes("user=1&site=fr"), new[] { "Content-Type" }, dropped: 1);
-        Assert.Equal("Envoi POST vers http://jeu.exemple.com/login : 14 octets, formulaire, champs : user, site, en-têtes du module : Content-Type, 1 octet(s) après la longueur annoncée, retirés", clean);
+        string clean = ResponseShape.DescribePost(new Uri("http://jeu.exemple.com/login"), Encoding.UTF8.GetBytes("user=1&site=fr"), new[] { "Content-Type" }, dropped: 1, layout: "en-têtes (fins de ligne \\n)");
+        Assert.Equal("Envoi POST vers http://jeu.exemple.com/login : 14 octets, formulaire, champs : user, site, en-têtes du module : Content-Type — en-têtes (fins de ligne \\n), 1 octet(s) après la longueur annoncée, retirés", clean);
     }
 
     [Theory]

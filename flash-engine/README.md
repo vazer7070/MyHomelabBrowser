@@ -192,8 +192,9 @@ message vient de Flash lui-même ou du contenu, qui dessine les siens dans sa fe
 (`NPNVcontentsScaleFactor`, 1 : l'hôte n'est pas adapté aux DPI, Windows met ses fenêtres à
 l'échelle). Ses **chargements**, eux, sont ceux d'un module dans un navigateur : identité et
 langues de la page qui le contient (`--http-user-agent`, `--accept-language`, `Accept: */*`), la
-page en `Referer`, et l'envoi tel que le module l'a écrit, coupé à la longueur qu'il annonce
-(`Content-Length`). Un serveur de jeu peut vérifier que la connexion du jeu vient du navigateur
+page en `Referer`, et l'envoi tel que le module l'a écrit, découpé comme Firefox le fait
+(`PostData` : en-têtes reconnus à leur `Content-Length`, fins de ligne `\r\n` ou `\n` seules, ligne
+vide en tête pour « pas d'en-têtes ») et coupé à la longueur annoncée (`Content-Length`). Un serveur de jeu peut vérifier que la connexion du jeu vient du navigateur
 qui a ouvert sa page. Le journal note la forme de chaque envoi (taille, noms des champs, en-têtes
 du module, caractère de contrôle final), jamais les valeurs. Comme dans Firefox, un
 `<object classid=…>` (ActiveX, Internet Explorer seulement) qui contient un contenu Flash (`<embed>`

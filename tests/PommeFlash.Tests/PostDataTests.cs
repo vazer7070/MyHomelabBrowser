@@ -33,6 +33,34 @@ public sealed class PostDataTests
     }
 
     [Fact]
+    public void Headers_ending_with_bare_line_feeds_are_separated_like_firefox_does()
+    {
+        // Demon Slayer : en-têtes finis par \n seules ; lus comme du corps, ils partaient collés
+        // devant le formulaire, et le serveur n'y trouvait plus le champ « site ».
+        const string form = "user=1207917868&key=57D95D5F&site=fr_0158&p2=0&rid=1";
+        PostData post = Parse($"Content-Type: application/x-www-form-urlencoded\nContent-Length: {form.Length}\n\n{form}");
+        Assert.Equal(form, Encoding.ASCII.GetString(post.Body));
+        Assert.Equal("application/x-www-form-urlencoded", post.Header("Content-Type"));
+        Assert.Equal(form.Length.ToString(System.Globalization.CultureInfo.InvariantCulture), post.Header("Content-Length"));
+        Assert.Equal("en-têtes (fins de ligne \\n)", post.Layout);
+
+        // Mélange de fins de ligne, en-tête Content-Length en minuscules et en premier.
+        PostData mixed = Parse("content-length: 3\r\nContent-Type: text/plain\n\nabc");
+        Assert.Equal("abc", Encoding.ASCII.GetString(mixed.Body));
+        Assert.Equal("text/plain", mixed.Header("content-type"));
+    }
+
+    [Fact]
+    public void A_blank_first_line_means_no_headers_as_npapi_says()
+    {
+        PostData post = Parse("\nuser=1&site=fr");
+        Assert.Equal("user=1&site=fr", Encoding.ASCII.GetString(post.Body));
+        Assert.Empty(post.Headers);
+        Assert.Equal("sans en-têtes (ligne vide en tête)", post.Layout);
+        Assert.Equal("user=1&site=fr", Encoding.ASCII.GetString(Parse("\r\nuser=1&site=fr").Body));
+    }
+
+    [Fact]
     public void Data_without_a_header_block_is_all_body()
     {
         Assert.Equal("a=1&b=2", Encoding.ASCII.GetString(Parse("a=1&b=2").Body));
