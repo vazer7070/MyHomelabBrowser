@@ -14,6 +14,7 @@ sealed class TestServer : IDisposable
     readonly Dictionary<string, (byte[] Body, string Type)> _files = new(StringComparer.Ordinal);
     readonly Dictionary<string, (string Target, string SetCookie)> _redirects = new(StringComparer.Ordinal);
     readonly ConcurrentDictionary<string, string> _cookies = new(StringComparer.Ordinal);
+    readonly ConcurrentDictionary<string, System.Collections.Specialized.NameValueCollection> _headers = new(StringComparer.Ordinal);
     readonly HashSet<string> _slow = new(StringComparer.Ordinal);
 
     public TestServer()
@@ -46,6 +47,9 @@ sealed class TestServer : IDisposable
     /// <summary>Adresse demandée au moins une fois.</summary>
     public bool WasRequested(string path) => _cookies.ContainsKey(path);
 
+    /// <summary>En-tête de la dernière requête reçue pour ce chemin (null : absent, ou chemin jamais demandé).</summary>
+    public string? Header(string path, string name) => _headers.TryGetValue(path, out var headers) ? headers[name] : null;
+
     async Task ServeAsync()
     {
         while (_listener.IsListening)
@@ -62,6 +66,7 @@ sealed class TestServer : IDisposable
 
             string path = context.Request.Url!.AbsolutePath.TrimStart('/');
             _cookies[path] = context.Request.Headers["Cookie"] ?? string.Empty;
+            _headers[path] = new System.Collections.Specialized.NameValueCollection(context.Request.Headers);
             HttpListenerResponse response = context.Response;
             if (_redirects.TryGetValue(path, out (string Target, string SetCookie) redirect))
             {

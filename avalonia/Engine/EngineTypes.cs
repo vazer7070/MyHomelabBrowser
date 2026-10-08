@@ -164,6 +164,13 @@ namespace PommeBrowser.Engine
         /// </summary>
         bool StartedWithData { get; }
 
+        /// <summary>
+        /// Identité de navigateur des chargements de la page (en-tête User-Agent), donnée aux
+        /// chargements du moteur Flash intégré, comme un navigateur le fait pour un module. Null :
+        /// inconnue (le lecteur garde celle de Basilisk).
+        /// </summary>
+        string? UserAgent { get; }
+
         /// <summary>Échec du chargement de la page principale (adresse, message).</summary>
         event Action<string, string>? LoadFailed;
 

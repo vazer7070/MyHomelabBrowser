@@ -75,6 +75,10 @@ namespace PommeBrowser.Engine.Gtk
         bool _startedWithData;
 
         public bool StartedWithData => _startedWithData;
+
+        volatile string? _userAgent;
+
+        public string? UserAgent => _userAgent;
         volatile bool _disposed;
         volatile Snapshot _state = new(null, null, false, 0, false, false);
         volatile bool _pageHasKeyboard;
@@ -182,6 +186,8 @@ namespace PommeBrowser.Engine.Gtk
 
             GtkEngine.ConfigureContext(webkit_web_view_get_context(_view));
             GtkEngine.ConfigureView(_view);
+            // Lue ici, sur le fil de GLib : les réglages de la vue n'y sont pas accessibles ailleurs.
+            _userAgent = String(webkit_settings_get_user_agent(webkit_web_view_get_settings(_view)));
             webkit_web_view_set_zoom_level(_view, _zoom);
             UpdateState();
         }

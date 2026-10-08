@@ -260,6 +260,21 @@ namespace PommeBrowser.Engine.WebView2
 
         public bool StartedWithData => _startedWithData;
 
+        public string? UserAgent
+        {
+            get
+            {
+                try
+                {
+                    return _disposed ? null : _core.Settings.UserAgent;
+                }
+                catch (Exception ex) when (ex is COMException or InvalidOperationException)
+                {
+                    return null;
+                }
+            }
+        }
+
         /// <summary>
         /// WebView2 ne donne pas la méthode d'une navigation : un formulaire envoyé se reconnaît à
         /// ses en-têtes (type de son contenu ; Origin, que Chromium n'envoie pas pour un lien).

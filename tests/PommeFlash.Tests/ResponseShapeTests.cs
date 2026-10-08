@@ -44,6 +44,21 @@ public sealed class ResponseShapeTests
     public void Binary_content_is_not_read_as_text()
         => Assert.Equal("binaire", ResponseShape.Describe(new byte[] { 0x0A, 0xFF, 0xFE, 0x00, 0x80 }));
 
+    [Fact]
+    public void A_post_of_the_module_is_described_by_its_field_names_only()
+    {
+        string post = ResponseShape.DescribePost(new Uri("http://s81fr.sq.koramgame.com/login?v=1&t=SECRET"),
+            Encoding.UTF8.GetBytes("user=SECRET&key=SECRET&site=fr_0158\0"), new[] { "Content-Type", "Content-Length" }, dropped: 0);
+        Assert.StartsWith("Envoi POST vers http://s81fr.sq.koramgame.com/login : 36 octets, paramètres de l'adresse : v, t, ", post);
+        // Un zéro final fausse le dernier champ (site) : il est signalé.
+        Assert.EndsWith(", en-têtes du module : Content-Type, Content-Length, se termine par le caractère de contrôle 0x00", post);
+        Assert.DoesNotContain("SECRET", post);
+        Assert.DoesNotContain("fr_0158", post);
+
+        string clean = ResponseShape.DescribePost(new Uri("http://jeu.exemple.com/login"), Encoding.UTF8.GetBytes("user=1&site=fr"), new[] { "Content-Type" }, dropped: 1);
+        Assert.Equal("Envoi POST vers http://jeu.exemple.com/login : 14 octets, formulaire, champs : user, site, en-têtes du module : Content-Type, 1 octet(s) après la longueur annoncée, retirés", clean);
+    }
+
     [Theory]
     [InlineData("text/html", true)]
     [InlineData("application/xml", true)]

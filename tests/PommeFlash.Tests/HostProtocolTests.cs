@@ -346,6 +346,8 @@ public sealed class HostProtocolTests
             "--swf", server.Url("movie.swf"),
             "--page", server.Url("jeu/page.html"),
             "--share-cookies",
+            "--http-user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Page/1.0",
+            "--accept-language", "fr-FR,fr;q=0.9",
             "--hidden"
         }, code => code.Contains("pommeAdd(2,3)", StringComparison.Ordinal) ? (true, "<number>5</number>") : (false, null),
         // PommeBrowser : cookies de la page, HttpOnly compris pour les chargements.
@@ -360,6 +362,17 @@ public sealed class HostProtocolTests
         Assert.Equal("session=abc; prefs=fr", server.CookieHeader("jeu/data.txt"));
         Assert.Equal("session=abc; prefs=fr", server.CookieHeader("jeu/vrai.txt"));
         Assert.Equal("session=abc; prefs=fr", server.CookieHeader("jeu/echo"));
+        // Comme les chargements d'un navigateur : identité et langues de la page, adresse de la page
+        // en Referer (paramètres compris), et l'envoi tel que le module l'a écrit.
+        foreach (string path in new[] { "movie.swf", "jeu/echo" })
+        {
+            Assert.Equal("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Page/1.0", server.Header(path, "User-Agent"));
+            Assert.Equal("fr-FR,fr;q=0.9", server.Header(path, "Accept-Language"));
+            Assert.Equal("*/*", server.Header(path, "Accept"));
+            Assert.Equal(server.Url("jeu/page.html"), server.Header(path, "Referer"));
+        }
+        Assert.Equal("text/plain", server.Header("jeu/echo", "Content-Type"));
+        Assert.Equal("5", server.Header("jeu/echo", "Content-Length"));
         Assert.Contains(events, e => e.GetProperty("event").GetString() == "cookies" &&
                                      e.GetProperty("url").GetString() == server.Url("jeu/vrai.txt") && e.GetProperty("http").GetBoolean());
 

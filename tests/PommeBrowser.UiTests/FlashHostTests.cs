@@ -52,7 +52,7 @@ public sealed class FlashHostTests
         // Contenu injoignable : le lecteur s'affiche quand même (le chargement échoue seul).
         var content = new FlashContent(new Uri("http://127.0.0.1:9/movie.swf"), new Uri("http://127.0.0.1:9/page.html"),
             null, 200, 150, null, Array.Empty<KeyValuePair<string, string>>());
-        FlashHostProcess host = FlashHostProcess.Start(content, plugin, isPrivate: true);
+        FlashHostProcess host = FlashHostProcess.Start(content, plugin, isPrivate: true, userAgent: null);
         var changes = new List<bool>();
         bool exited = false;
         host.ResponsivenessChanged += changes.Add;

@@ -146,7 +146,8 @@ namespace PommeBrowser.Legacy
         /// <summary>Cookie à enregistrer dans la page : en-tête Set-Cookie reçu (vrai) ou posé par le module.</summary>
         public event Action<Uri, string, bool>? CookieReceived;
 
-        public static FlashHostProcess Start(FlashContent content, string module, bool isPrivate)
+        /// <param name="userAgent">Identité de navigateur de la page (IEngineTab.UserAgent), pour les chargements du lecteur.</param>
+        public static FlashHostProcess Start(FlashContent content, string module, bool isPrivate, string? userAgent)
         {
             bool is32Bit = FlashModuleSearch.Is32Bit(module);
             string executable = ExecutablePath(is32Bit);
@@ -163,7 +164,7 @@ namespace PommeBrowser.Legacy
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
-            foreach (string argument in Arguments(content, module, isPrivate))
+            foreach (string argument in Arguments(content, module, isPrivate, userAgent, AcceptLanguage(CultureInfo.CurrentUICulture)))
                 start.ArgumentList.Add(argument);
 
             Process process = Process.Start(start) ?? throw new InvalidOperationException("PommeFlashHost ne démarre pas.");
@@ -182,7 +183,27 @@ namespace PommeBrowser.Legacy
             return host;
         }
 
-        static IEnumerable<string> Arguments(FlashContent content, string module, bool isPrivate)
+        /// <summary>
+        /// Langues des chargements du lecteur, comme celles qu'annonce le moteur de la page (Chromium :
+        /// langue de l'interface, sa langue sans région, puis l'anglais). Null : langue invariante.
+        /// </summary>
+        internal static string? AcceptLanguage(CultureInfo culture)
+        {
+            if (culture.Name.Length == 0)
+                return null;
+            var languages = new List<string> { culture.Name };
+            if (culture.Name.Contains('-') && culture.TwoLetterISOLanguageName is { Length: > 0 } neutral)
+                languages.Add(neutral);
+            foreach (string english in new[] { "en-US", "en" })
+            {
+                if (!languages.Contains(english, StringComparer.OrdinalIgnoreCase))
+                    languages.Add(english);
+            }
+            return string.Join(",", languages.Select((language, i) =>
+                i == 0 ? language : language + ";q=" + (1 - i / 10.0).ToString("0.0", CultureInfo.InvariantCulture)));
+        }
+
+        static IEnumerable<string> Arguments(FlashContent content, string module, bool isPrivate, string? userAgent, string? acceptLanguage)
         {
             yield return "--plugin";
             yield return module;
@@ -213,6 +234,18 @@ namespace PommeBrowser.Legacy
                 yield return "--private";
             // Cookies de la page donnés au lecteur, et ceux qu'il reçoit gardés dans la page (WebView2, WebKitGTK).
             yield return "--share-cookies";
+            // Chargements avec l'identité et les langues de la page, comme ceux d'un module dans un
+            // navigateur (le module lui-même voit celle de Basilisk, NPN_UserAgent).
+            if (userAgent is { Length: > 0 })
+            {
+                yield return "--http-user-agent";
+                yield return userAgent;
+            }
+            if (acceptLanguage != null)
+            {
+                yield return "--accept-language";
+                yield return acceptLanguage;
+            }
             // Fenêtre cachée jusqu'à ce que l'onglet la loge.
             yield return "--hidden";
         }

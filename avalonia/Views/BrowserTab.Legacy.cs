@@ -223,7 +223,7 @@ namespace PommeBrowser.Views
             FlashHostProcess host;
             try
             {
-                host = FlashHostProcess.Start(content, module, IsPrivate);
+                host = FlashHostProcess.Start(content, module, IsPrivate, _engine?.UserAgent);
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or System.IO.IOException or UnauthorizedAccessException)
             {

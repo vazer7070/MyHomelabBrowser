@@ -5,19 +5,29 @@ namespace PommeFlash.Host
 {
     /// <summary>
     /// Données envoyées par NPN_PostURL. Flash les fait précéder de ses en-têtes
-    /// (« Content-Type: …\r\nContent-Length: …\r\n\r\n ») : ils sont séparés du corps.
+    /// (« Content-Type: …\r\nContent-Length: …\r\n\r\n ») : ils sont séparés du corps. Le corps
+    /// s'arrête à la longueur que le module annonce (Content-Length), comme un serveur le lirait :
+    /// des octets au-delà (zéro final d'une chaîne C) fausseraient le dernier champ d'un formulaire.
     /// </summary>
     sealed class PostData
     {
-        PostData(byte[] body, IReadOnlyList<KeyValuePair<string, string>> headers)
+        PostData(byte[] body, IReadOnlyList<KeyValuePair<string, string>> headers, int dropped = 0)
         {
             Body = body;
             Headers = headers;
+            Dropped = dropped;
         }
 
         public byte[] Body { get; }
 
         public IReadOnlyList<KeyValuePair<string, string>> Headers { get; }
+
+        /// <summary>Octets retirés après la longueur annoncée par le module.</summary>
+        public int Dropped { get; }
+
+        /// <summary>En-tête donné par le module (null s'il ne l'a pas donné).</summary>
+        public string? Header(string name)
+            => Headers.FirstOrDefault(header => header.Key.Equals(name, StringComparison.OrdinalIgnoreCase)).Value;
 
         public static unsafe PostData Read(nint buffer, uint length, bool isFile)
         {
@@ -52,7 +62,12 @@ namespace PommeFlash.Host
                     return new PostData(data, Array.Empty<KeyValuePair<string, string>>());
                 headers.Add(new(line[..colon].Trim(), line[(colon + 1)..].Trim()));
             }
-            return new PostData(data[(end + 4)..], headers);
+            byte[] body = data[(end + 4)..];
+            string? length = headers.FirstOrDefault(header => header.Key.Equals("Content-Length", StringComparison.OrdinalIgnoreCase)).Value;
+            if (int.TryParse(length, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int announced) &&
+                announced < body.Length)
+                return new PostData(body[..announced], headers, body.Length - announced);
+            return new PostData(body, headers);
         }
 
         static int IndexOf(byte[] data, ReadOnlySpan<byte> pattern) => data.AsSpan().IndexOf(pattern);

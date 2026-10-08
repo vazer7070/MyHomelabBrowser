@@ -190,7 +190,14 @@ message vient de Flash lui-même ou du contenu, qui dessine les siens dans sa fe
 **Comme Basilisk** : le module reçoit l'identité de navigateur de Basilisk (`NPN_UserAgent`,
 `WOW64` pour l'hôte 32 bits, `X11; Linux x86_64` sous Linux) et le facteur d'échelle du contenu
 (`NPNVcontentsScaleFactor`, 1 : l'hôte n'est pas adapté aux DPI, Windows met ses fenêtres à
-l'échelle).
+l'échelle). Ses **chargements**, eux, sont ceux d'un module dans un navigateur : identité et
+langues de la page qui le contient (`--http-user-agent`, `--accept-language`, `Accept: */*`), la
+page en `Referer`, et l'envoi tel que le module l'a écrit, coupé à la longueur qu'il annonce
+(`Content-Length`). Un serveur de jeu peut vérifier que la connexion du jeu vient du navigateur
+qui a ouvert sa page. Le journal note la forme de chaque envoi (taille, noms des champs, en-têtes
+du module, caractère de contrôle final), jamais les valeurs. Comme dans Firefox, un
+`<object classid=…>` (ActiveX, Internet Explorer seulement) qui contient un contenu Flash (`<embed>`
+ou `<object type=…>`) lui laisse la place : c'est ce contenu, avec ses flashvars, qui est lu.
 
 ## Tests
 

@@ -459,6 +459,8 @@ namespace PommeBrowser.Engine.Apple
         /// <summary>Méthode des navigations non suivie ici (pas de décision de navigation) : inconnue.</summary>
         public bool StartedWithData => false;
 
+        public string? UserAgent => null;
+
         /// <summary>Cadres d'une autre origine hors d'atteinte depuis l'application (WebKit) : refus.</summary>
         public Task<(bool Ok, string? Value)> EvaluateInFrameAsync(Uri frame, string script) => Task.FromResult((false, (string?)null));
 

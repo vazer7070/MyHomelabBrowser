@@ -7,7 +7,8 @@ namespace PommeFlash.Host
     /// Paramètres de lancement donnés par PommeBrowser :
     /// --plugin &lt;NPSWF64_*.dll&gt; --swf &lt;adresse&gt; --page &lt;adresse de la page&gt;
     /// [--flashvars &lt;…&gt;] [--width N] [--height N] [--id &lt;…&gt;] [--param nom=valeur]…
-    /// [--user-agent &lt;…&gt;] [--private] [--hidden].
+    /// [--user-agent &lt;…&gt;] [--http-user-agent &lt;…&gt;] [--accept-language &lt;…&gt;]
+    /// [--private] [--hidden].
     /// </summary>
     sealed class HostOptions
     {
@@ -22,6 +23,17 @@ namespace PommeFlash.Host
         public string? ElementId { get; private set; }
         public List<KeyValuePair<string, string>> Params { get; } = new();
         public string UserAgent { get; private set; } = BasiliskUserAgent();
+
+        /// <summary>
+        /// Identité de navigateur des chargements (en-tête User-Agent) : celle de la page qui contient
+        /// le contenu, comme dans un navigateur, où la page et le module chargent avec la même. Un
+        /// serveur de jeu vérifie parfois que la connexion du jeu vient du navigateur qui a ouvert
+        /// sa page. Sans : <see cref="UserAgent"/>.
+        /// </summary>
+        public string? HttpUserAgent { get; private set; }
+
+        /// <summary>Langues de la page (en-tête Accept-Language), comme les chargements d'un navigateur.</summary>
+        public string? AcceptLanguage { get; private set; }
         public bool IsPrivate { get; private set; }
 
         /// <summary>
@@ -102,6 +114,12 @@ namespace PommeFlash.Host
                         break;
                     case "--user-agent":
                         options.UserAgent = Value();
+                        break;
+                    case "--http-user-agent":
+                        options.HttpUserAgent = Value() is { Length: > 0 } agent ? agent : null;
+                        break;
+                    case "--accept-language":
+                        options.AcceptLanguage = Value() is { Length: > 0 } languages ? languages : null;
                         break;
                     case "--private":
                         options.IsPrivate = true;

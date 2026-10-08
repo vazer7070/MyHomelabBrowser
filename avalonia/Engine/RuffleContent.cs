@@ -199,12 +199,20 @@ namespace PommeBrowser.Engine
               // contenu, et un contenu déclaré minuscule (pixel de suivi, lecteur audio invisible :
               // width="1") ne compte pas.
               const AD_SIZES = new Set(__AD_SIZES__);
+              // Objet ActiveX (classid, sans type Flash) : Internet Explorer seulement. Un navigateur à
+              // greffons (Firefox, Basilisk) ne le lit pas et lit le contenu Flash qu'il contient
+              // (<embed> ou <object type=…>), avec ses propres flashvars et paramètres, qui peuvent
+              // différer de ceux de l'objet : c'est celui-là qui est décrit.
+              const activeX = (el) => kind(el) === 'object' && (el.getAttribute('classid') || '').toLowerCase() === CLSID &&
+                !FLASH_TYPES.includes((el.getAttribute('type') || '').toLowerCase());
+              const nestedFlash = (el) => [...el.querySelectorAll('object, embed, ruffle-object, ruffle-embed')].some(isFlash);
               const describeAll = () => {
                 const found = [];
                 for (const el of document.querySelectorAll('object, embed, ruffle-object, ruffle-embed')) {
                   if (!isFlash(el)) continue;
+                  if (activeX(el) && nestedFlash(el)) continue;
                   const parent = el.parentElement;
-                  if (kind(el) === 'embed' && parent && kind(parent) === 'object' && isFlash(parent)) continue;
+                  if (kind(el) === 'embed' && parent && kind(parent) === 'object' && isFlash(parent) && !activeX(parent)) continue;
                   const params = {};
                   if (kind(el) === 'object') {
                     for (const p of el.querySelectorAll(':scope > param')) {

@@ -166,6 +166,19 @@ public sealed class FlashContentTests
     }
 
     [Fact]
+    public void An_activex_object_gives_way_to_the_flash_content_it_contains_as_in_basilisk()
+    {
+        string script = RuffleContent.ProbeScript("https://pomme.invalid/", "post");
+
+        // <object classid=…> (Internet Explorer) avec un <embed> ou un <object type=…> dedans :
+        // Firefox et Basilisk lisent celui de dedans, avec ses flashvars et ses paramètres.
+        Assert.Contains("if (activeX(el) && nestedFlash(el)) continue;", script);
+        Assert.Contains("!FLASH_TYPES.includes((el.getAttribute('type') || '').toLowerCase())", script);
+        // Un <embed> dans un objet Flash lisible (type, data) reste décrit par l'objet.
+        Assert.Contains("isFlash(parent) && !activeX(parent)) continue;", script);
+    }
+
+    [Fact]
     public void Messages_of_a_frame_reach_the_browser_through_the_main_document_after_an_origin_check()
     {
         string script = RuffleContent.ProbeScript("https://pomme.invalid/", "post");

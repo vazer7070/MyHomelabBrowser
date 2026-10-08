@@ -41,7 +41,11 @@ namespace PommeFlash.Host
             _npp->ndata = GCHandle.ToIntPtr(_self);
             // Cookies de la page (PommeBrowser) ou propres à l'hôte ; redirections suivies comme un navigateur.
             _http = new HttpClient(new BrowserHttpHandler(options.ShareCookies, _cookies));
-            _http.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
+            // En-têtes d'un chargement de module dans un navigateur : identité et langues de la page.
+            _http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", options.HttpUserAgent ?? options.UserAgent);
+            _http.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "*/*");
+            if (options.AcceptLanguage != null)
+                _http.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Language", options.AcceptLanguage);
 
             var page = new PageObjects(options);
             _windowObject = page.Window;
@@ -216,6 +220,8 @@ namespace PommeFlash.Host
 
             HostChannel.Trace("url:" + (post != null ? "POST " : "GET ") + uri.GetLeftPart(UriPartial.Path),
                 "Chargement demandé : " + (post != null ? "POST " : "GET ") + uri.GetLeftPart(UriPartial.Path));
+            if (post != null)
+                HostChannel.Trace("post:" + uri.GetLeftPart(UriPartial.Path), ResponseShape.DescribePost(uri, post.Body, post.Headers.Select(header => header.Key), post.Dropped));
             var stream = new PluginStream(this, url, uri, post, notify, notifyData);
             _streams.Add(stream);
             stream.Start();

@@ -52,6 +52,13 @@ public sealed class HostOptionsTests : IDisposable
             Assert.Contains("(X11; Linux x86_64;", agent, StringComparison.Ordinal);
 
         Assert.Equal("Autre/1.0", Parse("--user-agent", "Autre/1.0").UserAgent);
+        // Chargements : identité et langues de la page, si PommeBrowser les donne.
+        HostOptions page = Parse("--http-user-agent", "Mozilla/5.0 (Windows NT 10.0) Edg/140", "--accept-language", "fr-FR,fr;q=0.9");
+        Assert.Equal("Mozilla/5.0 (Windows NT 10.0) Edg/140", page.HttpUserAgent);
+        Assert.Equal("fr-FR,fr;q=0.9", page.AcceptLanguage);
+        Assert.Contains(" Basilisk/", page.UserAgent, StringComparison.Ordinal);
+        Assert.Null(Parse().HttpUserAgent);
+        Assert.Null(Parse("--http-user-agent", "").HttpUserAgent);
     }
 
     [Fact]

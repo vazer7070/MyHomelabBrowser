@@ -87,6 +87,7 @@ namespace PommeBrowser.Engine.Gtk
         [DllImport(WebKit)] public static extern void webkit_web_view_set_zoom_level(nint view, double level);
         [DllImport(WebKit)] public static extern nint webkit_web_view_get_favicon(nint view);
         [DllImport(WebKit)] public static extern nint webkit_web_view_get_settings(nint view);
+        [DllImport(WebKit)] public static extern nint webkit_settings_get_user_agent(nint settings);
         [DllImport(WebKit)] public static extern nint webkit_web_view_get_context(nint view);
         [DllImport(WebKit)] public static extern nint webkit_web_view_get_user_content_manager(nint view);
         [DllImport(WebKit)] public static extern nint webkit_web_view_get_find_controller(nint view);
