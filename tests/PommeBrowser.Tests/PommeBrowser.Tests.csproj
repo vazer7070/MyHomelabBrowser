@@ -39,6 +39,8 @@
     <Compile Include="..\..\classes\FavoriteItem.cs" Link="App\FavoriteItem.cs" />
     <Compile Include="..\..\classes\SiteZoomStore.cs" Link="App\SiteZoomStore.cs" />
     <Compile Include="..\..\classes\Import\BookmarkImporter.cs" Link="App\Import\BookmarkImporter.cs" />
+    <Compile Include="..\..\classes\Import\HistoryImporter.cs" Link="App\Import\HistoryImporter.cs" />
+    <Compile Include="..\..\classes\Import\PasswordCsvImporter.cs" Link="App\Import\PasswordCsvImporter.cs" />
     <Compile Include="..\..\classes\Security\Totp.cs" Link="App\Security\Totp.cs" />
     <Compile Include="..\..\classes\Security\CertificatePinStore.cs" Link="App\Security\CertificatePinStore.cs" />
     <Compile Include="..\..\classes\Homelab\HomelabService.cs" Link="App\Homelab\HomelabService.cs" />
@@ -49,6 +51,7 @@
     <Compile Include="..\..\classes\AppearanceSettings.cs" Link="App\AppearanceSettings.cs" />
     <Compile Include="..\..\classes\Profiles\AppDataContext.cs" Link="App\Profiles\AppDataContext.cs" />
     <Compile Include="..\..\classes\Security\HttpsUpgradePolicy.cs" Link="App\Security\HttpsUpgradePolicy.cs" />
+    <Compile Include="..\..\classes\Security\HttpsReturnGuard.cs" Link="App\Security\HttpsReturnGuard.cs" />
     <Compile Include="..\..\classes\Security\SiteSecurityStore.cs" Link="App\Security\SiteSecurityStore.cs" />
     <Compile Include="..\..\classes\HistoryEntry.cs" Link="App\HistoryEntry.cs" />
     <Compile Include="..\..\classes\History\HistoryStore.cs" Link="App\History\HistoryStore.cs" />
@@ -92,8 +95,14 @@
     <Compile Include="..\..\avalonia\Engine\UserScripts.cs" Link="Avalonia\UserScripts.cs" />
     <Compile Include="..\..\avalonia\Legacy\FlashModuleSearch.cs" Link="Avalonia\FlashModuleSearch.cs" />
     <Compile Include="..\..\avalonia\Engine\FlashContent.cs" Link="Avalonia\FlashContent.cs" />
+    <Compile Include="..\..\avalonia\Engine\FlashFrames.cs" Link="Avalonia\FlashFrames.cs" />
     <Compile Include="..\..\avalonia\Engine\FlashCookies.cs" Link="Avalonia\FlashCookies.cs" />
     <Compile Include="..\..\avalonia\Engine\RuffleContent.cs" Link="Avalonia\RuffleContent.cs" />
+    <Compile Include="..\..\avalonia\Core\SingleInstance.cs" Link="Avalonia\SingleInstance.cs" />
+    <Compile Include="..\..\avalonia\Core\LaunchTargets.cs" Link="Avalonia\LaunchTargets.cs" />
+    <Compile Include="..\..\avalonia\Core\DefaultBrowser.cs" Link="Avalonia\DefaultBrowser.cs" />
+    <Compile Include="..\..\avalonia\Legacy\Win32Embedding.cs" Link="Avalonia\Win32Embedding.cs" />
+    <Compile Include="..\..\avalonia\Core\NavigationLoopGuard.cs" Link="Avalonia\NavigationLoopGuard.cs" />
   </ItemGroup>
 
   <ItemGroup Label="Édition Linux (logique sans interface)">

@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -6,9 +8,9 @@ namespace PommeFlash.Host
 {
     /// <summary>
     /// Échanges avec PommeBrowser : un événement JSON par ligne sur la sortie standard (ready,
-    /// status, navigate, script, eval, log, exit) ; une commande par ligne sur l'entrée standard
-    /// (« close », « result &lt;id&gt; &lt;json&gt; »). La fin de l'entrée standard (PommeBrowser
-    /// fermé) arrête l'hôte.
+    /// status, navigate, script, eval, log, called, pong, exit) ; une commande par ligne sur l'entrée
+    /// standard (« close », « result &lt;id&gt; &lt;json&gt; », « call &lt;id&gt; &lt;json&gt; », « ping &lt;n&gt; »).
+    /// La fin de l'entrée standard (PommeBrowser fermé) arrête l'hôte.
     /// </summary>
     static class HostChannel
     {
@@ -98,10 +100,13 @@ namespace PommeFlash.Host
 
         /// <summary>
         /// Lit les commandes sur un fil à part ; <paramref name="ended"/> quand l'entrée se ferme.
-        /// Les réponses aux questions (« result ») sont remises directement à qui les attend.
+        /// Les réponses aux questions (« result ») sont remises directement à qui les attend. Les
+        /// appels de la page vers le contenu (« call ») vont à <paramref name="call"/>, sur le fil
+        /// du module, y compris pendant qu'il attend un script de la page (voir <see cref="RunCalls"/>).
         /// </summary>
-        public static void StartReading(Action<string> command, Action ended)
+        public static void StartReading(Action<string> command, Action<string> call, Action ended)
         {
+            _call = call;
             var thread = new Thread(() =>
             {
                 try
@@ -110,10 +115,15 @@ namespace PommeFlash.Host
                     while (reader.ReadLine() is { } line)
                     {
                         string trimmed = line.Trim();
-                        if (trimmed.StartsWith("result ", StringComparison.Ordinal))
-                            OnResult(trimmed);
-                        else if (trimmed.Length > 0)
-                            command(trimmed);
+                        try
+                        {
+                            Dispatch(trimmed);
+                        }
+                        catch (Exception ex) when (ex is not OutOfMemoryException)
+                        {
+                            // Une ligne malformée n'arrête jamais la lecture des suivantes.
+                            Error($"Commande illisible ({ex.GetType().Name}) : {Excerpt(trimmed, 80)}");
+                        }
                     }
                 }
                 catch (IOException)
@@ -128,6 +138,77 @@ namespace PommeFlash.Host
                 Name = "Commandes de PommeBrowser"
             };
             thread.Start();
+
+            void Dispatch(string trimmed)
+            {
+                if (trimmed.StartsWith("result ", StringComparison.Ordinal))
+                {
+                    OnResult(trimmed);
+                }
+                else if (trimmed.StartsWith("call ", StringComparison.Ordinal))
+                {
+                    Calls.Enqueue(trimmed);
+                    Wakeup.Set();
+                    UiThread.Post(RunCalls);
+                }
+                else if (trimmed.StartsWith("ping ", StringComparison.Ordinal))
+                {
+                    OnPing(trimmed[5..]);
+                }
+                else if (trimmed.Length > 0)
+                {
+                    command(trimmed);
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Battement de cœur : PommeBrowser vérifie que le fil du module tourne
+        // ---------------------------------------------------------------
+
+        // Attentes en cours d'une réponse de PommeBrowser, sur le fil du module.
+        static int _waitingForBrowser;
+
+        /// <summary>
+        /// « ping &lt;n&gt; » : « pong » répondu par le fil du module, preuve qu'il traite ses
+        /// messages ; aussitôt s'il attend PommeBrowser (script de la page, cookies) : il ne
+        /// bloque alors que sur lui.
+        /// </summary>
+        static void OnPing(string text)
+        {
+            if (!long.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out long number))
+                return;
+            if (Volatile.Read(ref _waitingForBrowser) > 0)
+                Send("pong", ("id", number));
+            else
+                UiThread.Post(() => Send("pong", ("id", number)));
+        }
+
+        // ---------------------------------------------------------------
+        // Appels de la page vers le contenu
+        // ---------------------------------------------------------------
+
+        // Appels reçus, dans l'ordre ; exécutés par le fil du module seulement.
+        static readonly ConcurrentQueue<string> Calls = new();
+        // Réveil du fil du module qui attend un script : appel reçu ou réponse arrivée.
+        static readonly AutoResetEvent Wakeup = new(false);
+        static Action<string>? _call;
+        // Scripts de la page attendus en ce moment par le fil du module, les uns dans les autres.
+        static int _scriptDepth;
+
+        /// <summary>
+        /// Appels imbriqués au plus : page → contenu → page → contenu… (au-delà, l'appel attend la
+        /// fin des précédents, comme sans imbrication).
+        /// </summary>
+        const int MaxScriptDepth = 8;
+
+        /// <summary>Sur le fil du module : exécute les appels de la page reçus, dans l'ordre.</summary>
+        static void RunCalls()
+        {
+            if (_call is not { } call)
+                return;
+            while (Calls.TryDequeue(out string? line))
+                UiThread.Run(() => call(line));
         }
 
         // ---------------------------------------------------------------
@@ -162,6 +243,7 @@ namespace PommeFlash.Host
                     return;
             }
             reply.TrySetResult(result);
+            Wakeup.Set();
         }
 
         static void FailPending()
@@ -176,11 +258,39 @@ namespace PommeFlash.Host
         /// <summary>
         /// Attente d'une réponse sur le fil du module, qui reste bloqué comme dans un navigateur
         /// (sous Windows, les messages envoyés par les autres fils sont traités pendant ce temps).
+        /// Avec <paramref name="allowCalls"/> (script de la page), les appels de la page vers le
+        /// contenu reçus pendant l'attente sont exécutés aussitôt : dans un navigateur, le script
+        /// peut appeler le contenu, qui répond depuis son appel à NPN_Evaluate. Sans cela, chacun
+        /// attendrait l'autre.
         /// </summary>
-        static bool Wait(int id, Task<(bool Ok, object? Value)> reply, TimeSpan timeout, out object? value)
+        static bool Wait(int id, Task<(bool Ok, object? Value)> reply, TimeSpan timeout, bool allowCalls, out object? value)
         {
-            if (!reply.IsCompleted)
-                UiThread.Display.Wait(((IAsyncResult)reply).AsyncWaitHandle, timeout);
+            if (allowCalls && _scriptDepth >= MaxScriptDepth)
+                allowCalls = false;
+            if (allowCalls)
+                _scriptDepth++;
+            Interlocked.Increment(ref _waitingForBrowser);
+            try
+            {
+                var clock = Stopwatch.StartNew();
+                while (!reply.IsCompleted)
+                {
+                    if (allowCalls)
+                        RunCalls();
+                    if (reply.IsCompleted)
+                        break;
+                    TimeSpan remaining = timeout - clock.Elapsed;
+                    if (remaining <= TimeSpan.Zero)
+                        break;
+                    UiThread.Display.Wait(allowCalls ? Wakeup : ((IAsyncResult)reply).AsyncWaitHandle, remaining);
+                }
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _waitingForBrowser);
+                if (allowCalls)
+                    _scriptDepth--;
+            }
 
             if (!reply.IsCompleted)
             {
@@ -199,7 +309,7 @@ namespace PommeFlash.Host
         public static bool RunInPage(string code, TimeSpan timeout, out object? value)
         {
             (int id, Task<(bool Ok, object? Value)> reply) = Ask("eval", ("code", code));
-            return Wait(id, reply, timeout, out value);
+            return Wait(id, reply, timeout, allowCalls: true, out value);
         }
 
         /// <summary>
@@ -210,7 +320,7 @@ namespace PommeFlash.Host
         public static string? PageCookies(Uri url)
         {
             (int id, Task<(bool Ok, object? Value)> reply) = Ask("cookies", ("url", url.AbsoluteUri), ("http", false));
-            return Wait(id, reply, CookieTimeout, out object? value) ? value as string : null;
+            return Wait(id, reply, CookieTimeout, allowCalls: false, out object? value) ? value as string : null;
         }
 
         /// <summary>
@@ -249,6 +359,11 @@ namespace PommeFlash.Host
             {
                 using JsonDocument document = JsonDocument.Parse(parts[2]);
                 JsonElement root = document.RootElement;
+                if (root.ValueKind != JsonValueKind.Object)
+                {
+                    Complete(id, result);
+                    return;
+                }
                 bool ok = root.TryGetProperty("ok", out JsonElement flag) && flag.ValueKind == JsonValueKind.True;
                 object? value = !root.TryGetProperty("value", out JsonElement element) ? null : element.ValueKind switch
                 {

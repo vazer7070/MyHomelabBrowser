@@ -130,5 +130,14 @@ namespace PommeFlash.Host
             => _funcs->getvalue == 0 ? Np.GenericError : ((delegate* unmanaged[Cdecl]<NPP_t*, int, void*, short>)_funcs->getvalue)(npp, (int)variable, value);
 
         public bool HasNewStream => _funcs->newstream != 0;
+
+        /// <summary>Le module veut être consulté avant chaque redirection de ses chargements notifiés.</summary>
+        public bool HandlesRedirects => _funcs->urlredirectnotify != 0;
+
+        public void UrlRedirectNotify(NPP_t* npp, nint url, int status, nint notifyData)
+        {
+            if (_funcs->urlredirectnotify != 0)
+                ((delegate* unmanaged[Cdecl]<NPP_t*, nint, int, nint, void>)_funcs->urlredirectnotify)(npp, url, status, notifyData);
+        }
     }
 }

@@ -489,6 +489,46 @@ namespace MyHomelabBrowser.classes.Profiles.Credentials
             Save();
         }
 
+        /// <summary>
+        /// Identifiants importés d'un autre navigateur, enregistrés en une fois. Un identifiant déjà
+        /// présent pour le même site et le même nom n'est jamais remplacé (celui de PommeBrowser peut
+        /// être plus récent). Renvoie les nombres d'identifiants ajoutés, déjà présents et ignorés
+        /// (adresse non reconnue).
+        /// </summary>
+        public (int Added, int Existing, int Invalid) Import(IEnumerable<(string Url, string Username, string Password, string? Totp)> credentials)
+        {
+            EnsureUnlocked();
+            int added = 0, existing = 0, invalid = 0;
+            foreach ((string url, string username, string password, string? totp) in credentials)
+            {
+                string origin = CredentialOrigin.NormalizeStoredValue(url);
+                if (origin.Length == 0 || string.IsNullOrEmpty(password))
+                {
+                    invalid++;
+                    continue;
+                }
+                string user = username?.Trim() ?? string.Empty;
+                if (_cache.Any(x => string.Equals(x.Host, origin, StringComparison.OrdinalIgnoreCase) &&
+                                    string.Equals(x.Username, user, StringComparison.OrdinalIgnoreCase)))
+                {
+                    existing++;
+                    continue;
+                }
+                _cache.Add(new CredentialEntry
+                {
+                    Host = origin,
+                    Username = user,
+                    Password = password,
+                    UpdatedAt = DateTime.UtcNow,
+                    TotpSecret = string.IsNullOrWhiteSpace(totp) ? null : totp.Trim()
+                });
+                added++;
+            }
+            if (added > 0)
+                Save();
+            return (added, existing, invalid);
+        }
+
         public void Upsert(
             string origin,
             string username,

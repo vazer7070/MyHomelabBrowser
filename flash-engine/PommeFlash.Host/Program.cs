@@ -67,6 +67,7 @@ namespace PommeFlash.Host
             // Commandes lues dès maintenant : le module peut demander un script à la page dès sa création.
             HostChannel.StartReading(
                 command => UiThread.Post(() => OnCommand(command)),
+                CallFromPage,
                 () => UiThread.Post(Close));
 
             try
@@ -103,16 +104,16 @@ namespace PommeFlash.Host
 
         static void OnCommand(string command)
         {
-            // « call <id> {"request":"<invoke …>"} » : appel de la page vers le contenu.
-            if (command.StartsWith("call ", StringComparison.Ordinal))
-            {
-                CallFromPage(command);
-                return;
-            }
             switch (command)
             {
                 case "close":
                     Close();
+                    break;
+                case "stats":
+                    // Diagnostic (tests de tenue) : ressources vivantes, lues sur le fil du module.
+                    (int streams, int timers) = _instance?.Usage ?? (0, 0);
+                    HostChannel.Send("stats", ("memory", NpMemory.Live), ("objects", NpObjects.LiveHostObjects),
+                        ("streams", streams), ("timers", timers));
                     break;
                 default:
                     HostChannel.Log("Commande inconnue : " + command);
@@ -120,6 +121,7 @@ namespace PommeFlash.Host
             }
         }
 
+        /// <summary>« call &lt;id&gt; {"request":"&lt;invoke …&gt;"} » : appel de la page vers le contenu, sur le fil du module.</summary>
         static void CallFromPage(string command)
         {
             string[] parts = command.Split(' ', 3);
@@ -129,7 +131,8 @@ namespace PommeFlash.Host
             try
             {
                 using var document = System.Text.Json.JsonDocument.Parse(parts[2]);
-                if (document.RootElement.TryGetProperty("request", out System.Text.Json.JsonElement value) && value.ValueKind == System.Text.Json.JsonValueKind.String)
+                if (document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                    document.RootElement.TryGetProperty("request", out System.Text.Json.JsonElement value) && value.ValueKind == System.Text.Json.JsonValueKind.String)
                     request = value.GetString();
             }
             catch (System.Text.Json.JsonException)

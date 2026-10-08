@@ -1,10 +1,10 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
@@ -32,15 +32,23 @@ namespace PommeBrowser.Legacy
         // Écritures sur l'entrée de l'hôte (réponses aux scripts, fermeture) : une à la fois.
         readonly SemaphoreSlim _input = new(1, 1);
         Task _reading = Task.CompletedTask;
-        // Scripts de la page que l'hôte attend (eval), et appels de la page vers le contenu en cours.
-        readonly ConcurrentDictionary<int, byte> _pendingScripts = new();
+        // Appels de la page vers le contenu en cours.
         readonly Dictionary<int, CallSlot> _calls = new();
         int _nextCall;
         volatile bool _calling;
+        // Appels de la page restés sans réponse à la suite, et appels suspendus jusqu'à (Environment.TickCount64).
+        int _callTimeouts;
+        long _callsSuspendedUntil;
         volatile bool _ready;
         nint _window;
         bool _closed;
         bool _exited;
+        // Battement de cœur (voir StartHeartbeat).
+        Timer? _heartbeat;
+        long _pingsSent;
+        long _lastPong;
+        long _lastPongAt;
+        bool _unresponsive;
 
         FlashHostProcess(Process process, string module)
         {
@@ -50,6 +58,26 @@ namespace PommeBrowser.Legacy
 
         /// <summary>Module Flash chargé par cet hôte.</summary>
         public string Module { get; }
+
+        /// <summary>
+        /// L'hôte s'est arrêté seul après avoir affiché le contenu (plantage du module, processus
+        /// tué) : ni fermé par PommeBrowser, ni échoué au démarrage.
+        /// </summary>
+        public bool Crashed { get; private set; }
+
+        /// <summary>
+        /// Le fil du module ne répond plus depuis <see cref="UnresponsiveAfter"/> (vrai), ou répond
+        /// de nouveau (faux) ; sur le fil de l'interface.
+        /// </summary>
+        public event Action<bool>? ResponsivenessChanged;
+
+        /// <summary>
+        /// Silence du fil du module au-delà duquel le lecteur est dit figé : plus que les 15 s
+        /// après lesquelles Flash propose lui-même d'arrêter un script trop long.
+        /// </summary>
+        public static readonly TimeSpan UnresponsiveAfter = TimeSpan.FromSeconds(20);
+
+        static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(3);
 
         /// <summary>
         /// L'hôte s'est arrêté seul avant d'afficher le contenu : module impossible à charger,
@@ -75,6 +103,25 @@ namespace PommeBrowser.Legacy
         /// <summary>Un hôte est livré dans cette compilation (au moins en 64 bits).</summary>
         public static bool IsAvailable => File.Exists(ExecutablePath(false));
 
+        /// <summary>L'hôte 32 bits (modules NPSWF32) est livré : Windows seulement.</summary>
+        public static bool IsAvailable32 => OperatingSystem.IsWindows() && File.Exists(ExecutablePath(true));
+
+        /// <summary>Arrêt d'un lecteur que PommeBrowser n'a pas demandé (diagnostic).</summary>
+        public sealed record Stop(DateTime At, string Module, int? ExitCode, bool BeforeContent);
+
+        /// <summary>Dernier arrêt non demandé d'un lecteur pendant cette session, ou null.</summary>
+        public static Stop? LastStop { get; private set; }
+
+        /// <summary>Lecteurs ouverts : numéros de leurs processus.</summary>
+        public static IReadOnlyList<int> RunningProcessIds
+        {
+            get
+            {
+                lock (Running)
+                    return Running.Where(h => !h.HasExited).Select(h => h._process.Id).ToList();
+            }
+        }
+
         /// <summary>L'hôte de l'architecture de ce module est livré (Linux : 64 bits seulement).</summary>
         public static bool IsAvailableFor(string module)
             => (OperatingSystem.IsWindows() || !FlashModuleSearch.Is32Bit(module)) && File.Exists(ExecutablePath(module));
@@ -99,7 +146,8 @@ namespace PommeBrowser.Legacy
         /// <summary>Cookie à enregistrer dans la page : en-tête Set-Cookie reçu (vrai) ou posé par le module.</summary>
         public event Action<Uri, string, bool>? CookieReceived;
 
-        public static FlashHostProcess Start(FlashContent content, string module, bool isPrivate)
+        /// <param name="userAgent">Identité de navigateur de la page (IEngineTab.UserAgent), pour les chargements du lecteur.</param>
+        public static FlashHostProcess Start(FlashContent content, string module, bool isPrivate, string? userAgent)
         {
             bool is32Bit = FlashModuleSearch.Is32Bit(module);
             string executable = ExecutablePath(is32Bit);
@@ -116,7 +164,7 @@ namespace PommeBrowser.Legacy
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
-            foreach (string argument in Arguments(content, module, isPrivate))
+            foreach (string argument in Arguments(content, module, isPrivate, userAgent, AcceptLanguage(CultureInfo.CurrentUICulture)))
                 start.ArgumentList.Add(argument);
 
             Process process = Process.Start(start) ?? throw new InvalidOperationException("PommeFlashHost ne démarre pas.");
@@ -135,7 +183,27 @@ namespace PommeBrowser.Legacy
             return host;
         }
 
-        static IEnumerable<string> Arguments(FlashContent content, string module, bool isPrivate)
+        /// <summary>
+        /// Langues des chargements du lecteur, comme celles qu'annonce le moteur de la page (Chromium :
+        /// langue de l'interface, sa langue sans région, puis l'anglais). Null : langue invariante.
+        /// </summary>
+        internal static string? AcceptLanguage(CultureInfo culture)
+        {
+            if (culture.Name.Length == 0)
+                return null;
+            var languages = new List<string> { culture.Name };
+            if (culture.Name.Contains('-') && culture.TwoLetterISOLanguageName is { Length: > 0 } neutral)
+                languages.Add(neutral);
+            foreach (string english in new[] { "en-US", "en" })
+            {
+                if (!languages.Contains(english, StringComparer.OrdinalIgnoreCase))
+                    languages.Add(english);
+            }
+            return string.Join(",", languages.Select((language, i) =>
+                i == 0 ? language : language + ";q=" + (1 - i / 10.0).ToString("0.0", CultureInfo.InvariantCulture)));
+        }
+
+        static IEnumerable<string> Arguments(FlashContent content, string module, bool isPrivate, string? userAgent, string? acceptLanguage)
         {
             yield return "--plugin";
             yield return module;
@@ -166,6 +234,18 @@ namespace PommeBrowser.Legacy
                 yield return "--private";
             // Cookies de la page donnés au lecteur, et ceux qu'il reçoit gardés dans la page (WebView2, WebKitGTK).
             yield return "--share-cookies";
+            // Chargements avec l'identité et les langues de la page, comme ceux d'un module dans un
+            // navigateur (le module lui-même voit celle de Basilisk, NPN_UserAgent).
+            if (userAgent is { Length: > 0 })
+            {
+                yield return "--http-user-agent";
+                yield return userAgent;
+            }
+            if (acceptLanguage != null)
+            {
+                yield return "--accept-language";
+                yield return acceptLanguage;
+            }
             // Fenêtre cachée jusqu'à ce que l'onglet la loge.
             yield return "--hidden";
         }
@@ -209,6 +289,10 @@ namespace PommeBrowser.Legacy
                     case "ready" when root.TryGetProperty("window", out JsonElement window) && window.TryGetInt64(out long handle):
                         _window = (nint)handle;
                         _ready = true;
+                        StartHeartbeat();
+                        break;
+                    case "pong" when root.TryGetProperty("id", out JsonElement pong) && pong.TryGetInt64(out long answered):
+                        OnPong(answered);
                         break;
                     case "navigate" when root.TryGetProperty("url", out JsonElement url) &&
                                          Uri.TryCreate(url.GetString(), UriKind.Absolute, out Uri? target) &&
@@ -224,12 +308,14 @@ namespace PommeBrowser.Legacy
                         if (_calling)
                         {
                             // La page attend la réponse du contenu : elle ne peut pas exécuter de script
-                            // maintenant. Refus immédiat, sans quoi chacun attendrait l'autre.
-                            Reply(id, false, null);
-                            RuntimeLogBuffer.Append("[Flash] Script du contenu refusé pendant un appel de la page vers le contenu.");
+                            // maintenant, et chacun attendrait l'autre. Le contenu reçoit « undefined »
+                            // aussitôt, et le script est exécuté dès que l'appel de la page a répondu
+                            // (la plupart des ExternalInterface.call n'attendent pas de résultat).
+                            Reply(id, true, DeferredResult(evaluated));
+                            Dispatcher.UIThread.Post(() => ScriptRequested?.Invoke(null, evaluated));
+                            RuntimeLogBuffer.Append("[Flash] Script du contenu demandé pendant un appel de la page : exécuté après cet appel.");
                             break;
                         }
-                        _pendingScripts[id] = 0;
                         Dispatcher.UIThread.Post(() =>
                         {
                             if (ScriptRequested is { } handler)
@@ -242,6 +328,15 @@ namespace PommeBrowser.Legacy
                         bool withHttpOnly = root.TryGetProperty("http", out JsonElement httpOnly) && httpOnly.ValueKind == JsonValueKind.True;
                         if (!Uri.TryCreate(Text(root, "url"), UriKind.Absolute, out Uri? cookieUrl))
                         {
+                            Reply(cookieQuestion, false, null);
+                            break;
+                        }
+                        if (_calling && !withHttpOnly)
+                        {
+                            // Le contenu attend ces cookies sur son fil (NPN_GetValueForURL) pendant un
+                            // appel de la page, qui attend le contenu : réponse aussitôt, sans cookies.
+                            // Les chargements (HttpOnly compris) n'attendent pas sur ce fil : ils sont
+                            // servis après l'appel.
                             Reply(cookieQuestion, false, null);
                             break;
                         }
@@ -285,13 +380,19 @@ namespace PommeBrowser.Legacy
             }
         }
 
+        /// <summary>
+        /// Résultat donné au contenu pour un script exécuté plus tard : « &lt;undefined/&gt; » pour
+        /// un appel d'ExternalInterface (le contenu le lit comme undefined), rien sinon.
+        /// </summary>
+        internal static string? DeferredResult(string code)
+            => code.Contains("__flash__toXML", StringComparison.Ordinal) ? "<undefined/>" : null;
+
         static string Text(JsonElement root, string name)
             => root.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : string.Empty;
 
         /// <summary>Réponse à une question de l'hôte (script de la page, cookies) : « result &lt;id&gt; {"ok":…,"value":…} ».</summary>
         public void Reply(int id, bool ok, string? value)
         {
-            _pendingScripts.TryRemove(id, out _);
             using var buffer = new MemoryStream();
             using (var writer = new Utf8JsonWriter(buffer))
             {
@@ -340,24 +441,29 @@ namespace PommeBrowser.Legacy
         /// ExternalInterface.addCallback), sur le fil de l'interface et de façon synchrone, comme
         /// un greffon de navigateur : la page attend la réponse (code JavaScript à évaluer).
         /// Pendant l'attente, seuls les messages que Windows envoie d'autres processus sont traités
-        /// (la fenêtre du lecteur est logée dans celle de PommeBrowser). Null si l'hôte refuse,
-        /// ne répond pas à temps, ou attend lui-même un script de la page (chacun attendrait l'autre).
+        /// (la fenêtre du lecteur est logée dans celle de PommeBrowser). Le contenu peut attendre
+        /// lui-même un script de la page (le script appelle le contenu) : l'hôte exécute l'appel
+        /// pendant cette attente, comme un navigateur. Null si l'hôte refuse ou ne répond pas à temps.
         /// </summary>
         public string? CallFunction(string request, TimeSpan timeout)
         {
             if (HasExited)
                 return null;
-            if (!_pendingScripts.IsEmpty)
+            if (request.Length > RuffleContent.MaxFlashCallLength)
             {
-                RuntimeLogBuffer.Append("[Flash] Appel de la page vers le contenu refusé : le contenu attend un script de la page.");
+                RuntimeLogBuffer.Append($"[Flash] Appel de la page vers le contenu refusé : {request.Length} caractères.");
                 return null;
             }
+            // Lecteur figé, ou appels restés sans réponse : l'interface ne reste pas bloquée à chaque appel.
+            if (_unresponsive || Environment.TickCount64 < Interlocked.Read(ref _callsSuspendedUntil))
+                return null;
 
             int id = Interlocked.Increment(ref _nextCall);
             var slot = new CallSlot();
             lock (_calls)
                 _calls[id] = slot;
             _calling = true;
+            PommeBrowser.Core.CrashWatch.Activity = "appel de la page vers le lecteur Flash " + _process.Id.ToString(CultureInfo.InvariantCulture);
             try
             {
                 using var buffer = new MemoryStream();
@@ -374,13 +480,21 @@ namespace PommeBrowser.Legacy
                 if (!answered)
                 {
                     RuntimeLogBuffer.Append($"[Flash] Le contenu n'a pas répondu à un appel de la page après {timeout.TotalSeconds:0} s.");
+                    if (++_callTimeouts >= 2)
+                    {
+                        // Deux fois de suite : appels suivants refusés aussitôt pendant 10 s.
+                        Interlocked.Exchange(ref _callsSuspendedUntil, Environment.TickCount64 + 10_000);
+                        RuntimeLogBuffer.Append("[Flash] Appels de la page vers le contenu suspendus 10 s.");
+                    }
                     return null;
                 }
+                _callTimeouts = 0;
                 return slot.Ok ? slot.Value : null;
             }
             finally
             {
                 _calling = false;
+                PommeBrowser.Core.CrashWatch.Activity = null;
                 lock (_calls)
                     _calls.Remove(id);
                 slot.Done.Dispose();
@@ -458,6 +572,62 @@ namespace PommeBrowser.Legacy
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool PeekMessageW(out Msg message, nint hwnd, uint min, uint max, uint remove);
 
+        // ---------------------------------------------------------------
+        // Battement de cœur : le fil du module tourne-t-il encore ?
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// Une fois le contenu affiché : « ping » toutes les 3 s, auquel le fil du module répond
+        /// quand il traite ses messages (ou aussitôt s'il attend PommeBrowser). Sans réponse depuis
+        /// <see cref="UnresponsiveAfter"/>, le lecteur est figé : l'onglet le signale, et propose de
+        /// le relancer. Les réponses sont lues sur le fil de lecture : une interface occupée ne
+        /// fait pas croire à un lecteur figé.
+        /// </summary>
+        void StartHeartbeat()
+        {
+            Interlocked.Exchange(ref _lastPongAt, Environment.TickCount64);
+            var timer = new Timer(_ => Beat(), null, HeartbeatInterval, HeartbeatInterval);
+            if (Interlocked.CompareExchange(ref _heartbeat, timer, null) != null || _closed || _exited)
+                timer.Dispose();
+        }
+
+        void Beat()
+        {
+            if (_closed || _exited)
+                return;
+            long sent = Interlocked.Increment(ref _pingsSent);
+            _ = WriteAsync("ping " + sent.ToString(CultureInfo.InvariantCulture));
+            bool silent = Interlocked.Read(ref _lastPong) < sent - 1 &&
+                          Environment.TickCount64 - Interlocked.Read(ref _lastPongAt) > (long)UnresponsiveAfter.TotalMilliseconds;
+            if (silent && !_unresponsive)
+            {
+                _unresponsive = true;
+                RuntimeLogBuffer.Append($"[Flash] Le lecteur ne répond plus depuis {UnresponsiveAfter.TotalSeconds:0} s : {Path.GetFileName(Module)}.");
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!HasExited)
+                        ResponsivenessChanged?.Invoke(true);
+                });
+            }
+        }
+
+        void OnPong(long answered)
+        {
+            Interlocked.Exchange(ref _lastPong, Math.Max(Interlocked.Read(ref _lastPong), answered));
+            Interlocked.Exchange(ref _lastPongAt, Environment.TickCount64);
+            if (!_unresponsive)
+                return;
+            _unresponsive = false;
+            RuntimeLogBuffer.Append("[Flash] Le lecteur répond de nouveau.");
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!HasExited)
+                    ResponsivenessChanged?.Invoke(false);
+            });
+        }
+
+        void StopHeartbeat() => Interlocked.Exchange(ref _heartbeat, null)?.Dispose();
+
         public bool HasExited => _exited || _process.HasExited;
 
         public IEnumerable<int> ProcessIds => new[] { _process.Id };
@@ -483,6 +653,7 @@ namespace PommeBrowser.Legacy
             if (_closed)
                 return;
             _closed = true;
+            StopHeartbeat();
             try
             {
                 if (await WriteAsync("close").ConfigureAwait(true))
@@ -514,17 +685,25 @@ namespace PommeBrowser.Legacy
             if (_exited)
                 return;
             _exited = true;
+            StopHeartbeat();
             lock (Running)
                 Running.Remove(this);
             FailedToStart = !_closed && !_ready;
+            Crashed = !_closed && _ready;
+            int? code = null;
             try
             {
                 if (_process.HasExited)
-                    RuntimeLogBuffer.Append($"[Flash] Moteur intégré arrêté (code {_process.ExitCode}){(FailedToStart ? " avant d'afficher le contenu" : string.Empty)} : {Path.GetFileName(Module)}.");
+                {
+                    code = _process.ExitCode;
+                    RuntimeLogBuffer.Append($"[Flash] Moteur intégré arrêté (code {code}){(FailedToStart ? " avant d'afficher le contenu" : string.Empty)} : {Path.GetFileName(Module)}.");
+                }
             }
             catch (InvalidOperationException)
             {
             }
+            if (!_closed)
+                LastStop = new Stop(DateTime.Now, Path.GetFileName(Module), code, FailedToStart);
             Exited?.Invoke();
         }
 

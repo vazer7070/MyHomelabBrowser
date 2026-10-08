@@ -157,6 +157,20 @@ namespace PommeBrowser.Engine
         /// <summary>Étape du chargement de la page principale, avec son adresse.</summary>
         event Action<LoadStage, string?>? LoadChanged;
 
+        /// <summary>
+        /// La navigation que LoadChanged(Started) annonce envoie des données (formulaire envoyé,
+        /// POST) : la relancer à une autre adresse (passage en HTTPS) les perdrait, le serveur
+        /// recevrait un formulaire vide. Lu pendant cet appel ; faux si le moteur ne le sait pas.
+        /// </summary>
+        bool StartedWithData { get; }
+
+        /// <summary>
+        /// Identité de navigateur des chargements de la page (en-tête User-Agent), donnée aux
+        /// chargements du moteur Flash intégré, comme un navigateur le fait pour un module. Null :
+        /// inconnue (le lecteur garde celle de Basilisk).
+        /// </summary>
+        string? UserAgent { get; }
+
         /// <summary>Échec du chargement de la page principale (adresse, message).</summary>
         event Action<string, string>? LoadFailed;
 
@@ -218,6 +232,15 @@ namespace PommeBrowser.Engine
         Task<string?> EvaluateAsync(string script, bool isolated);
 
         /// <summary>
+        /// Exécute un script dans le document d'un cadre d'une autre origine que la page : celui
+        /// d'un contenu Flash (<paramref name="frame"/> : son adresse), comme un navigateur y
+        /// exécute ses ExternalInterface.call ; seulement si ce document a toujours l'origine de
+        /// cette adresse (voir <see cref="FlashFrames"/>). Ok faux : cadre introuvable ou document
+        /// changé, ou moteur qui n'atteint pas les cadres d'une autre origine (WebKit).
+        /// </summary>
+        Task<(bool Ok, string? Value)> EvaluateInFrameAsync(Uri frame, string script);
+
+        /// <summary>
         /// Cookies du profil de la page pour une adresse, au format de l'en-tête Cookie (vide s'il
         /// n'y en a pas) ; sans les HttpOnly si <paramref name="includeHttpOnly"/> est faux. Null :
         /// ce moteur ne les partage pas (moteur Flash intégré, Windows seulement).
@@ -229,10 +252,11 @@ namespace PommeBrowser.Engine
 
         /// <summary>
         /// Appels synchrones de la page vers le contenu du moteur Flash intégré : objet
-        /// <see cref="RuffleContent.FlashBridgeName"/> dont la méthode CallFunction(requête) rend la
-        /// réponse du contenu. Null : retiré. Sans effet hors du moteur Windows.
+        /// <see cref="RuffleContent.FlashBridgeName"/> (WebView2, document principal seulement) ou
+        /// schéma <see cref="RuffleContent.FlashBridgeScheme"/> (WebKitGTK, requêtes accompagnées de
+        /// <paramref name="token"/>), dont CallFunction(requête) rend la réponse du contenu. Null : retiré.
         /// </summary>
-        void SetFlashBridge(Func<string, string?>? callFunction);
+        void SetFlashBridge(Func<string, string?>? callFunction, string? token);
 
         /// <summary>
         /// Script injecté à chaque chargement, dans le monde isolé de PommeBrowser ; avec

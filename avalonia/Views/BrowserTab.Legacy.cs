@@ -18,6 +18,19 @@ namespace PommeBrowser.Views
     /// Contenus Flash que Ruffle ne lit pas : moteur Flash intégré (module Flash de l'utilisateur,
     /// Windows, expérimental) ou Basilisk (lecteur Flash d'origine), logés dans l'onglet.
     /// </summary>
+    /// <summary>Moteur qui lit le Flash d'une page.</summary>
+    public enum FlashEngine
+    {
+        /// <summary>Ruffle, dans la page (ou pas de Flash).</summary>
+        Ruffle,
+
+        /// <summary>Module Flash de l'utilisateur, par PommeFlashHost (dans la page ou à sa place).</summary>
+        Integrated,
+
+        /// <summary>Basilisk, navigateur à part logé dans l'onglet.</summary>
+        Basilisk
+    }
+
     public sealed partial class BrowserTab
     {
         ILegacyBrowser? _basilisk;
@@ -25,8 +38,14 @@ namespace PommeBrowser.Views
         Uri? _legacyUri;
         // Contenu lu par le moteur intégré (null : Basilisk).
         FlashContent? _integrated;
-        // Lecteur que la page appelle (ExternalInterface.addCallback), le plus récent de l'onglet.
-        ILegacyBrowser? _flashBridgeHost;
+        // Lecteurs que la page appelle (ExternalInterface.addCallback, méthodes de Flash), par clé :
+        // celle de l'emplacement du contenu dans la page, ou « page » pour le lecteur à la place de la page.
+        readonly Dictionary<string, (FlashHostProcess Host, FlashContent Content)> _flashCallees = new(StringComparer.Ordinal);
+        // Jeton du pont de la page, tant qu'un de ses lecteurs peut être appelé.
+        string? _flashBridgeToken;
+
+        /// <summary>Clé du lecteur lu à la place de la page, pour le pont.</summary>
+        const string WholePageCallee = "page";
 
         /// <summary>Attente d'un appel de la page vers le contenu : l'interface reste figée pendant ce temps.</summary>
         static readonly TimeSpan FlashCallTimeout = TimeSpan.FromSeconds(8);
@@ -61,8 +80,50 @@ namespace PommeBrowser.Views
                     FlashModuleSearch.Is32Bit(failed) ? 32 : 64, FlashModuleSearch.Is32Bit(next) ? 32 : 64));
         }
 
+        // Dernière relance automatique du lecteur après un arrêt (voir TryAutoRelaunch).
+        DateTime _flashAutoRelaunchAt = DateTime.MinValue;
+
+        /// <summary>Entre deux relances automatiques : un module qui plante sans cesse n'est pas relancé en boucle.</summary>
+        static readonly TimeSpan FlashAutoRelaunchSpacing = TimeSpan.FromMinutes(5);
+
+        /// <summary>Module pour relancer le lecteur : le même s'il est toujours là, sinon le premier à essayer.</summary>
+        static string? RelaunchModule(FlashHostProcess host)
+            => System.IO.File.Exists(host.Module) && FlashHostProcess.IsAvailableFor(host.Module) ? host.Module : NextFlashModule(null);
+
+        /// <summary>
+        /// Lecteur arrêté de lui-même après avoir affiché le contenu (plantage du module) : relancé
+        /// automatiquement au même endroit, une fois toutes les 5 minutes au plus. Faux sinon (l'onglet
+        /// propose alors « Relancer »).
+        /// </summary>
+        bool TryAutoRelaunch(FlashHostProcess host, Action<string> relaunch)
+        {
+            if (!host.Crashed || DateTime.UtcNow - _flashAutoRelaunchAt < FlashAutoRelaunchSpacing || RelaunchModule(host) is not { } module)
+                return false;
+            _flashAutoRelaunchAt = DateTime.UtcNow;
+            RuntimeLogBuffer.Append("[Flash] Lecteur arrêté après l'affichage du contenu : relancé automatiquement.");
+            if (IsSelected)
+                Window.ShowToast(Tr("Le lecteur Flash s'est arrêté : il a été relancé."), warning: true);
+            relaunch(module);
+            return true;
+        }
+
+        /// <summary>Lecteur figé (il ne traite plus ses messages) : l'onglet affiché propose de le relancer.</summary>
+        void WatchFlashResponsiveness(FlashHostProcess host, Func<bool> isCurrent, Action<string> relaunch)
+        {
+            host.ResponsivenessChanged += frozen =>
+            {
+                if (!frozen || !isCurrent() || !IsSelected)
+                    return;
+                Window.ShowToast(Tr("Le lecteur Flash ne répond plus."), Tr("Relancer"), () =>
+                {
+                    if (isCurrent() && RelaunchModule(host) is { } module)
+                        relaunch(module);
+                }, timeout: 20, warning: true);
+            };
+        }
+
         /// <summary>Un moteur de secours peut lire le Flash de cette page.</summary>
-        public bool HasFlashFallback => UsesIntegratedFlash || _app.BasiliskExecutable != null;
+        public bool HasFlashFallback => UsesIntegratedFlash || (_app.BasiliskAllowed && _app.BasiliskExecutable != null);
 
         /// <summary>Le moteur de secours de cette page est le moteur intégré.</summary>
         public bool FallbackIsIntegrated => UsesIntegratedFlash;
@@ -70,25 +131,72 @@ namespace PommeBrowser.Views
         /// <summary>La page affichée est lue par le moteur intégré.</summary>
         public bool IsIntegratedFlash => Page == TabPage.Legacy && _integrated != null;
 
+        /// <summary>Moteur qui lit le Flash de la page (bouton ⚡).</summary>
+        public FlashEngine FlashEngine
+            => HasFlashOverlay || IsIntegratedFlash ? FlashEngine.Integrated
+                : Page == TabPage.Legacy && _legacyUri != null ? FlashEngine.Basilisk
+                : FlashEngine.Ruffle;
+
+        /// <summary>Retour à Ruffle depuis le moteur intégré ou Basilisk (bouton ⚡).</summary>
+        public void ReturnToRuffle()
+        {
+            if (HasFlashOverlay)
+                StopFlashOverlay();
+            else if (Page == TabPage.Legacy && _legacyUri is { } uri)
+                BackToRuffle(uri);
+        }
+
         /// <summary>
         /// Contenu que Ruffle ne lit pas : moteur intégré s'il est prêt (à sa place dans la page si
         /// possible, sinon à la place de la page), sinon Basilisk.
         /// </summary>
-        public void OpenFlashFallback(Uri uri)
+        public void OpenFlashFallback(Uri uri, bool automatic = false)
         {
             if (UsesIntegratedFlash)
             {
+                // Retenu pour le site pendant la session : Ruffle n'y lancera plus les contenus.
+                _app.PreferIntegratedFlash(uri.Host, true);
+                if (_rufflePlaying)
+                {
+                    if (!automatic)
+                    {
+                        // Choix de l'utilisateur alors que Ruffle lit déjà un contenu de la page (un jeu
+                        // s'y est peut-être déjà connecté) : la page est rechargée, une fois le script de
+                        // détection mis à jour, et le moteur intégré sera seul à la lire.
+                        RuntimeLogBuffer.Append($"[Flash] Ruffle lisait déjà {uri.Host} : page rechargée pour le moteur intégré seul.");
+                        if (IsSelected)
+                            Window.ShowToast(Tr("Ruffle lisait déjà ce contenu : la page est rechargée pour que votre module Flash soit seul à le lire."));
+                        Avalonia.Threading.DispatcherTimer.RunOnce(() => Reload(), TimeSpan.FromMilliseconds(300));
+                        return;
+                    }
+                    StopRuffleInPage();
+                }
                 FlashContent content = _flashContent!;
                 // À sa place dans la page si possible, sinon à la place de la page.
                 if (CanPlaceInPage(content) && NextFlashModule(null) is { } module)
-                    OpenFlashInPage(content, module);
+                    PlayPageInIntegratedFlash(content, module);
                 else
                     OpenInIntegratedFlash(content);
             }
-            else
+            else if (_app.BasiliskAllowed)
             {
                 OpenInBasilisk(uri);
             }
+            else
+            {
+                // Basilisk désactivé : il ne se lance jamais. Le moteur intégré n'est pas prêt pour cette page.
+                Window.ShowToast(IntegratedUnavailableReason(), Tr("Paramètres"), () => Window.OpenSettings("flash"), warning: true);
+            }
+        }
+
+        /// <summary>Ce qui empêche le moteur intégré de lire le contenu de cette page.</summary>
+        string IntegratedUnavailableReason()
+        {
+            if (!_app.Settings.FlashIntegratedEngine)
+                return Tr("Basilisk est désactivé : activez le moteur Flash intégré dans les paramètres pour lire ce contenu.");
+            if (NextFlashModule(null) == null)
+                return Tr("Module Flash absent : ajoutez votre copie de Flash Player dans les paramètres.");
+            return Tr("Aucun contenu Flash à lire n'a été trouvé sur cette page.");
         }
 
         /// <summary>
@@ -107,12 +215,15 @@ namespace PommeBrowser.Views
 
             StopBasilisk();
             _engine?.Stop();
+            // La page reste chargée derrière (scripts du contenu) : ses lecteurs Ruffle, cadres
+            // compris, s'arrêtent, sinon le contenu serait lu deux fois.
+            StopRuffleInPage();
             _legacyUri = content.Page;
             _integrated = content;
             FlashHostProcess host;
             try
             {
-                host = FlashHostProcess.Start(content, module, IsPrivate);
+                host = FlashHostProcess.Start(content, module, IsPrivate, _engine?.UserAgent);
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or System.IO.IOException or UnauthorizedAccessException)
             {
@@ -135,47 +246,80 @@ namespace PommeBrowser.Views
                     OpenInIntegratedFlash(content, next);
                     return;
                 }
+                if (Page == TabPage.Legacy && _integrated == content && TryAutoRelaunch(host, m => OpenInIntegratedFlash(content, m)))
+                    return;
                 if (Page == TabPage.Legacy)
                     ShowLegacyPage(running: false);
             };
-            ConnectFlashHost(host, content);
+            WatchFlashResponsiveness(host, () => _basilisk == host, m => OpenInIntegratedFlash(content, m));
+            ConnectFlashHost(host, content, WholePageCallee);
             host.SetBackground(!IsSelected);
             ShowEmbeddedLegacy(host, Tr("Ouverture du lecteur Flash…"), Tr("{0} s'ouvre avec votre module Flash.", content.Swf.Host), content.Page);
         }
 
-        /// <summary>Le lecteur agit sur la page comme un greffon de navigateur : pages demandées, scripts, cookies.</summary>
-        void ConnectFlashHost(FlashHostProcess host, FlashContent content)
+        /// <summary>
+        /// Le lecteur agit sur la page comme un greffon de navigateur : pages demandées, scripts,
+        /// cookies, et appels de la page vers lui (<paramref name="key"/> : son emplacement).
+        /// </summary>
+        void ConnectFlashHost(FlashHostProcess host, FlashContent content, string key)
         {
             host.NavigateRequested += OnFlashNavigate;
             host.ScriptRequested += (id, code) => RunFlashScript(host, content, id, code);
             host.CookiesRequested += (id, url, httpOnly) => GiveFlashCookies(host, content, id, url, httpOnly);
             host.CookieReceived += (url, cookie, fromHttp) => KeepFlashCookie(content, url, cookie, fromHttp);
 
-            // Appels de la page vers le contenu : l'élément du contenu reçoit CallFunction.
+            // Appels de la page vers le contenu : l'élément du contenu reçoit CallFunction et les méthodes de Flash.
             if (_engine is { } engine)
             {
-                _flashBridgeHost = host;
-                engine.SetFlashBridge(request => CallFlash(host, content, request));
-                InstallFlashBridge(engine, content);
-                host.Exited += () =>
+                _flashCallees[key] = (host, content);
+                if (_flashBridgeToken == null)
                 {
-                    if (_flashBridgeHost != host)
-                        return;
-                    _flashBridgeHost = null;
-                    _engine?.SetFlashBridge(null);
-                };
+                    // Jeton propre à la page : seuls les scripts du pont, injectés par PommeBrowser, le connaissent.
+                    _flashBridgeToken = RuffleContent.NewFlashBridgeToken();
+                    engine.SetFlashBridge(CallFlash, _flashBridgeToken);
+                }
+                InstallFlashBridge(engine, content, key, _flashBridgeToken);
+                host.Exited += () => ForgetFlashCallee(key, host);
             }
         }
 
-        /// <summary>Appel de la page vers le contenu, sur le fil de l'interface (la page attend la réponse).</summary>
-        string? CallFlash(FlashHostProcess host, FlashContent content, string request)
-            => _flashBridgeHost == host && !host.HasExited && IsTopDocument(content) ? host.CallFunction(request, FlashCallTimeout) : null;
+        /// <summary>Lecteur arrêté : la page ne l'appelle plus ; sans lecteur, le pont est retiré.</summary>
+        void ForgetFlashCallee(string key, FlashHostProcess host)
+        {
+            if (!_flashCallees.TryGetValue(key, out var callee) || callee.Host != host)
+                return;
+            _flashCallees.Remove(key);
+            if (_flashCallees.Count > 0)
+                return;
+            _flashBridgeToken = null;
+            _engine?.SetFlashBridge(null, null);
+        }
 
-        async void InstallFlashBridge(IEngineTab engine, FlashContent content)
+        /// <summary>
+        /// Appel de la page vers un contenu (« clé|requête », clé de son emplacement), sur le fil de
+        /// l'interface (la page attend la réponse).
+        /// </summary>
+        string? CallFlash(string message)
+        {
+            int separator = message.IndexOf('|', StringComparison.Ordinal);
+            if (separator <= 0 || separator > 16 || !_flashCallees.TryGetValue(message[..separator], out var callee))
+                return null;
+            string key = message[..separator];
+            string request = message[(separator + 1)..];
+            if (request == RuffleContent.FocusRequest)
+            {
+                // Après la réponse : la page attend encore celle-ci.
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => FocusFlashSlot(key));
+                return string.Empty;
+            }
+            return !callee.Host.HasExited && IsReachable(callee.Content) ? callee.Host.CallFunction(request, FlashCallTimeout) : null;
+        }
+
+        async void InstallFlashBridge(IEngineTab engine, FlashContent content, string key, string token)
         {
             try
             {
-                await engine.EvaluateAsync(RuffleContent.FlashBridgeScript(content.Id), isolated: false);
+                await engine.EvaluateAsync(InDocumentOf(content, RuffleContent.FlashBridgeScript(key, content, token)), isolated: false);
             }
             catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or
                                            System.Runtime.InteropServices.COMException or System.Threading.Tasks.TaskCanceledException)
@@ -251,20 +395,37 @@ namespace PommeBrowser.Views
                System.Uri.Compare(page, content.Page, UriComponents.HttpRequestUrl, UriFormat.UriEscaped, StringComparison.Ordinal) == 0;
 
         /// <summary>
+        /// Le contenu vient d'un cadre de même origine que la page (jeu dans une iframe du site) :
+        /// le document principal y a accès, comme le cadre au document principal.
+        /// </summary>
+        bool IsSameOriginFrame(FlashContent content)
+            => !IsTopDocument(content) && System.Uri.TryCreate(WebUrl, UriKind.Absolute, out Uri? page) &&
+               System.Uri.Compare(page, content.Page, UriComponents.SchemeAndServer, UriFormat.UriEscaped, StringComparison.OrdinalIgnoreCase) == 0;
+
+        /// <summary>Le document principal atteint le contenu : le sien, ou celui d'un cadre de même origine.</summary>
+        bool IsReachable(FlashContent content) => IsTopDocument(content) || IsSameOriginFrame(content);
+
+        /// <summary>Script exécuté dans le document du contenu : le document principal, ou le cadre de même origine.</summary>
+        string InDocumentOf(FlashContent content, string script)
+            => IsTopDocument(content) ? script : RuffleContent.InWindowOf(content.Page, script);
+
+        /// <summary>
         /// Script demandé par le contenu (ExternalInterface.call, adresse javascript:) : exécuté
         /// dans la page, comme dans un navigateur, et son résultat renvoyé au lecteur. Le lecteur
-        /// applique lui-même allowScriptAccess. Seulement pour un contenu du document principal :
-        /// celui d'un cadre n'agit pas sur la page qui le contient (il reçoit un refus).
+        /// applique lui-même allowScriptAccess. Exécuté dans le document du contenu : le document
+        /// principal, le cadre de même origine qui le contient, ou un cadre d'une autre origine,
+        /// où le moteur l'exécute lui-même (WebView2) ; jamais dans un autre document (un contenu
+        /// d'un cadre d'un autre site n'agit pas sur la page), sinon refus.
         /// </summary>
         async void RunFlashScript(FlashHostProcess host, FlashContent content, int? id, string code)
         {
             string? value = null;
             bool ok = false;
-            if (_engine is { } engine && IsTopDocument(content))
+            if (_engine is { } engine && IsReachable(content))
             {
                 try
                 {
-                    value = await engine.EvaluateAsync(code, isolated: false);
+                    value = await engine.EvaluateAsync(InDocumentOf(content, code), isolated: false);
                     ok = true;
                 }
                 catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or
@@ -273,8 +434,51 @@ namespace PommeBrowser.Views
                     RuntimeLogBuffer.Append("[Flash] Script de la page impossible : " + ex.Message);
                 }
             }
+            else if (_engine is { } frameEngine && !IsTopDocument(content))
+            {
+                string? problem = null;
+                try
+                {
+                    (ok, value) = await frameEngine.EvaluateInFrameAsync(content.Page, code);
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or
+                                               System.Runtime.InteropServices.COMException or System.Threading.Tasks.TaskCanceledException)
+                {
+                    problem = ex.Message;
+                }
+                NoteFrameScripts(content, ok, problem);
+            }
             if (id is { } request)
                 host.Reply(request, ok, value);
+        }
+
+        // Cadres dont l'exécution des scripts (réussie ou non) est déjà notée au journal.
+        readonly HashSet<string> _frameScriptsNoted = new(StringComparer.Ordinal);
+
+        /// <summary>Une ligne au journal par cadre et par issue : exécutés dans le cadre, ou refusés et pourquoi.</summary>
+        void NoteFrameScripts(FlashContent content, bool ok, string? problem)
+        {
+            string origin = FlashFrames.Origin(content.Page);
+            if (!_frameScriptsNoted.Add(origin + (ok ? " ok" : " refus")))
+                return;
+            RuntimeLogBuffer.Append(ok
+                ? $"[Flash] Scripts du contenu exécutés dans son cadre ({content.Page.Host}, autre origine que la page), comme dans un navigateur."
+                : $"[Flash] Scripts du contenu refusés : son cadre ({content.Page.Host}, autre origine que la page) est hors d'atteinte{(problem != null ? " (" + problem + ")" : " (cadre introuvable ou d'un autre site, ou moteur sans accès aux cadres)")}.");
+        }
+
+        async void StopRuffleInPage()
+        {
+            if (_engine is not { } engine)
+                return;
+            try
+            {
+                await engine.EvaluateAsync(RuffleContent.StopRuffleScript, isolated: false);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or
+                                           System.Runtime.InteropServices.COMException or System.Threading.Tasks.TaskCanceledException)
+            {
+                RuntimeLogBuffer.Append("[Flash] Arrêt de Ruffle dans la page impossible : " + ex.Message);
+            }
         }
 
         /// <summary>Site réglé sur « toujours dans Basilisk », et Basilisk installé.</summary>
@@ -283,7 +487,7 @@ namespace PommeBrowser.Views
             uri = null;
             if (!BasiliskInstall.IsOpenable(url, out Uri parsed) || FlashDomainRules.GetRule(parsed) != FlashRuleMode.Legacy)
                 return false;
-            if (_app.BasiliskExecutable == null)
+            if (!_app.BasiliskAllowed || _app.BasiliskExecutable == null)
                 return false;
             uri = parsed;
             return true;
@@ -295,6 +499,13 @@ namespace PommeBrowser.Views
         /// </summary>
         public void OpenInBasilisk(Uri uri)
         {
+            // « Utiliser Basilisk » décoché : il ne se lance jamais, quel que soit le chemin.
+            if (!_app.BasiliskAllowed)
+            {
+                RuntimeLogBuffer.Append("[Basilisk] Désactivé dans les paramètres : pas de lancement pour " + uri.Host + ".");
+                Window.ShowToast(Tr("Basilisk est désactivé dans les paramètres."), Tr("Paramètres"), () => Window.OpenSettings("flash"));
+                return;
+            }
             if (_app.BasiliskExecutable is not { } executable)
             {
                 Window.ShowBasiliskMissing();
@@ -344,7 +555,11 @@ namespace PommeBrowser.Views
         /// <summary>Page de l'onglet : la fenêtre du lecteur dès qu'elle est logée, un message d'attente avant.</summary>
         void ShowEmbeddedLegacy(ILegacyBrowser browser, string title, string text, Uri uri)
         {
-            var view = new LegacyView { IsVisible = false };
+            var view = new LegacyView
+            {
+                IsVisible = false,
+                KeyboardName = _integrated is { } content ? "lecteur Flash : " + FlashContent.ShortName(content.Swf) : "Basilisk"
+            };
             var waiting = new StatusPage("IconGames", title, text,
                 new (string, bool, Action)[] { (Tr("Lire avec Ruffle"), false, () => BackToRuffle(uri)) });
             var page = new Grid();
@@ -420,7 +635,7 @@ namespace PommeBrowser.Views
         public void SyncLegacyKeyboard(bool force)
         {
             _legacyView?.SyncKeyboard(force);
-            _overlayView?.SyncKeyboard(force);
+            SyncFlashSlotsKeyboard(force);
         }
 
         void StopBasilisk() => _basilisk?.Close();
@@ -441,6 +656,7 @@ namespace PommeBrowser.Views
             if (FlashDomainRules.GetRule(uri) == FlashRuleMode.Legacy)
                 FlashDomainRules.RemoveRule(uri);
             _app.SessionRuffleHosts.Add(uri.Host);
+            _app.PreferIntegratedFlash(PageHost ?? uri.Host, false);
             StopBasilisk();
             CloseFlashOverlay();
             _basilisk = null;

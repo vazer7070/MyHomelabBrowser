@@ -85,12 +85,13 @@ namespace PommeBrowser.Views
         // ---------------------------------------------------------------
 
         /// <summary>Nouvel onglet : adresse donnée, ou page d'accueil.</summary>
-        public BrowserTab NewTab(string? url, bool select, bool isPrivate = false, int? index = null)
+        public BrowserTab NewTab(string? url, bool select, bool isPrivate = false, int? index = null, bool httpsFallback = false)
         {
             var tab = new BrowserTab(this, isPrivate);
             AddTab(tab, index ?? _tabs.Count);
+            MyHomelabBrowser.classes.RuntimeLogBuffer.Append($"[Onglet] Nouvel onglet ({_tabs.Count} ouverts).");
             if (url != null)
-                tab.Navigate(url);
+                tab.Navigate(url, httpsFallback);
             else
                 tab.ShowHome();
             if (select || _selected == null)
@@ -143,6 +144,8 @@ namespace PommeBrowser.Views
             if (_selected != null)
             {
                 _selected.IsSelected = false;
+                // Inactif à partir de maintenant (mise en veille) : pas depuis qu'il a été choisi.
+                _selected.LastActivated = DateTime.Now;
                 CloseFind();
             }
 

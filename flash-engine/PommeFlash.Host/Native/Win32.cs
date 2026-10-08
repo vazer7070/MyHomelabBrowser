@@ -14,6 +14,8 @@ namespace PommeFlash.Host.Native
         public const uint WM_CLOSE = 0x0010;
         public const uint WM_ERASEBKGND = 0x0014;
         public const uint WM_MOUSEACTIVATE = 0x0021;
+        public const uint WM_KEYDOWN = 0x0100;
+        public const uint WM_SYSKEYDOWN = 0x0104;
         public const uint WM_LBUTTONDOWN = 0x0201;
         public const uint WM_RBUTTONDOWN = 0x0204;
         public const uint WM_MBUTTONDOWN = 0x0207;
@@ -202,6 +204,35 @@ namespace PommeFlash.Host.Native
 
         [LibraryImport(Kernel32)]
         public static partial uint GetCurrentProcessId();
+
+        public const uint EVENT_OBJECT_SHOW = 0x8002;
+        public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+        public const int OBJID_WINDOW = 0;
+        public const uint GA_ROOT = 2;
+
+        /// <summary>Évènements d'accessibilité (fenêtre affichée…), remis sur le fil qui s'y abonne, par sa boucle de messages.</summary>
+        [LibraryImport(User32)]
+        public static partial nint SetWinEventHook(uint eventMin, uint eventMax, nint module,
+            delegate* unmanaged<nint, uint, nint, int, int, uint, uint, void> callback, uint process, uint thread, uint flags);
+
+        [LibraryImport(User32)]
+        public static partial nint GetAncestor(nint hwnd, uint flags);
+
+        // ---------------------------------------------------------------
+        // Écrans à haute densité
+        // ---------------------------------------------------------------
+
+        /// <summary>DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 (Windows 10 1703 et suivants).</summary>
+        public const nint DpiAwarenessPerMonitorV2 = -4;
+
+        [LibraryImport(User32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool SetProcessDpiAwarenessContext(nint value);
+
+        /// <summary>Windows Vista à 10 1607 : adapté à la densité de l'écran principal.</summary>
+        [LibraryImport(User32)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool SetProcessDPIAware();
 
         [StructLayout(LayoutKind.Sequential)]
         struct PROCESSENTRY32W

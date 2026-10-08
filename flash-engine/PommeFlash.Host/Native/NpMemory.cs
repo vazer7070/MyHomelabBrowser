@@ -9,15 +9,30 @@ namespace PommeFlash.Host.Native
     /// </summary>
     static unsafe class NpMemory
     {
-        public static nint Alloc(nuint size) => (nint)NativeMemory.Alloc(size == 0 ? 1 : size);
+        static long _live;
+
+        /// <summary>Blocs alloués et pas encore libérés (diagnostic : commande « stats »).</summary>
+        public static long Live => Interlocked.Read(ref _live);
+
+        public static nint Alloc(nuint size)
+        {
+            Interlocked.Increment(ref _live);
+            return (nint)NativeMemory.Alloc(size == 0 ? 1 : size);
+        }
 
         public static void Free(nint pointer)
         {
-            if (pointer != 0)
-                NativeMemory.Free((void*)pointer);
+            if (pointer == 0)
+                return;
+            Interlocked.Decrement(ref _live);
+            NativeMemory.Free((void*)pointer);
         }
 
-        public static nint AllocZeroed(nuint size) => (nint)NativeMemory.AllocZeroed(size == 0 ? 1 : size);
+        public static nint AllocZeroed(nuint size)
+        {
+            Interlocked.Increment(ref _live);
+            return (nint)NativeMemory.AllocZeroed(size == 0 ? 1 : size);
+        }
 
         /// <summary>Chaîne UTF-8 terminée par un zéro, libérable par le module.</summary>
         public static nint Utf8(string text) => Utf8(text, out _);

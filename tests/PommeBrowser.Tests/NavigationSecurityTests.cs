@@ -38,6 +38,45 @@ public sealed class HttpsUpgradePolicyTests
             HttpsUpgradePolicy.Upgrade(new Uri("http://exemple.fr:80/a/b?c=1#d")).AbsoluteUri);
 }
 
+/// <summary>Site passé en HTTPS qui repart de lui-même en HTTP (koramgame.com) : plus de boucle.</summary>
+public sealed class HttpsReturnGuardTests
+{
+    [Fact]
+    public void A_site_that_goes_back_to_http_by_itself_right_after_opening_in_https_is_left_in_http()
+    {
+        var guard = new HttpsReturnGuard();
+        Assert.False(guard.UpgradedPageOpened("www.koramgame.com", 1_000));
+
+        // Autre site, ou page déjà en HTTPS : rien.
+        Assert.False(guard.ReturnsToHttp(new Uri("http://autre.fr/"), 1_500));
+        Assert.False(guard.ReturnsToHttp(new Uri("https://www.koramgame.com/"), 1_500));
+        // Retour en http:// du même site peu après : il veut HTTP (une fois).
+        Assert.True(guard.ReturnsToHttp(new Uri("http://www.koramgame.com/index.html"), 1_800));
+        Assert.False(guard.ReturnsToHttp(new Uri("http://www.koramgame.com/"), 1_900));
+
+        // Bien plus tard (lien suivi par l'utilisateur) : pas un retour de la page.
+        guard.UpgradedPageOpened("exemple.fr", 10_000);
+        Assert.False(guard.ReturnsToHttp(new Uri("http://exemple.fr/"), 10_000 + HttpsReturnGuard.ReturnDelay));
+    }
+
+    [Fact]
+    public void The_same_site_opened_in_https_again_and_again_is_a_loop()
+    {
+        var guard = new HttpsReturnGuard();
+        Assert.False(guard.UpgradedPageOpened("www.koramgame.com", 0));
+        Assert.False(guard.UpgradedPageOpened("www.koramgame.com", 400));
+        Assert.True(guard.UpgradedPageOpened("www.koramgame.com", 800));
+
+        // Ouvertures espacées, ou de sites différents : pas une boucle.
+        var other = new HttpsReturnGuard();
+        Assert.False(other.UpgradedPageOpened("a.fr", 0));
+        Assert.False(other.UpgradedPageOpened("b.fr", 100));
+        Assert.False(other.UpgradedPageOpened("a.fr", 200));
+        Assert.False(other.UpgradedPageOpened("a.fr", 200 + HttpsReturnGuard.LoopPeriod + 1));
+        Assert.False(other.UpgradedPageOpened("a.fr", 300 + HttpsReturnGuard.LoopPeriod + 1));
+    }
+}
+
 public sealed class SiteSecurityStoreTests : IDisposable
 {
     readonly string _path = Path.Combine(Path.GetTempPath(), "pomme-sites-" + Guid.NewGuid().ToString("N"), "site-permissions.json");

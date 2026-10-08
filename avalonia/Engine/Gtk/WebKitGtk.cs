@@ -87,6 +87,7 @@ namespace PommeBrowser.Engine.Gtk
         [DllImport(WebKit)] public static extern void webkit_web_view_set_zoom_level(nint view, double level);
         [DllImport(WebKit)] public static extern nint webkit_web_view_get_favicon(nint view);
         [DllImport(WebKit)] public static extern nint webkit_web_view_get_settings(nint view);
+        [DllImport(WebKit)] public static extern nint webkit_settings_get_user_agent(nint settings);
         [DllImport(WebKit)] public static extern nint webkit_web_view_get_context(nint view);
         [DllImport(WebKit)] public static extern nint webkit_web_view_get_user_content_manager(nint view);
         [DllImport(WebKit)] public static extern nint webkit_web_view_get_find_controller(nint view);
@@ -166,6 +167,7 @@ namespace PommeBrowser.Engine.Gtk
         [DllImport(WebKit)] public static extern uint webkit_navigation_action_get_modifiers(nint action);
         [DllImport(WebKit)] public static extern int webkit_navigation_action_is_user_gesture(nint action);
         [DllImport(WebKit)] public static extern nint webkit_uri_request_get_uri(nint request);
+        [DllImport(WebKit)] public static extern nint webkit_uri_request_get_http_method(nint request);
         [DllImport(WebKit)] public static extern nint webkit_response_policy_decision_get_response(nint decision);
         [DllImport(WebKit)] public static extern int webkit_response_policy_decision_is_mime_type_supported(nint decision);
         [DllImport(WebKit)] public static extern int webkit_response_policy_decision_is_main_frame_main_resource(nint decision);

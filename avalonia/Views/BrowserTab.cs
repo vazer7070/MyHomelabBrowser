@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
@@ -52,6 +53,12 @@ namespace PommeBrowser.Views
         readonly BrowserApp _app;
         readonly Grid _host = new();
         readonly HashSet<string> _upgradedHosts = new(StringComparer.OrdinalIgnoreCase);
+
+        // Site passé en HTTPS par PommeBrowser qui repart de lui-même en HTTP (voir OnLoadChanged).
+        readonly HttpsReturnGuard _httpsReturn = new();
+
+        // Page qui se recharge sans fin (voir OnNavigationLoop).
+        readonly NavigationLoopGuard _loopGuard = new();
 
         NativeWebView? _web;
         IEngineTab? _engine;
@@ -130,7 +137,7 @@ namespace PommeBrowser.Views
                     return;
                 Set(ref _isSelected, value);
                 _basilisk?.SetBackground(!value);
-                _overlayHost?.SetBackground(!value);
+                SetFlashSlotsBackground(!value);
             }
         }
 
@@ -377,16 +384,26 @@ namespace PommeBrowser.Views
         // Navigation
         // ---------------------------------------------------------------
 
-        /// <summary>Ouvre une adresse (déjà résolue) dans l'onglet.</summary>
-        public void Navigate(string url)
+        /// <summary>
+        /// Ouvre une adresse (déjà résolue) dans l'onglet. <paramref name="httpsFallback"/> : adresse
+        /// saisie sans schéma et ouverte en https:// (voir UrlResolver.IsImplicitHttps), qui revient
+        /// en http:// si le site ne propose pas HTTPS.
+        /// </summary>
+        public void Navigate(string url, bool httpsFallback = false)
         {
             _pendingTitle = null;
+            _loopGuard.Reset();
+            _loopStoppedAt = long.MinValue / 2;
             if (WantsBasilisk(url, out Uri? legacy))
             {
                 OpenInBasilisk(legacy);
                 return;
             }
-            TryUpgrade(ref url);
+            if (!TryUpgrade(ref url) && httpsFallback &&
+                System.Uri.TryCreate(url, UriKind.Absolute, out Uri? typed) && typed.Scheme == System.Uri.UriSchemeHttps)
+            {
+                _upgradedHosts.Add(typed.IdnHost);
+            }
             ShowWeb();
             if (_engine != null)
             {
@@ -426,6 +443,7 @@ namespace PommeBrowser.Views
 
         public void GoBack()
         {
+            _loopStoppedAt = long.MinValue / 2;
             if (Page != TabPage.Web)
             {
                 if (_webShownOnce)
@@ -438,12 +456,14 @@ namespace PommeBrowser.Views
 
         public void GoForward()
         {
+            _loopStoppedAt = long.MinValue / 2;
             _expectedMainUrl = null;
             _engine?.GoForward();
         }
 
         public void Reload(bool bypassCache = false)
         {
+            _loopStoppedAt = long.MinValue / 2;
             if (Page != TabPage.Web)
             {
                 if (Page == TabPage.Error && WebUrl.Length > 0)
@@ -466,16 +486,21 @@ namespace PommeBrowser.Views
         /// <summary>http:// devient https:// (hors réseau local et sites autorisés en HTTP).</summary>
         bool TryUpgrade(ref string url)
         {
-            if (!_app.Settings.HttpsUpgrade || !System.Uri.TryCreate(url, UriKind.Absolute, out Uri? uri))
-                return false;
-
-            if (!HttpsUpgradePolicy.ShouldUpgrade(uri, host => _app.SiteSecurity.IsHttpAllowed(host) || _app.HttpOnlyHosts.Contains(host)))
+            if (!System.Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) || !WouldUpgrade(uri))
                 return false;
 
             _upgradedHosts.Add(uri.IdnHost);
             url = HttpsUpgradePolicy.Upgrade(uri).AbsoluteUri;
             return true;
         }
+
+        /// <summary>Adresse que le passage automatique en HTTPS changerait (réglage actif, site non exclu).</summary>
+        bool WouldUpgrade(Uri uri)
+            => _app.Settings.HttpsUpgrade &&
+               HttpsUpgradePolicy.ShouldUpgrade(uri, host => _app.SiteSecurity.IsHttpAllowed(host) || _app.HttpOnlyHosts.Contains(host));
+
+        // Sites dont un formulaire envoyé en HTTP est déjà noté au journal.
+        readonly HashSet<string> _formsKeptInHttp = new(StringComparer.OrdinalIgnoreCase);
 
         double ZoomFor(string? url)
             => System.Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) ? _app.Zoom.Get(uri) : 1;
@@ -504,35 +529,69 @@ namespace PommeBrowser.Views
                         return;
                     }
 
-                    // Page atteinte par un lien : même passage en HTTPS qu'une adresse saisie.
-                    if (url != null && url != _expectedMainUrl)
+                    // Boucle arrêtée à l'instant : la page quittée ne relance pas sa navigation.
+                    if (url != BlankPage && Environment.TickCount64 - _loopStoppedAt < LoopStopHold)
+                    {
+                        _engine?.Navigate(BlankPage);
+                        return;
+                    }
+
+                    // Page passée en HTTPS par PommeBrowser qui repart d'elle-même vers http:// (script
+                    // de la page, pas une redirection du serveur) : le site veut HTTP, il le garde.
+                    // Sinon, chaque retour serait de nouveau passé en HTTPS, sans fin.
+                    if (System.Uri.TryCreate(url, UriKind.Absolute, out Uri? started))
+                    {
+                        _loopGuard.Started(started);
+                        if (_httpsReturn.ReturnsToHttp(started, Environment.TickCount64) && _app.HttpOnlyHosts.Add(started.IdnHost))
+                            RuntimeLogBuffer.Append($"[HTTPS] {started.IdnHost} revient de lui-même en HTTP : laissé en HTTP pour la session.");
+                    }
+
+                    // Page atteinte par un lien : même passage en HTTPS qu'une adresse saisie. Pas un
+                    // formulaire envoyé : relancée en HTTPS, la navigation perdrait ce qu'il envoie (le
+                    // serveur de koramgame recevait une connexion sans identifiant).
+                    if (url != null && url != _expectedMainUrl && _engine is { StartedWithData: true })
+                    {
+                        if (System.Uri.TryCreate(url, UriKind.Absolute, out Uri? form) && WouldUpgrade(form) && _formsKeptInHttp.Add(form.IdnHost))
+                            RuntimeLogBuffer.Append($"[HTTPS] Formulaire envoyé à {form.IdnHost} en HTTP : laissé tel quel (passé en HTTPS, il perdrait ce qu'il envoie).");
+                    }
+                    else if (url != null && url != _expectedMainUrl)
                     {
                         string upgraded = url;
                         if (TryUpgrade(ref upgraded))
                         {
+                            _loopGuard.Upgraded(new Uri(upgraded), Environment.TickCount64);
                             _expectedMainUrl = upgraded;
                             _engine?.Navigate(upgraded);
                             return;
                         }
                     }
                     _expectedMainUrl = null;
-                    if (Page == TabPage.Error)
+                    // Page blanche d'une boucle arrêtée : la page d'explication reste affichée.
+                    if (Page == TabPage.Error && url != BlankPage)
                         ShowWeb();
                     break;
 
                 case LoadStage.Redirected:
                     // Un site qui renvoie de https:// vers http:// ne propose pas HTTPS : pas de boucle.
-                    if (System.Uri.TryCreate(url, UriKind.Absolute, out Uri? redirected) &&
-                        redirected.Scheme == System.Uri.UriSchemeHttp &&
-                        _upgradedHosts.Contains(redirected.IdnHost))
+                    if (System.Uri.TryCreate(url, UriKind.Absolute, out Uri? redirected))
                     {
-                        _app.HttpOnlyHosts.Add(redirected.IdnHost);
+                        _loopGuard.Redirected(redirected);
+                        if (redirected.Scheme == System.Uri.UriSchemeHttp && _upgradedHosts.Contains(redirected.IdnHost))
+                            _app.HttpOnlyHosts.Add(redirected.IdnHost);
                     }
                     break;
 
                 case LoadStage.Committed:
+                    // Repère du journal (arrêt brutal) : le site seulement, rien d'une page privée.
+                    System.Uri.TryCreate(url, UriKind.Absolute, out Uri? committed);
+                    RuntimeLogBuffer.Append("[Page] " + (IsPrivate ? "navigation privée" : committed is { Host.Length: > 0 } shown ? shown.Host : url ?? "?"));
+                    // Page ouverte en HTTPS par PommeBrowser : un retour en HTTP juste après vient du site.
+                    if (committed is { } page && page.Scheme == System.Uri.UriSchemeHttps && _upgradedHosts.Contains(page.IdnHost) &&
+                        _httpsReturn.UpgradedPageOpened(page.IdnHost, Environment.TickCount64) && _app.HttpOnlyHosts.Add(page.IdnHost))
+                        RuntimeLogBuffer.Append($"[HTTPS] {page.IdnHost} : allers-retours entre HTTPS et HTTP, laissé en HTTP pour la session.");
                     _upgradedHosts.Clear();
                     _rufflePlaying = false;
+                    _integratedStartPlanned = false;
                     _flashContent = null;
                     CloseFlashOverlay();
                     Window.OnTabCommitted(this);
@@ -541,6 +600,8 @@ namespace PommeBrowser.Views
                         _engine.Zoom = ZoomFor(url);
                     if (!IsPrivate && url != null)
                         _app.History.Record(url, _engine?.Title);
+                    if (committed != null && _loopGuard.Opened(committed, Environment.TickCount64))
+                        OnNavigationLoop(committed);
                     break;
 
                 case LoadStage.Finished:
@@ -571,9 +632,10 @@ namespace PommeBrowser.Views
 
         void OnLoadFailed(string url, string message)
         {
-            if (System.Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) && _upgradedHosts.Contains(uri.IdnHost))
+            if (System.Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) && _upgradedHosts.Contains(uri.IdnHost) &&
+                uri.Scheme == System.Uri.UriSchemeHttps)
             {
-                ShowHttpsUnavailable(uri);
+                FallBackToHttp(uri, message);
                 return;
             }
 
@@ -583,19 +645,21 @@ namespace PommeBrowser.Views
                 (Tr("Retour"), false, GoBackOrHome));
         }
 
-        void ShowHttpsUnavailable(Uri httpsUri)
+        /// <summary>
+        /// HTTPS essayé par PommeBrowser (adresse http:// passée en https://, ou saisie sans
+        /// schéma) sur un site qui ne le propose pas (pas de réponse, réponse TLS invalide,
+        /// certificat refusé) : la page est ouverte en http://, comme le font Chrome et Firefox,
+        /// sans page d'erreur. La barre d'adresse la montre « non sécurisée ». Le site n'est plus
+        /// essayé en HTTPS pendant la session.
+        /// </summary>
+        void FallBackToHttp(Uri httpsUri, string reason)
         {
             var http = new UriBuilder(httpsUri) { Scheme = System.Uri.UriSchemeHttp, Port = -1 }.Uri;
             string host = httpsUri.IdnHost;
-            ShowError(http.AbsoluteUri, Tr("Ce site ne propose pas de connexion sécurisée"),
-                Tr("{0} n'a pas répondu en HTTPS. En HTTP, ce que vous envoyez et recevez peut être lu ou modifié sur le réseau.", host),
-                (Tr("Retour"), true, GoBackOrHome),
-                (Tr("Continuer en HTTP"), false, () =>
-                {
-                    _app.SiteSecurity.Set(host, SiteSecurityStore.InsecureHttp, true);
-                    _upgradedHosts.Remove(host);
-                    Navigate(http.AbsoluteUri);
-                }));
+            _upgradedHosts.Remove(host);
+            _app.HttpOnlyHosts.Add(host);
+            RuntimeLogBuffer.Append($"[HTTPS] {host} ne répond pas en HTTPS ({reason}) : ouvert en HTTP.");
+            Navigate(http.AbsoluteUri);
         }
 
         void OnCertificateError(CertificateProblem problem)
@@ -603,10 +667,10 @@ namespace PommeBrowser.Views
             if (!System.Uri.TryCreate(problem.Uri, UriKind.Absolute, out Uri? uri))
                 return;
 
-            // Passage automatique en HTTPS sur un site sans certificat valide : on propose HTTP.
-            if (_upgradedHosts.Contains(uri.IdnHost))
+            // HTTPS essayé par PommeBrowser sur un site sans certificat valide : retour en HTTP.
+            if (_upgradedHosts.Contains(uri.IdnHost) && uri.Scheme == System.Uri.UriSchemeHttps)
             {
-                ShowHttpsUnavailable(uri);
+                FallBackToHttp(uri, "certificat refusé");
                 return;
             }
 
@@ -646,6 +710,83 @@ namespace PommeBrowser.Views
         {
             _app.SessionTrustedHosts.Add(uri.Authority);
             _engine?.AllowCertificate(problem);
+        }
+
+        const string BlankPage = "about:blank";
+        const long LoopStopHold = 3_000;
+        const int ForgetHttpsTimeout = 5_000;
+        long _loopStoppedAt = long.MinValue / 2;
+
+        /// <summary>
+        /// La page se recharge sans fin (voir NavigationLoopGuard) : son trajet est noté au journal.
+        /// Si PommeBrowser a passé des sites en HTTPS pendant la boucle, ils restent en HTTP (la
+        /// boucle vient sans doute de là) ; si elle continue, ou sans passage en HTTPS, la page est
+        /// quittée (ses scripts la relanceraient) et expliquée, avec de quoi réessayer.
+        /// </summary>
+        async void OnNavigationLoop(Uri page)
+        {
+            long now = Environment.TickCount64;
+            RuntimeLogBuffer.Append($"[Page] Boucle : {NavigationLoopGuard.LoopCount} pages ouvertes en moins de {NavigationLoopGuard.LoopPeriod / 1000} s. Trajet : {_loopGuard.Trail}");
+            List<string> upgraded = _loopGuard.UpgradedHosts(now).Where(host => !_app.HttpOnlyHosts.Contains(host)).ToList();
+            Uri? forced = _loopGuard.ForcedToHttps();
+            _loopGuard.Reset();
+            foreach (string host in upgraded)
+                _app.HttpOnlyHosts.Add(host);
+            if (upgraded.Count > 0)
+                RuntimeLogBuffer.Append("[HTTPS] Boucle avec le passage en HTTPS : " + string.Join(", ", upgraded) + " laissé en HTTP pour la session.");
+
+            string url = page.AbsoluteUri;
+            string site = page.Host;
+            _loopStoppedAt = now;
+
+            // La page demande http:// et le moteur la repasse aussitôt en https:// : HTTPS imposé par
+            // sa mémoire (HSTS), sans doute retenue quand PommeBrowser a ouvert le site en HTTPS.
+            // Elle est effacée (une fois par site et par session), puis la page est rouverte en HTTP.
+            if (forced != null && _app.HttpsMemoryForgotten.Add(forced.IdnHost))
+            {
+                _app.HttpOnlyHosts.Add(forced.IdnHost);
+                _engine?.Navigate(BlankPage);
+                RuntimeLogBuffer.Append($"[HTTPS] {forced.IdnHost} : la page veut HTTP mais revient aussitôt en HTTPS sans PommeBrowser (mémoire HSTS du moteur, ou serveur) : effacement de la mémoire HTTPS de la dernière heure.");
+                // Borné : le moteur ne répond pas toujours (la page restait blanche).
+                Task<bool> forget = EngineHost.ForgetHttpsMemoryAsync(IsPrivate, TimeSpan.FromHours(1));
+                bool forgotten = await Task.WhenAny(forget, Task.Delay(ForgetHttpsTimeout)) == forget && await forget;
+                RuntimeLogBuffer.Append(forgotten
+                    ? $"[HTTPS] {forced.IdnHost} : mémoire HTTPS effacée, page rouverte en HTTP."
+                    : forget.IsCompleted
+                        ? $"[HTTPS] {forced.IdnHost} : mémoire HTTPS non effacée."
+                        : $"[HTTPS] {forced.IdnHost} : le moteur n'a pas effacé sa mémoire HTTPS en {ForgetHttpsTimeout / 1000} s.");
+                if (forgotten)
+                {
+                    Navigate(forced.AbsoluteUri);
+                    return;
+                }
+            }
+            else if (upgraded.Count > 0 && forced == null)
+            {
+                // La boucle venait sans doute du passage en HTTPS : elle continue en HTTP, ou s'arrête.
+                return;
+            }
+
+            _engine?.Navigate(BlankPage);
+            var blocker = _app.AdBlock;
+            bool filtered = AdBlockService.IsSupported && blocker.Settings.Enabled &&
+                            !blocker.IsLocal(site) && !blocker.IsSiteAllowed(site);
+            (string, bool, Action) retry = (Tr("Réessayer"), true, () => Navigate(url));
+            (string, bool, Action) other = filtered
+                ? (Tr("Réessayer sans la protection web"), false, () =>
+                {
+                    blocker.SetSiteAllowed(site, true);
+                    RuntimeLogBuffer.Append("[Page] Protection web en pause sur " + site + " après une boucle.");
+                    Navigate(url);
+                })
+                : (Tr("Retour"), false, () =>
+                {
+                    _loopStoppedAt = long.MinValue / 2;
+                    GoBackOrHome();
+                });
+            ShowError(url, Tr("Cette page se recharge sans arrêt"),
+                Tr("{0} s'est rechargée plusieurs fois par seconde : PommeBrowser l'a arrêtée pour que l'onglet reste utilisable. La protection web ou un réglage du site peut en être la cause.", site),
+                retry, other, warning: true);
         }
 
         void GoBackOrHome()

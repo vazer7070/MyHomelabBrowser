@@ -91,6 +91,39 @@ namespace MyHomelabBrowser.classes.History
             return valid.Count;
         }
 
+        /// <summary>
+        /// Visites importées d'un autre navigateur, en une transaction ; une visite déjà présente
+        /// (même adresse, même moment) n'est pas dupliquée. Renvoie le nombre de visites ajoutées.
+        /// </summary>
+        public int Import(IEnumerable<HistoryEntry> entries)
+        {
+            int added = 0;
+            using (SqliteConnection connection = Open())
+            using (SqliteTransaction transaction = connection.BeginTransaction())
+            {
+                using SqliteCommand command = connection.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText =
+                    "INSERT INTO visits (url, title, visited_at) SELECT $url, $title, $at " +
+                    "WHERE NOT EXISTS (SELECT 1 FROM visits WHERE url = $url AND visited_at = $at)";
+                SqliteParameter url = command.Parameters.Add("$url", SqliteType.Text);
+                SqliteParameter title = command.Parameters.Add("$title", SqliteType.Text);
+                SqliteParameter at = command.Parameters.Add("$at", SqliteType.Integer);
+                foreach (HistoryEntry entry in entries)
+                {
+                    if (string.IsNullOrWhiteSpace(entry.Url))
+                        continue;
+                    url.Value = entry.Url;
+                    title.Value = entry.Title ?? string.Empty;
+                    at.Value = entry.VisitedAt.Ticks;
+                    added += command.ExecuteNonQuery();
+                }
+                transaction.Commit();
+            }
+            Trim();
+            return added;
+        }
+
         /// <summary>Entrées les plus récentes, dans l'ordre chronologique.</summary>
         public List<HistoryEntry> LoadRecent(int limit)
         {

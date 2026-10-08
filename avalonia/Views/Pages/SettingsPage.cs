@@ -218,10 +218,48 @@ namespace PommeBrowser.Views.Pages
         // Général
         // ---------------------------------------------------------------
 
+        /// <summary>Navigateur par défaut : état, et bouton pour que les liens des autres applications s'ouvrent ici.</summary>
+        Control DefaultBrowserCard()
+        {
+            var status = Hint(Tr("Vérification…"));
+            Button make = Action(Tr("Définir comme navigateur par défaut"), () => { }, primary: true);
+            make.IsVisible = false;
+
+            async void Refresh()
+            {
+                bool? isDefault = await DefaultBrowser.IsDefaultAsync();
+                status.Text = isDefault == true
+                    ? Tr("PommeBrowser est votre navigateur par défaut : les liens des autres applications s'ouvrent ici.")
+                    : Tr("Les liens des autres applications (courriels, documents, messageries) s'ouvrent dans un autre navigateur.");
+                make.IsVisible = isDefault != true;
+            }
+
+            make.Click += async (_, _) =>
+            {
+                make.IsEnabled = false;
+                string? error = await DefaultBrowser.MakeDefaultAsync();
+                make.IsEnabled = true;
+                if (error != null)
+                    _window.ShowToast(error, warning: true);
+                else if (OperatingSystem.IsWindows())
+                    status.Text = Tr("Dans la fenêtre de Windows qui s'est ouverte, choisissez PommeBrowser pour les liens (HTTP et HTTPS).");
+                else
+                    Refresh();
+            };
+            Refresh();
+            return Card(Tr("Navigateur par défaut"), null, status, Buttons(make));
+        }
+
         Control BuildGeneral()
         {
             var panel = new StackPanel { Spacing = 14 };
             panel.Children.Add(Hint(Tr("Démarrage, nouveaux onglets, réseau et certificats du navigateur.")));
+            panel.Children.Add(DefaultBrowserCard());
+            panel.Children.Add(Card(Tr("Venir d'un autre navigateur"),
+                Tr("Reprenez les favoris, l'historique et les mots de passe de Chrome, Edge, Brave, Firefox…"),
+                Buttons(
+                    Action(Tr("Favoris et historique…"), () => _ = ImportFavoritesDialog.ShowAsync(_window)),
+                    Action(Tr("Mots de passe…"), () => _ = ImportPasswordsDialog.ShowAsync(_window)))));
 
             // Apparence
             var restart = Action(Tr("Redémarrer maintenant"), () => _app.Restart());
@@ -525,11 +563,17 @@ namespace PommeBrowser.Views.Pages
                     Settings.EnableFlashSupport = value;
                     Save();
                 }),
-                Check(Tr("Ouvrir dans Basilisk les contenus que Ruffle ne sait pas lire"), Settings.FlashAutoFallback, value =>
+                Check(Tr("Quand Ruffle ne sait pas lire un contenu, passer d'office au moteur de secours"), Settings.FlashAutoFallback, value =>
                 {
                     Settings.FlashAutoFallback = value;
                     Save();
                 }),
+                Check(Tr("Utiliser Basilisk (navigateur avec le lecteur Flash d'origine)"), Settings.BasiliskEnabled != false, value =>
+                {
+                    Settings.BasiliskEnabled = value;
+                    Save();
+                }),
+                Hint(Tr("Décoché, Basilisk ne se lance jamais : ni par le bouton Flash, ni d'office, ni pour les sites réglés sur Basilisk. Le moteur de secours est alors le moteur intégré, s'il est activé.")),
                 IntegratedEngineOption(),
                 Check(Tr("Mode debug Flash (journal détaillé)"), Settings.FlashDebugEnabled, value =>
                 {

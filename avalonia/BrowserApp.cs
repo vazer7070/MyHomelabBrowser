@@ -8,6 +8,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using MyHomelabBrowser.classes;
+using MyHomelabBrowser.classes.AdBlock.Models;
 using MyHomelabBrowser.classes.Localization;
 using MyHomelabBrowser.classes.Security;
 using PommeBrowser.Core;
@@ -67,6 +68,47 @@ namespace PommeBrowser
         /// <summary>Hôtes ramenés sur Ruffle après une bascule automatique : plus de bascule pendant la session.</summary>
         public HashSet<string> SessionRuffleHosts { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>
+        /// Sites (domaine enregistrable de la page de l'onglet : koramgame.com pour
+        /// game.fr.demon.koramgame.com) dont le Flash est lu par le moteur intégré pendant cette
+        /// session : Ruffle n'y lance plus les contenus (il les décrit seulement), et le moteur
+        /// intégré démarre d'office. Tout le site, pas seulement l'hôte : l'accueil d'un jeu et sa
+        /// page de jeu sont souvent sur deux sous-domaines, et Ruffle ne doit pas s'y connecter
+        /// avant le moteur intégré. Voir <see cref="PreferIntegratedFlash"/>.
+        /// </summary>
+        public IReadOnlySet<string> SessionIntegratedSites => _integratedSites;
+
+        readonly HashSet<string> _integratedSites = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Le Flash de cette page (hôte de l'onglet) est lu d'office par le moteur intégré.</summary>
+        public bool PrefersIntegratedFlash(string? host)
+            => !string.IsNullOrEmpty(host) && _integratedSites.Contains(AdBlockDomain.GetRegistrableDomain(host));
+
+        /// <summary>
+        /// Moteur intégré choisi (ou abandonné) pour le site d'une page : le script de détection de
+        /// chaque onglet est mis à jour, pour les pages chargées ensuite.
+        /// </summary>
+        public void PreferIntegratedFlash(string host, bool preferred)
+        {
+            string site = AdBlockDomain.GetRegistrableDomain(host);
+            if (site.Length == 0 || (preferred ? !_integratedSites.Add(site) : !_integratedSites.Remove(site)))
+                return;
+            MyHomelabBrowser.classes.RuntimeLogBuffer.Append(preferred
+                ? $"[Flash] {site} : moteur intégré retenu pour tout le site pendant la session (Ruffle n'y lance plus les contenus)."
+                : $"[Flash] {site} : retour à Ruffle pour la session.");
+            foreach (Views.MainWindow window in _windows)
+            {
+                foreach (Views.BrowserTab tab in window.Tabs)
+                    tab.RefreshRuffleProbe();
+            }
+        }
+
+        /// <summary>
+        /// Hôtes dont la mémoire HTTPS du moteur (HSTS) a été effacée pendant la session, après une
+        /// boucle : une fois seulement par hôte.
+        /// </summary>
+        public HashSet<string> HttpsMemoryForgotten { get; } = new(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>Hôtes qui ne répondent pas en HTTPS (pas de nouvel essai pendant la session).</summary>
         public HashSet<string> HttpOnlyHosts { get; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -114,6 +156,7 @@ namespace PommeBrowser
         {
             _lifetime = lifetime;
             Dispatcher.UIThread.UnhandledException += OnUnhandledException;
+            CrashWatch.WatchInterface();
             lifetime.ShutdownMode = ShutdownMode.OnLastWindowClose;
             lifetime.ShutdownRequested += OnShutdownRequested;
 
@@ -128,11 +171,19 @@ namespace PommeBrowser
             RestoreSession(window, urls);
             window.Show();
 
+            // Lancements suivants (liens ouverts depuis d'autres applications) : dans cette instance.
+            Program.Instance?.Attach(targets => Dispatcher.UIThread.Post(() => Current.OpenFromOutside(targets)));
+
+            // Tout premier lancement : accueil (import, navigateur par défaut, moteur de recherche),
+            // une fois la fenêtre affichée. Pas quand on arrive par un lien : il sera proposé ensuite.
+            if (placement == null && !Appearance.WelcomeDone && urls.Count == 0)
+                DispatcherTimer.RunOnce(() => ShowWelcome(window), TimeSpan.FromMilliseconds(700));
+
             // Durée du démarrage, jusqu'à la fenêtre affichée (journal joint aux rapports).
             if (placement == null)
             {
                 Dispatcher.UIThread.Post(() => RuntimeLogBuffer.Append(
-                    $"[Démarrage] fenêtre affichée en {System.Diagnostics.Stopwatch.GetElapsedTime(Program.StartedAt).TotalMilliseconds:F0} ms"),
+                    $"[Démarrage] fenêtre affichée en {System.Diagnostics.Stopwatch.GetElapsedTime(Program.StartedAt).TotalMilliseconds:F0} ms ({Environment.ProcessPath})"),
                     DispatcherPriority.Background);
             }
         }
@@ -233,6 +284,43 @@ namespace PommeBrowser
                 _closedTabs.RemoveAll(t => t.Window == window);
             };
             return window;
+        }
+
+        async void ShowWelcome(MainWindow window)
+        {
+            // Proposé une seule fois, même si l'accueil est fermé ou interrompu.
+            Appearance.WelcomeDone = true;
+            try
+            {
+                Appearance.Save();
+                if (_windows.Contains(window))
+                    await Views.Dialogs.WelcomeDialog.ShowAsync(window);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                RuntimeLogBuffer.Append("[Accueil] " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Adresses d'un autre lancement (lien ouvert depuis une autre application, fichier, icône) :
+        /// dans des onglets de la dernière fenêtre, qui passe au premier plan. Sans adresse, une
+        /// nouvelle fenêtre, comme Firefox et Chrome quand on les relance.
+        /// </summary>
+        public void OpenFromOutside(IReadOnlyList<string> targets)
+        {
+            List<string> urls = targets.Select(UrlResolver.TryResolveUrl).OfType<string>().ToList();
+            MainWindow? window = ActiveWindow;
+            if (window == null || urls.Count == 0)
+            {
+                window = NewWindow(urls.FirstOrDefault());
+                urls.RemoveRange(0, Math.Min(1, urls.Count));
+            }
+            foreach (string url in urls)
+                window.NewTab(url, select: true);
+            if (window.WindowState == WindowState.Minimized)
+                window.WindowState = WindowState.Normal;
+            window.Activate();
         }
 
         /// <summary>Nouvelle fenêtre, avec la page d'accueil ou l'adresse donnée.</summary>

@@ -94,6 +94,7 @@ namespace PommeBrowser.Views.Pages
                 if (await App.Vault.ChangePasswordAsync(Window) is { } message)
                     Window.ShowToast(message);
             }));
+            buttons.Children.Add(TextButton(Tr("Importer…"), () => _ = ImportPasswordsDialog.ShowAsync(Window)));
             buttons.Children.Add(TextButton(Tr("Verrouiller"), App.Vault.Lock));
             DockPanel.SetDock(buttons, Dock.Right);
             bar.Children.Add(buttons);

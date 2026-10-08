@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Avalonia;
 using MyHomelabBrowser.classes;
@@ -20,19 +21,53 @@ namespace PommeBrowser
         public static readonly long StartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
 
         /// <summary>Adresses passées en ligne de commande (ouvertes dans des onglets).</summary>
-        public static string[] StartupUrls { get; private set; } = Array.Empty<string>();
+        public static IReadOnlyList<string> StartupUrls { get; private set; } = Array.Empty<string>();
+
+        /// <summary>Instance unique : reçoit les adresses des lancements suivants (null dans les tests).</summary>
+        public static SingleInstance? Instance { get; private set; }
 
         [STAThread]
         static int Main(string[] args)
         {
             // Installation, désinstallation et mises à jour Velopack (Windows) : avant tout le reste.
+            // PommeBrowser s'inscrit comme navigateur (Windows le propose ensuite pour les liens) à
+            // l'installation et à chaque mise à jour, et se retire à la désinstallation.
             if (OperatingSystem.IsWindows())
-                Velopack.VelopackApp.Build().Run();
+            {
+                // Une version téléchargée n'est pas installée d'office au démarrage : elle l'est à la
+                // fermeture (BrowserApp.OnProcessEnding), et jamais sur une compilation de test.
+                Velopack.VelopackApp.Build()
+                    .SetAutoApplyOnStartup(false)
+                    .OnAfterInstallFastCallback(_ => RegisterAsBrowser())
+                    .OnAfterUpdateFastCallback(_ => RegisterAsBrowser())
+                    .OnBeforeUninstallFastCallback(_ => SafeRegistry(() =>
+                    {
+                        if (OperatingSystem.IsWindows())
+                            DefaultBrowser.Unregister();
+                    }))
+                    .Run();
+            }
 
             args = Relauncher.WaitForPrevious(args);
             RuntimeLogBuffer.Init();
             AppPaths.Initialize();
             ErrorLog.InstallProcessHandlers();
+
+            // PommeBrowser déjà ouvert (lien cliqué dans une autre application, icône…) : il
+            // reçoit les adresses et ouvre les onglets ; ce lancement s'arrête là.
+            IReadOnlyList<string> targets = LaunchTargets.Resolve(args, Environment.CurrentDirectory);
+            Instance = SingleInstance.Claim(SingleInstance.ChannelName(AppDataContext.GlobalRoot), targets, RuntimeLogBuffer.Append);
+            if (Instance == null)
+                return 0;
+            // Seule instance : un arrêt brutal de la session précédente est consigné (errors.log).
+            CrashWatch.Start();
+            // Installation antérieure à l'inscription comme navigateur : faite maintenant, sans attendre.
+            if (OperatingSystem.IsWindows())
+                _ = System.Threading.Tasks.Task.Run(() => SafeRegistry(() =>
+                {
+                    if (OperatingSystem.IsWindows())
+                        DefaultBrowser.EnsureRegistered();
+                }));
 
             // Dernier profil ouvert. Les données d'un profil renommé ou supprimé pendant que
             // PommeBrowser tournait sont déplacées ou effacées maintenant, moteur arrêté.
@@ -52,7 +87,7 @@ namespace PommeBrowser
 
             Appearance = LoadAppearance();
             InitializeLanguage(Appearance.Language);
-            StartupUrls = args;
+            StartupUrls = targets;
 
             if (OperatingSystem.IsLinux())
             {
@@ -63,7 +98,32 @@ namespace PommeBrowser
                 Engine.Gtk.WebKitGtk.g_set_prgname(AppPaths.GlibProgramName);
             }
 
-            return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+            int code = BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+            BrowserApp.Current?.OnProcessEnding();
+            return code;
+        }
+
+        static void RegisterAsBrowser()
+        {
+            if (OperatingSystem.IsWindows() && DefaultBrowser.InstalledLauncher() is { } launcher)
+                SafeRegistry(() =>
+                {
+                    if (OperatingSystem.IsWindows())
+                        DefaultBrowser.Register(launcher);
+                });
+        }
+
+        /// <summary>Inscription dans le registre : un échec n'empêche ni l'installation ni le démarrage.</summary>
+        static void SafeRegistry(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+            {
+                RuntimeLogBuffer.Append("[Navigateur par défaut] " + ex.Message);
+            }
         }
 
         public static AppBuilder BuildAvaloniaApp()
@@ -91,7 +151,8 @@ namespace PommeBrowser
             return new AppearanceSettings
             {
                 Theme = AppTheme.System,
-                Language = culture.Equals("fr", StringComparison.OrdinalIgnoreCase) ? "fr" : "en"
+                Language = culture.Equals("fr", StringComparison.OrdinalIgnoreCase) ? "fr" : "en",
+                WelcomeDone = false
             };
         }
 

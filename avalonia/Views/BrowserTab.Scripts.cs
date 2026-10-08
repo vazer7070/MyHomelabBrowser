@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Flash;
 using MyHomelabBrowser.classes.Profiles.Credentials;
@@ -63,9 +64,7 @@ namespace PommeBrowser.Views
                 // Flash annoncé avant les scripts de la page, qui n'ajoutent souvent leur contenu qu'à cette condition.
                 engine.AddUserScript(RuffleContent.PluginScriptId, RuffleContent.PluginScript,
                     allFrames: true, atDocumentStart: true, pageWorld: true);
-                engine.AddUserScript(RuffleContent.ScriptId,
-                    RuffleContent.ProbeScript(EngineHost.RuffleBaseUrl, EngineHost.ScriptPost(RuffleContent.MessageHandler, "status")),
-                    allFrames: true, atDocumentStart: false);
+                AddRuffleProbe(engine);
             }
             else
             {
@@ -73,6 +72,43 @@ namespace PommeBrowser.Views
                 engine.RemoveUserScript(RuffleContent.ScriptId);
             }
             _ruffleAttached = wanted;
+        }
+
+        void AddRuffleProbe(IEngineTab engine)
+            => engine.AddUserScript(RuffleContent.ScriptId,
+                RuffleContent.ProbeScript(EngineHost.RuffleBaseUrl, EngineHost.ScriptPost(RuffleContent.MessageHandler, "status"), _app.SessionIntegratedSites),
+                allFrames: true, atDocumentStart: false);
+
+        /// <summary>Sites lus par le moteur intégré modifiés : script de détection mis à jour (pages suivantes).</summary>
+        public void RefreshRuffleProbe()
+        {
+            if (_engine is { } engine && _ruffleAttached)
+                AddRuffleProbe(engine);
+        }
+
+        // Moteur intégré déjà lancé d'office pour la page affichée (remis à zéro à chaque page).
+        bool _integratedStartPlanned;
+
+        /// <summary>Hôte de la page de l'onglet (son site est celui retenu pour le moteur intégré).</summary>
+        string? PageHost => System.Uri.TryCreate(WebUrl, UriKind.Absolute, out Uri? page) ? page.Host : null;
+
+        /// <summary>
+        /// Contenu Flash décrit sur un site retenu pour le moteur intégré (Ruffle ne l'a pas lancé) :
+        /// le moteur intégré le lit d'office, une fois la liste des contenus de la page arrivée.
+        /// </summary>
+        void StartIntegratedIfPreferred()
+        {
+            if (_integratedStartPlanned || PageHost is not { } host || !_app.PrefersIntegratedFlash(host))
+                return;
+            _integratedStartPlanned = true;
+            Avalonia.Threading.DispatcherTimer.RunOnce(() =>
+            {
+                if (Page != TabPage.Web || HasFlashOverlay || _inPageModule != null || _flashContent == null ||
+                    !UsesIntegratedFlash || PageHost != host || !System.Uri.TryCreate(WebUrl, UriKind.Absolute, out Uri? uri))
+                    return;
+                RuntimeLogBuffer.Append($"[Flash] {host} : lu d'office par le moteur intégré (retenu pour la session).");
+                OpenFlashFallback(uri, automatic: true);
+            }, TimeSpan.FromMilliseconds(400));
         }
 
         void OnScriptMessage(string channel, string body)
@@ -92,12 +128,21 @@ namespace PommeBrowser.Views
         {
             if (status.StartsWith(PommeBrowser.Engine.FlashContent.MessagePrefix, StringComparison.Ordinal))
             {
-                if (PommeBrowser.Engine.FlashContent.Parse(status[PommeBrowser.Engine.FlashContent.MessagePrefix.Length..]) is { } content &&
-                    (_flashContent == null || content.Area > _flashContent.Area))
+                if (PommeBrowser.Engine.FlashContent.Parse(status[PommeBrowser.Engine.FlashContent.MessagePrefix.Length..]) is not { } content)
+                    return;
+                if (content.IsPreferredOver(_flashContent))
                 {
+                    if (_flashContent?.Swf != content.Swf)
+                        RuntimeLogBuffer.Append($"[Flash] Contenu de la page : {content.Swf.GetLeftPart(UriPartial.Path)} ({content.Width}×{content.Height}){(IsTopDocument(content) ? string.Empty : ", dans un cadre")}.");
                     _flashContent = content;
                     RaiseChanged();
                 }
+                StartIntegratedIfPreferred();
+                return;
+            }
+            if (status.StartsWith(PommeBrowser.Engine.FlashContent.ListPrefix, StringComparison.Ordinal))
+            {
+                OnFlashContents(status[PommeBrowser.Engine.FlashContent.ListPrefix.Length..]);
                 return;
             }
             if (status.StartsWith(RuffleContent.RectPrefix, StringComparison.Ordinal))
@@ -128,8 +173,9 @@ namespace PommeBrowser.Views
         /// </summary>
         void OnRuffleFailed()
         {
-            // Contenu déjà lu par le moteur intégré dans la page : l'erreur d'un autre lecteur Ruffle n'y change rien.
-            if (Page != TabPage.Web || HasFlashOverlay || !BasiliskInstall.IsOpenable(WebUrl, out Uri uri))
+            // Page déjà passée au moteur intégré (ses contenus, même ajoutés ensuite, sont lus par
+            // lui) : l'erreur d'un lecteur Ruffle n'y change rien.
+            if (Page != TabPage.Web || HasFlashOverlay || _inPageModule != null || !BasiliskInstall.IsOpenable(WebUrl, out Uri uri))
                 return;
 
             RuntimeLogBuffer.Append("[Ruffle] Contenu Flash illisible sur " + uri.Host);
@@ -137,11 +183,12 @@ namespace PommeBrowser.Views
                              HasFlashFallback && !_app.SessionRuffleHosts.Contains(uri.Host);
             if (!automatic)
             {
+                RuntimeLogBuffer.Append("[Ruffle] Pas de bascule d'office : " + FallbackDiagnosis(uri) + ".");
                 OfferFlashFallback(Tr("Ruffle n'a pas pu lire le contenu Flash de cette page."));
                 return;
             }
 
-            OpenFlashFallback(uri);
+            OpenFlashFallback(uri, automatic: true);
             if (!IsSelected)
                 return;
             if (HasFlashOverlay)
@@ -157,6 +204,27 @@ namespace PommeBrowser.Views
                 Window.ShowToast(Tr("Ruffle n'a pas pu lire ce contenu : {0} s'ouvre dans Basilisk. L'ouvrir toujours ainsi ?", uri.Host),
                     Tr("Toujours"), () => FlashDomainRules.SetRule(uri, FlashRuleMode.Legacy), timeout: 10);
             }
+        }
+
+        /// <summary>Pourquoi la bascule d'office n'a pas lieu (journal).</summary>
+        string FallbackDiagnosis(Uri uri)
+        {
+            var reasons = new List<string>();
+            if (!_app.Settings.FlashAutoFallback)
+                reasons.Add("bascule d'office désactivée");
+            if (_rufflePlaying)
+                reasons.Add("un autre contenu est déjà lu par Ruffle");
+            if (_app.SessionRuffleHosts.Contains(uri.Host))
+                reasons.Add("retour à Ruffle choisi pour ce site");
+            if (!HasFlashFallback)
+            {
+                string integrated = !_app.Settings.FlashIntegratedEngine ? "désactivé"
+                    : _flashContent == null ? "aucun contenu décrit par la page"
+                    : NextFlashModule(null) == null ? "aucun module Flash" : "indisponible sur ce système";
+                string basilisk = !_app.BasiliskAllowed ? "désactivé" : "introuvable";
+                reasons.Add($"aucun moteur de secours (moteur intégré : {integrated} ; Basilisk : {basilisk})");
+            }
+            return string.Join(", ", reasons);
         }
 
         /// <summary>

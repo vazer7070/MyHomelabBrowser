@@ -16,11 +16,15 @@ sealed class HostRun : IAsyncDisposable
     readonly Func<string, (bool Ok, string? Value)>? _scripts;
     readonly Func<string, bool, string?>? _cookies;
 
-    HostRun(Process process, Func<string, (bool Ok, string? Value)>? scripts, Func<string, bool, string?>? cookies)
+    readonly Func<HostRun, string, Task<(bool Ok, string? Value)>?>? _slowScripts;
+
+    HostRun(Process process, Func<string, (bool Ok, string? Value)>? scripts, Func<string, bool, string?>? cookies,
+        Func<HostRun, string, Task<(bool Ok, string? Value)>?>? slowScripts)
     {
         _process = process;
         _scripts = scripts;
         _cookies = cookies;
+        _slowScripts = slowScripts;
         _reader = Task.Run(ReadAsync);
     }
 
@@ -64,10 +68,12 @@ sealed class HostRun : IAsyncDisposable
     /// <summary>
     /// Hôte lancé ; à la place de PommeBrowser, <paramref name="scripts"/> répond aux scripts de la
     /// page qu'il demande (événements « eval ») et <paramref name="cookies"/> aux cookies d'une
-    /// adresse (« cookies » : adresse, HttpOnly compris ; null : refusés).
+    /// adresse (« cookies » : adresse, HttpOnly compris ; null : refusés). <paramref name="slowScripts"/>,
+    /// prioritaire quand il rend une tâche, répond plus tard (par exemple après un appel de la page
+    /// vers le contenu envoyé pendant que le contenu attend le script).
     /// </summary>
     public static HostRun Start(IEnumerable<string> arguments, Func<string, (bool Ok, string? Value)>? scripts = null,
-        Func<string, bool, string?>? cookies = null)
+        Func<string, bool, string?>? cookies = null, Func<HostRun, string, Task<(bool Ok, string? Value)>?>? slowScripts = null)
     {
         var start = new ProcessStartInfo
         {
@@ -83,7 +89,7 @@ sealed class HostRun : IAsyncDisposable
         foreach (string argument in arguments)
             start.ArgumentList.Add(argument);
         start.Environment["WINEDEBUG"] = "-all";
-        return new HostRun(Process.Start(start) ?? throw new InvalidOperationException("Hôte non lancé."), scripts, cookies);
+        return new HostRun(Process.Start(start) ?? throw new InvalidOperationException("Hôte non lancé."), scripts, cookies, slowScripts);
     }
 
     async Task ReadAsync()
@@ -96,7 +102,16 @@ sealed class HostRun : IAsyncDisposable
             JsonElement received = document.RootElement.Clone();
             _events.Enqueue(received);
             string? kind = received.GetProperty("event").GetString();
-            if (_scripts != null && kind == "eval")
+            if (kind == "eval" && _slowScripts?.Invoke(this, received.GetProperty("code").GetString()!) is { } slow)
+            {
+                int id = received.GetProperty("id").GetInt32();
+                _ = Task.Run(async () =>
+                {
+                    (bool ok, string? value) = await slow;
+                    await SendAsync($"result {id} {JsonSerializer.Serialize(new { ok, value })}");
+                });
+            }
+            else if (_scripts != null && kind == "eval")
             {
                 (bool ok, string? value) = _scripts(received.GetProperty("code").GetString()!);
                 string reply = JsonSerializer.Serialize(new { ok, value });

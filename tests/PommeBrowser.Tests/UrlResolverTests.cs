@@ -57,4 +57,15 @@ public class UrlResolverTests
     [InlineData("example.com", false)]
     public void Local_host_detection(string host, bool expected)
         => Assert.Equal(expected, UrlResolver.IsLocalHost(host));
+
+    [Theory]
+    [InlineData("na62.evony.com/s.html?loginid=74&adv=index", true)]
+    [InlineData("exemple.fr", true)]
+    [InlineData("https://exemple.fr", false)]   // https tapé exprès : pas de retour en HTTP
+    [InlineData("http://exemple.fr", false)]    // déjà en HTTP (le passage en HTTPS a son propre suivi)
+    [InlineData("exemple.fr:8443/admin", false)] // port explicite
+    [InlineData("nas:5000", false)]             // réseau local, ouvert en HTTP
+    [InlineData("chat noir", false)]            // recherche
+    public void An_address_typed_without_scheme_may_fall_back_to_http(string input, bool expected)
+        => Assert.Equal(expected, UrlResolver.IsImplicitHttps(input));
 }

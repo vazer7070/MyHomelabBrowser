@@ -229,6 +229,23 @@ namespace PommeBrowser.Engine
             return Task.CompletedTask;
         }
 
+        /// <summary>
+        /// Mémoire HTTPS du moteur (HSTS) des sites vus depuis <paramref name="since"/> effacée :
+        /// un site qui impose HTTPS par elle alors que ses pages renvoient vers HTTP tourne en
+        /// boucle. Vrai si c'est fait.
+        /// </summary>
+        public static async Task<bool> ForgetHttpsMemoryAsync(bool isPrivate, TimeSpan since)
+        {
+            if (Kind == EngineKind.WebView2 && OperatingSystem.IsWindows())
+                return await WebView2.WebView2Engine.ForgetHttpsMemoryAsync(isPrivate, since);
+            if (Kind == EngineKind.WebKitGtk)
+            {
+                await GtkEngine.ForgetHttpsMemoryAsync(since);
+                return true;
+            }
+            return false;
+        }
+
         // ---------------------------------------------------------------
         // Filtre anti-pub compilé par WebKit (WebKitGTK et WKWebView : même format de règles)
         // ---------------------------------------------------------------

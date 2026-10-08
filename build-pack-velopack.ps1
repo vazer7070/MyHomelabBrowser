@@ -475,13 +475,18 @@ try {
     }
     New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 
+    $supportApiUrl = if ([string]::IsNullOrWhiteSpace($env:POMMEBROWSER_SUPPORT_API_URL)) { "https://support.maloquine.us" } else { $env:POMMEBROWSER_SUPPORT_API_URL.Trim() }
+    Write-Host "Serveur de support : $supportApiUrl" -ForegroundColor DarkGray
+
     $publishArguments = @(
         "publish", $csproj.FullName,
         "-c", "Release",
         "-r", "win-x64",
         "--self-contained", "true",
         "-o", $publishDir,
-        "-p:Version=$version"
+        "-p:Version=$version",
+        # Serveur de support : « Signaler un problème » y envoie les rapports (puis Discord).
+        "-p:SupportApiUrl=$supportApiUrl"
     )
     if ($Edition -eq "avalonia") {
         $publishArguments += "-p:RuffleDownloadOptional=false"

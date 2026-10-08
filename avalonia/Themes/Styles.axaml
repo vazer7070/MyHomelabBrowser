@@ -119,6 +119,16 @@
     <Style Selector="Button.toolbar.warm">
         <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
     </Style>
+    <!-- Bouton ⚡ : couleur du moteur Flash de la page (la forme de l'éclair change aussi). -->
+    <Style Selector="Button.toolbar.ruffle">
+        <Setter Property="Foreground" Value="{DynamicResource RuffleBrush}" />
+    </Style>
+    <Style Selector="Button.toolbar.flashplayer">
+        <Setter Property="Foreground" Value="{DynamicResource FlashPlayerBrush}" />
+    </Style>
+    <Style Selector="Button.toolbar.basilisk">
+        <Setter Property="Foreground" Value="{DynamicResource BasiliskBrush}" />
+    </Style>
 
     <!-- Petit bouton intégré dans un champ (barre d'adresse, recherche). -->
     <Style Selector="Button.inline">

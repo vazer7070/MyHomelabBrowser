@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -23,11 +24,102 @@ namespace PommeBrowser.Engine
         /// <summary>Préfixe du message envoyé par le script de détection.</summary>
         public const string MessagePrefix = "content:";
 
+        /// <summary>
+        /// Préfixe de la liste de tous les contenus d'un document (tableau JSON de descriptions),
+        /// envoyée par le script de détection à chaque changement.
+        /// </summary>
+        public const string ListPrefix = "contents:";
+
+        /// <summary>Contenus d'un document retenus au plus.</summary>
+        public const int MaxListed = 16;
+
         const int MaxFlashVars = 16 * 1024;
         const int MaxParams = 32;
         const int MaxParamValue = 2048;
 
         public long Area => (long)Width * Height;
+
+        /// <summary>
+        /// Formats publicitaires courants (IAB) : sur une page « jeu + publicités Flash », un
+        /// contenu de cette taille cède la place à un contenu d'une autre taille, même plus petit.
+        /// </summary>
+        public static readonly IReadOnlyList<(int Width, int Height)> AdSizes = new[]
+        {
+            (728, 90), (970, 90), (970, 250), (468, 60), (234, 60), (320, 50), (320, 100),
+            (300, 250), (336, 280), (250, 250), (200, 200), (180, 150), (125, 125),
+            (160, 600), (120, 600), (300, 600), (120, 240), (88, 31)
+        };
+
+        /// <summary>Taille d'un format publicitaire courant.</summary>
+        public bool HasAdSize => AdSizes.Contains((Width, Height));
+
+        /// <summary>
+        /// Contenu à confier au moteur intégré plutôt que <paramref name="current"/> (contenu
+        /// principal retenu jusque-là, d'un autre document de la page par exemple) : celui qui n'a
+        /// pas une taille de publicité, sinon le plus grand.
+        /// </summary>
+        public bool IsPreferredOver(FlashContent? current)
+        {
+            if (current == null)
+                return true;
+            if (HasAdSize != current.HasAdSize)
+                return !HasAdSize;
+            return Area > current.Area;
+        }
+
+        /// <summary>
+        /// Même contenu : même fichier, même document, même identifiant d'élément, mêmes flashvars
+        /// (taille et paramètres mis à part).
+        /// </summary>
+        public bool IsSameAs(FlashContent other)
+            => Swf == other.Swf && Page == other.Page && string.Equals(Id, other.Id, StringComparison.Ordinal) &&
+               string.Equals(FlashVars, other.FlashVars, StringComparison.Ordinal);
+
+        /// <summary>Clé de l'identité du contenu (voir <see cref="IsSameAs"/>).</summary>
+        public string Identity => string.Join('\n', Page.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped),
+            Swf.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped), Id ?? string.Empty, FlashVars ?? string.Empty);
+
+        /// <summary>Pour le journal : fichier, taille et identifiant.</summary>
+        /// <summary>Nom court du fichier du contenu (« EvonyClient1921.swf »), pour le journal.</summary>
+        public static string ShortName(Uri swf)
+        {
+            string name = System.IO.Path.GetFileName(swf.AbsolutePath);
+            return name.Length > 0 ? name : swf.Host;
+        }
+
+        public override string ToString()
+            => $"{Swf.GetLeftPart(UriPartial.Path)} ({Width}×{Height}{(Id is { Length: > 0 } ? ", id " + Id : string.Empty)})";
+
+        /// <summary>
+        /// Liste des contenus d'un document (« contents: ») : descriptions valides, toutes du même
+        /// document, <see cref="MaxListed"/> au plus ; vide si la liste est invalide.
+        /// </summary>
+        public static IReadOnlyList<FlashContent> ParseList(string json)
+        {
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(json);
+                if (document.RootElement.ValueKind != JsonValueKind.Array)
+                    return Array.Empty<FlashContent>();
+                var list = new List<FlashContent>();
+                foreach (JsonElement item in document.RootElement.EnumerateArray())
+                {
+                    if (list.Count >= MaxListed)
+                        break;
+                    if (Parse(item.GetRawText()) is not { } content)
+                        continue;
+                    if (list.Count > 0 && content.Page != list[0].Page)
+                        return Array.Empty<FlashContent>();
+                    if (!list.Exists(c => c.IsSameAs(content)))
+                        list.Add(content);
+                }
+                return list;
+            }
+            catch (JsonException)
+            {
+                return Array.Empty<FlashContent>();
+            }
+        }
 
         [GeneratedRegex("^[a-z][a-z0-9_-]{0,63}$", RegexOptions.CultureInvariant)]
         private static partial Regex ParamName();
@@ -101,9 +193,11 @@ namespace PommeBrowser.Engine
     /// <summary>
     /// Position du contenu lu par le moteur intégré dans la page (script de suivi, voir
     /// RuffleContent.FlashTrackerScript) : rectangle en pixels CSS par rapport à la zone affichée,
-    /// rapport pixels CSS / pixels de l'écran, et visibilité. Données de la page : bornées.
+    /// rapport pixels CSS / pixels de l'écran, et visibilité. Contenu d'un cadre : zone du cadre
+    /// où il est visible (<paramref name="Clip"/>, pixels CSS). Données de la page : bornées.
     /// </summary>
-    public sealed record FlashRect(double X, double Y, double Width, double Height, double PixelRatio, bool Visible)
+    public sealed record FlashRect(double X, double Y, double Width, double Height, double PixelRatio, bool Visible,
+                                   FlashClip? Clip = null)
     {
         const double MaxCoordinate = 1_000_000;
         const double MaxSize = 100_000;
@@ -124,7 +218,17 @@ namespace PommeBrowser.Engine
                     width is < 0 or > MaxSize || height is < 0 or > MaxSize || ratio is <= 0 or > 16)
                     return null;
                 bool visible = root.TryGetProperty("visible", out JsonElement shown) && shown.ValueKind == JsonValueKind.True;
-                return new FlashRect(x, y, width, height, ratio, visible && width >= 1 && height >= 1);
+                FlashClip? clip = null;
+                if (root.TryGetProperty("clip", out JsonElement area) && area.ValueKind == JsonValueKind.Object)
+                {
+                    if (!Number(area, "x", out double clipX) || !Number(area, "y", out double clipY) ||
+                        !Number(area, "w", out double clipWidth) || !Number(area, "h", out double clipHeight) ||
+                        Math.Abs(clipX) > MaxCoordinate || Math.Abs(clipY) > MaxCoordinate ||
+                        clipWidth is < 0 or > MaxSize || clipHeight is < 0 or > MaxSize)
+                        return null;
+                    clip = new FlashClip(clipX, clipY, clipWidth, clipHeight);
+                }
+                return new FlashRect(x, y, width, height, ratio, visible && width >= 1 && height >= 1, clip);
             }
             catch (JsonException)
             {
@@ -154,6 +258,14 @@ namespace PommeBrowser.Engine
             double top = Math.Max(0, Y * factor);
             double right = Math.Min(areaWidth, (X + Width) * factor);
             double bottom = Math.Min(areaHeight, (Y + Height) * factor);
+            if (Clip is { } clip)
+            {
+                // Contenu d'un cadre : seule la partie dans la zone du cadre est montrée.
+                left = Math.Max(left, clip.X * factor);
+                top = Math.Max(top, clip.Y * factor);
+                right = Math.Min(right, (clip.X + clip.Width) * factor);
+                bottom = Math.Min(bottom, (clip.Y + clip.Height) * factor);
+            }
             if (right - left < 1 || bottom - top < 1)
                 return null;
 
@@ -165,6 +277,9 @@ namespace PommeBrowser.Engine
                 Math.Max(1, (int)Math.Round(Width * PixelRatio)), Math.Max(1, (int)Math.Round(Height * PixelRatio)));
         }
     }
+
+    /// <summary>Zone d'un cadre où son contenu est visible, en pixels CSS dans la zone affichée.</summary>
+    public readonly record struct FlashClip(double X, double Y, double Width, double Height);
 
     /// <summary>
     /// Contenu placé dans la page : partie visible (DIP, dans la zone de la page web), et fenêtre

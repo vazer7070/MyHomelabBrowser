@@ -78,6 +78,9 @@ namespace PommeFlash.Host
             using var request = new HttpRequestMessage(_post != null ? HttpMethod.Post : HttpMethod.Get, _uri);
             if (_owner.Options.Page.Scheme is "http" or "https")
                 request.Headers.Referrer = _owner.Options.Page;
+            // Comme Firefox : chargement notifié (notifyData non nul), module qui le demande.
+            if (_notify && _notifyData != 0 && _owner.Library.HandlesRedirects)
+                request.Options.Set(BrowserHttpHandler.RedirectApproval, (next, status, cancellation) => _owner.ApproveRedirectAsync(next, status, _notifyData, cancellation));
             if (_post != null)
             {
                 request.Content = new ByteArrayContent(_post.Body);
@@ -119,7 +122,13 @@ namespace PommeFlash.Host
             UiThread.Post(() => Open(info));
 
             await using Stream body = await response.Content.ReadAsStreamAsync(_cancel.Token).ConfigureAwait(false);
-            await PumpBodyAsync(body).ConfigureAwait(false);
+            // Petite réponse texte (connexion d'un jeu…) : sa forme au journal, sans ses valeurs.
+            string? mediaType = response.Content.Headers.ContentType?.MediaType;
+            MemoryStream? head = info.Length <= ResponseShape.Limit && ResponseShape.IsText(mediaType) ? new MemoryStream() : null;
+            long received = await PumpBodyAsync(body, head).ConfigureAwait(false);
+            if (head != null && received <= ResponseShape.Limit)
+                HostChannel.Trace("body:" + _uri.GetLeftPart(UriPartial.Path),
+                    $"Réponse de {_uri.GetLeftPart(UriPartial.Path)} : {received} octets, {ResponseShape.Describe(head.GetBuffer().AsSpan(0, (int)head.Length))}");
         }
 
         async Task ReadFileAsync()
@@ -153,16 +162,22 @@ namespace PommeFlash.Host
             });
         }
 
-        async Task PumpBodyAsync(Stream body)
+        /// <summary>Corps remis au module ; <paramref name="head"/> en garde le début. Rend la taille lue.</summary>
+        async Task<long> PumpBodyAsync(Stream body, MemoryStream? head = null)
         {
             var buffer = new byte[ChunkSize];
+            long total = 0;
             int read;
             while ((read = await body.ReadAsync(buffer, _cancel.Token).ConfigureAwait(false)) > 0)
             {
                 byte[] chunk = buffer.AsSpan(0, read).ToArray();
+                if (head != null && head.Length < ResponseShape.Limit)
+                    head.Write(chunk, 0, (int)Math.Min(read, ResponseShape.Limit - head.Length));
+                total += read;
                 UiThread.Post(() => Enqueue(chunk));
             }
             UiThread.Post(Complete);
+            return total;
         }
 
         // ---------------------------------------------------------------

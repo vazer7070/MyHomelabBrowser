@@ -20,6 +20,7 @@
 #include <X11/keysym.h>
 #endif
 #include <stdarg.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "npapi-min.h"
@@ -122,16 +123,105 @@ static void scriptableDeallocate(NPObject *obj)
 static bool scriptableHasMethod(NPObject *obj, void *name)
 {
     (void)obj;
-    return name == browser->getstringidentifier("CallFunction");
+    return name == browser->getstringidentifier("CallFunction") || name == browser->getstringidentifier("PercentLoaded") ||
+           name == browser->getstringidentifier("GetVariable") || name == browser->getstringidentifier("SetVariable");
+}
+
+/* Variable gardée par SetVariable, rendue par GetVariable (API JavaScript de Flash). */
+static char variableValue[256] = "vide";
+
+static bool stringResult(NPVariant *result, const char *value)
+{
+    uint32_t length = (uint32_t)strlen(value);
+    char *text = (char *)browser->memalloc(length + 1);
+    memcpy(text, value, length + 1);
+    result->type = NPVariantType_String;
+    result->value.stringValue.UTF8Characters = text;
+    result->value.stringValue.UTF8Length = length;
+    return true;
+}
+
+/* Méthodes de Flash appelées par la page : PercentLoaded, GetVariable, SetVariable. */
+static bool flashMethod(void *name, const NPVariant *args, uint32_t count, NPVariant *result)
+{
+    if (name == browser->getstringidentifier("PercentLoaded"))
+    {
+        report("method PercentLoaded count=%u", count);
+        result->type = NPVariantType_Int32;
+        result->value.intValue = 100;
+        return true;
+    }
+    if (name == browser->getstringidentifier("SetVariable"))
+    {
+        if (count < 2 || args[0].type != NPVariantType_String || args[1].type != NPVariantType_String)
+            return false;
+        const NPString *value = &args[1].value.stringValue;
+        uint32_t length = value->UTF8Length < sizeof(variableValue) - 1 ? value->UTF8Length : (uint32_t)sizeof(variableValue) - 1;
+        memcpy(variableValue, value->UTF8Characters, length);
+        variableValue[length] = 0;
+        report("method SetVariable %.*s=%s", (int)args[0].value.stringValue.UTF8Length, args[0].value.stringValue.UTF8Characters, variableValue);
+        result->type = NPVariantType_Void;
+        return true;
+    }
+    if (name == browser->getstringidentifier("GetVariable"))
+    {
+        if (count < 1 || args[0].type != NPVariantType_String)
+            return false;
+        report("method GetVariable");
+        return stringResult(result, variableValue);
+    }
+    return false;
+}
+
+/* ------------------------------------------------------------------ */
+/* Tenue : la page demande « boucle:N » ; N chargements enchaînés,      */
+/* avec à chacun un objet créé puis rendu et les objets de la page lus. */
+/* ------------------------------------------------------------------ */
+
+#define CYCLE_DATA ((void *)0xB0C1E)
+static int cycleLeft, cycleNumber;
+static NPObject *getObject(NPObject *owner, const char *name);
+
+static void cycleStep(void)
+{
+    if (cycleLeft <= 0)
+    {
+        report("cycle-done=%d", cycleNumber);
+        return;
+    }
+    cycleLeft--;
+    NPObject *obj = browser->createobject(instanceNpp, &testClass);
+    browser->releaseobject(obj);
+    NPObject *window = NULL;
+    if (browser->getvalue(instanceNpp, NPNVWindowNPObject, &window) == NPERR_NO_ERROR && window)
+    {
+        NPObject *location = getObject(window, "location");
+        if (location)
+            browser->releaseobject(location);
+        browser->releaseobject(window);
+    }
+    browser->geturlnotify(instanceNpp, "data.txt", NULL, CYCLE_DATA);
 }
 
 /* Réponse : « retour:<requête> », sur le fil du module. */
 static bool scriptableInvoke(NPObject *obj, void *name, const NPVariant *args, uint32_t count, NPVariant *result)
 {
     (void)obj;
-    if (name != browser->getstringidentifier("CallFunction") || count < 1 || args[0].type != NPVariantType_String)
+    if (name != browser->getstringidentifier("CallFunction"))
+        return flashMethod(name, args, count, result);
+    if (count < 1 || args[0].type != NPVariantType_String)
         return false;
     const NPString *request = &args[0].value.stringValue;
+    if (request->UTF8Length > 7 && memcmp(request->UTF8Characters, "boucle:", 7) == 0)
+    {
+        char rounds[16] = { 0 };
+        memcpy(rounds, request->UTF8Characters + 7, request->UTF8Length - 7 < 15 ? request->UTF8Length - 7 : 15);
+        cycleLeft = atoi(rounds);
+        cycleNumber++;
+        cycleStep();
+        result->type = NPVariantType_Void;
+        return true;
+    }
     report("call main=%d request=%.*s", onMainThread(), (int)request->UTF8Length, request->UTF8Characters);
     static const char prefix[] = "retour:";
     uint32_t length = (uint32_t)(sizeof(prefix) - 1) + request->UTF8Length;
@@ -446,14 +536,24 @@ static void checkClickFocus(void)
 }
 #endif
 
+/* Paramètre « pomme-calme » : contenu sans le scénario de test (essais dans PommeBrowser). */
+static int quiet;
+
 static void continueScenario(const char *movieUrl)
 {
+    if (quiet)
+    {
+        report("calme");
+        return;
+    }
     checkClickFocus();
     evaluateScript("try { __flash__toXML(pommeAdd(2,3)) ; } catch (e) { \"<undefined/>\"; }", "script");
     evaluateScript("pommeRefuse()", "script-refused");
     checkCookies(movieUrl);
     browser->geturlnotify(instanceNpp, "data.txt", NULL, (void *)0x1234);
     browser->geturlnotify(instanceNpp, "missing.txt", NULL, (void *)0x5678);
+    browser->geturlnotify(instanceNpp, "detour.txt", NULL, (void *)0x4321);
+    browser->geturlnotify(instanceNpp, "lent.bin", NULL, (void *)0x7777);
     const char *post = "Content-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello";
     browser->posturlnotify(instanceNpp, "echo", NULL, (uint32_t)strlen(post), post, 0, (void *)0x9ABC);
     browser->geturl(instanceNpp, "https://example.org/page", "_blank");
@@ -480,7 +580,11 @@ static NPError NPP_New(NPMIMEType type, NPP npp, uint16_t mode, int16_t argc, ch
 #endif
     report("new mime=%s mode=%u argc=%d", type, mode, argc);
     for (int i = 0; i < argc; i++)
+    {
         report("arg %s=%s", argn[i], argv[i] ? argv[i] : "(null)");
+        if (strcmp(argn[i], "pomme-calme") == 0)
+            quiet = 1;
+    }
 
     report("ua=%s", browser->uagent(npp));
 
@@ -607,8 +711,9 @@ static NPError NPP_NewStream(NPP npp, NPMIMEType type, NPStream *stream, NPBool 
         memcpy(firstLine, stream->headers, length);
         firstLine[length] = 0;
     }
-    report("stream-open url=%s mime=%s end=%u notify=%llx status=%s", stream->url, type, stream->end,
-           (unsigned long long)(uintptr_t)stream->notifyData, firstLine);
+    if (stream->notifyData != CYCLE_DATA)
+        report("stream-open url=%s mime=%s end=%u notify=%llx status=%s", stream->url, type, stream->end,
+               (unsigned long long)(uintptr_t)stream->notifyData, firstLine);
     return NPERR_NO_ERROR;
 }
 
@@ -635,7 +740,8 @@ static NPError NPP_DestroyStream(NPP npp, NPStream *stream, NPReason reason)
 {
     (void)npp;
     StreamState *state = (StreamState *)stream->pdata;
-    report("stream-done url=%s bytes=%u hash=%08x ordered=%d reason=%d", stream->url, state->bytes, state->hash, state->ordered, reason);
+    if (stream->notifyData != CYCLE_DATA)
+        report("stream-done url=%s bytes=%u hash=%08x ordered=%d reason=%d", stream->url, state->bytes, state->hash, state->ordered, reason);
     int isMovie = strstr(stream->url, "movie.swf") != NULL;
     browser->memfree(state);
     stream->pdata = NULL;
@@ -646,9 +752,23 @@ static NPError NPP_DestroyStream(NPP npp, NPStream *stream, NPReason reason)
     return NPERR_NO_ERROR;
 }
 
+/* Redirection d'un chargement notifié, soumise par le navigateur : refusée vers « interdit ». */
+static void NPP_URLRedirectNotify(NPP npp, const char *url, int32_t status, void *notifyData)
+{
+    int allow = strstr(url, "interdit") == NULL;
+    report("redirect url=%s status=%d data=%llx main=%d allow=%d", url, (int)status,
+           (unsigned long long)(uintptr_t)notifyData, onMainThread(), allow);
+    ((void (*)(NPP, void *, NPBool))browser->urlredirectresponse)(npp, notifyData, (NPBool)allow);
+}
+
 static void NPP_URLNotify(NPP npp, const char *url, NPReason reason, void *notifyData)
 {
     (void)npp;
+    if (notifyData == CYCLE_DATA)
+    {
+        cycleStep();
+        return;
+    }
     report("notify url=%s reason=%d data=%llx", url, reason, (unsigned long long)(uintptr_t)notifyData);
     notifications++;
     checkFinished();
@@ -696,6 +816,7 @@ static void fillPluginFuncs(NPPluginFuncs *funcs)
     funcs->writeready = NPP_WriteReady;
     funcs->write = NPP_Write;
     funcs->urlnotify = NPP_URLNotify;
+    funcs->urlredirectnotify = (void *)NPP_URLRedirectNotify;
     funcs->getvalue = NPP_GetValue;
     funcs->setvalue = NPP_SetValue;
 }

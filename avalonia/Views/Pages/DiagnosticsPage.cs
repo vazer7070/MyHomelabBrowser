@@ -13,6 +13,7 @@ using MyHomelabBrowser.classes;
 using MyHomelabBrowser.classes.Homelab;
 using PommeBrowser.Core;
 using PommeBrowser.Engine;
+using PommeBrowser.Legacy;
 using static MyHomelabBrowser.classes.Localization.Loc;
 
 namespace PommeBrowser.Views.Pages
@@ -107,7 +108,60 @@ namespace PommeBrowser.Views.Pages
                 engineRows.Add((Tr("Mémoire du moteur"), DownloadEntry.FormatSize(engineMemory)));
             }
             sections.Add(new(Tr("Moteur web"), engineRows));
+            if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux())
+                sections.Add(new(Tr("Moteur Flash intégré"), FlashRows()));
             return sections;
+        }
+
+        /// <summary>Moteur Flash intégré : réglage, hôtes livrés, modules trouvés (ordre d'essai), lecteurs et dernier arrêt.</summary>
+        List<(string, string)> FlashRows()
+        {
+            var rows = new List<(string, string)>
+            {
+                (Tr("Réglage"), App.Settings.FlashIntegratedEngine ? Tr("activé") : Tr("désactivé")),
+                (Tr("Hôte 64 bits"), FlashHostProcess.IsAvailable ? Tr("livré") : Tr("absent de cette compilation"))
+            };
+            if (OperatingSystem.IsWindows())
+                rows.Add((Tr("Hôte 32 bits"), FlashHostProcess.IsAvailable32 ? Tr("livré") : Tr("absent de cette compilation")));
+
+            IReadOnlyList<string> modules = LegacyEngine.IntegratedModules;
+            if (modules.Count == 0)
+                rows.Add((Tr("Modules"), Tr("aucun : ajoutez votre copie de Flash Player dans Paramètres › Avancé")));
+            for (int i = 0; i < modules.Count; i++)
+            {
+                string module = modules[i];
+                Version? version = FlashModuleSearch.VersionOf(module);
+                var text = new StringBuilder(Path.GetFileName(module));
+                text.Append(" — ").Append(FlashModuleSearch.Is32Bit(module) && OperatingSystem.IsWindows() ? "32" : "64").Append(Tr(" bits"));
+                text.Append(", ").Append(version != null ? Tr("version {0}", version) : Tr("version inconnue"));
+                if (version != null && version > FlashModuleSearch.LastWithoutTimeBomb)
+                    text.Append(Tr(" (peut refuser les contenus depuis janvier 2021 : préférez la 32.0.0.371 ou une version plus ancienne)"));
+                if (!FlashHostProcess.IsAvailableFor(module))
+                    text.Append(Tr(" — hôte de cette architecture absent"));
+                text.Append(" — ").Append(module);
+                rows.Add((Tr("Module {0}", i + 1), text.ToString()));
+            }
+
+            IReadOnlyList<int> players = FlashHostProcess.RunningProcessIds;
+            long memory = 0;
+            foreach (int pid in players)
+            {
+                try
+                {
+                    using Process p = Process.GetProcessById(pid);
+                    memory += p.WorkingSet64;
+                }
+                catch (ArgumentException)
+                {
+                    // Lecteur arrêté entre-temps.
+                }
+            }
+            rows.Add((Tr("Lecteurs ouverts"), players.Count == 0 ? "0" : Tr("{0} ({1})", players.Count, DownloadEntry.FormatSize(memory))));
+            rows.Add((Tr("Dernier arrêt inattendu"), FlashHostProcess.LastStop is { } stop
+                ? Tr("{0} — {1}, code {2}{3}", stop.At.ToString("T", Culture), stop.Module,
+                    stop.ExitCode?.ToString(Culture) ?? "?", stop.BeforeContent ? Tr(" (avant d'afficher le contenu)") : string.Empty)
+                : Tr("aucun")));
+            return rows;
         }
 
         static string Log()

@@ -69,6 +69,16 @@ namespace PommeBrowser.Engine.Gtk
         bool _filterApplied;
         string? _hoveredLink;
         string? _tlsFailedUri;
+        // Adresse de la navigation de la page en cours de décision qui envoie des données (POST),
+        // notée sur le fil de GLib (decide-policy) et lue à son démarrage (load-changed).
+        volatile string? _dataNavigation;
+        bool _startedWithData;
+
+        public bool StartedWithData => _startedWithData;
+
+        volatile string? _userAgent;
+
+        public string? UserAgent => _userAgent;
         volatile bool _disposed;
         volatile Snapshot _state = new(null, null, false, 0, false, false);
         volatile bool _pageHasKeyboard;
@@ -176,6 +186,8 @@ namespace PommeBrowser.Engine.Gtk
 
             GtkEngine.ConfigureContext(webkit_web_view_get_context(_view));
             GtkEngine.ConfigureView(_view);
+            // Lue ici, sur le fil de GLib : les réglages de la vue n'y sont pas accessibles ailleurs.
+            _userAgent = String(webkit_settings_get_user_agent(webkit_web_view_get_settings(_view)));
             webkit_web_view_set_zoom_level(_view, _zoom);
             UpdateState();
         }
@@ -389,13 +401,29 @@ namespace PommeBrowser.Engine.Gtk
                 return;
 
             string? uri = String(webkit_web_view_get_uri(view));
+            bool withData = false;
             if (loadEvent == 0)
+            {
                 tab._tlsFailedUri = null;
+                withData = uri != null && tab._dataNavigation == uri;
+                tab._dataNavigation = null;
+            }
             // Le filtre suit la page qui s'affiche, avant ses premières ressources.
             if (loadEvent is 0 or 1)
                 tab.ApplyContentFilterOnGlib(pageUri: uri);
             tab.UpdateState();
-            tab.Post(() => tab.LoadChanged?.Invoke((LoadStage)loadEvent, uri));
+            tab.Post(() =>
+            {
+                tab._startedWithData = withData;
+                try
+                {
+                    tab.LoadChanged?.Invoke((LoadStage)loadEvent, uri);
+                }
+                finally
+                {
+                    tab._startedWithData = false;
+                }
+            });
         }
 
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
@@ -485,9 +513,17 @@ namespace PommeBrowser.Engine.Gtk
                 }
 
                 nint action = webkit_navigation_policy_decision_get_navigation_action(decision);
-                string? target = String(webkit_uri_request_get_uri(webkit_navigation_action_get_request(action)));
+                nint navigationRequest = webkit_navigation_action_get_request(action);
+                string? target = String(webkit_uri_request_get_uri(navigationRequest));
                 if (string.IsNullOrEmpty(target))
                     return 0;
+                // Formulaire envoyé (POST…) : ne pas le relancer ailleurs (voir StartedWithData).
+                if (type == PolicyNavigationAction)
+                {
+                    string? method = String(webkit_uri_request_get_http_method(navigationRequest));
+                    tab._dataNavigation = method != null && !method.Equals("GET", StringComparison.OrdinalIgnoreCase) &&
+                                          !method.Equals("HEAD", StringComparison.OrdinalIgnoreCase) ? target : null;
+                }
 
                 bool linkClicked = webkit_navigation_action_get_navigation_type(action) == NavigationLinkClicked;
                 bool middle = webkit_navigation_action_get_mouse_button(action) == MouseMiddle;
@@ -840,10 +876,14 @@ namespace PommeBrowser.Engine.Gtk
         // Moteur Flash intégré : cookies de la page et appels de la page vers le contenu
         // ---------------------------------------------------------------
 
-        /// <summary>Réponse aux appels de la page vers le contenu Flash (fil de l'interface) ; null : aucun lecteur.</summary>
-        public Func<string, string?>? FlashBridge => _flashBridge;
+        /// <summary>
+        /// Réponse aux appels de la page vers le contenu Flash (fil de l'interface) et jeton que ces
+        /// appels doivent porter ; null : aucun lecteur.
+        /// </summary>
+        public (Func<string, string?> Call, string Token)? FlashBridge => _flashBridge?.Value;
 
-        volatile Func<string, string?>? _flashBridge;
+        // Boîte : lue et remplacée d'un seul coup depuis d'autres fils.
+        volatile StrongBox<(Func<string, string?> Call, string Token)>? _flashBridge;
 
         /// <summary>Cookies de la page pour une adresse (en-tête Cookie), lus dans le gestionnaire de cookies de WebKit.</summary>
         public Task<string?> GetCookieHeaderAsync(Uri url, bool includeHttpOnly)
@@ -981,9 +1021,16 @@ namespace PommeBrowser.Engine.Gtk
         /// <summary>
         /// Appels de la page vers le contenu Flash : la page y accède par une requête synchrone au
         /// schéma <see cref="RuffleContent.FlashBridgeScheme"/> (voir GtkEngine.ServeFlashBridge),
-        /// à laquelle <paramref name="callFunction"/> répond ; null quand le lecteur s'arrête.
+        /// portant <paramref name="token"/>, à laquelle <paramref name="callFunction"/> répond ; null
+        /// quand le lecteur s'arrête.
         /// </summary>
-        public void SetFlashBridge(Func<string, string?>? callFunction) => _flashBridge = callFunction;
+        public void SetFlashBridge(Func<string, string?>? callFunction, string? token)
+            => _flashBridge = callFunction != null && !string.IsNullOrEmpty(token)
+                ? new StrongBox<(Func<string, string?> Call, string Token)>((callFunction, token))
+                : null;
+
+        /// <summary>Cadres d'une autre origine hors d'atteinte depuis l'application (WebKit) : refus.</summary>
+        public Task<(bool Ok, string? Value)> EvaluateInFrameAsync(Uri frame, string script) => Task.FromResult((false, (string?)null));
 
         public Task<string?> EvaluateAsync(string script, bool isolated)
         {

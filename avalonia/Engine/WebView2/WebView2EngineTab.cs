@@ -45,6 +45,8 @@ namespace PommeBrowser.Engine.WebView2
         double _zoom = 1;
         string? _navigationUri;
         bool _certificateShown;
+        // La navigation en cours affiche la page d'erreur de WebView2.
+        bool _errorPage;
         string? _hoveredLink;
         bool _findAttached;
 
@@ -239,16 +241,61 @@ namespace PommeBrowser.Engine.WebView2
         {
             _navigationUri = e.Uri;
             _certificateShown = false;
+            _errorPage = false;
             _loading = true;
             _progress = 0.1;
             StateChanged?.Invoke();
-            LoadChanged?.Invoke(e.IsRedirected ? LoadStage.Redirected : LoadStage.Started, e.Uri);
+            _startedWithData = !e.IsRedirected && SendsData(e.RequestHeaders);
+            try
+            {
+                LoadChanged?.Invoke(e.IsRedirected ? LoadStage.Redirected : LoadStage.Started, e.Uri);
+            }
+            finally
+            {
+                _startedWithData = false;
+            }
+        }
+
+        bool _startedWithData;
+
+        public bool StartedWithData => _startedWithData;
+
+        public string? UserAgent
+        {
+            get
+            {
+                try
+                {
+                    return _disposed ? null : _core.Settings.UserAgent;
+                }
+                catch (Exception ex) when (ex is COMException or InvalidOperationException)
+                {
+                    return null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// WebView2 ne donne pas la méthode d'une navigation : un formulaire envoyé se reconnaît à
+        /// ses en-têtes (type de son contenu ; Origin, que Chromium n'envoie pas pour un lien).
+        /// </summary>
+        static bool SendsData(CoreWebView2HttpRequestHeaders headers)
+        {
+            try
+            {
+                return headers.Contains("Content-Type") || headers.Contains("Origin");
+            }
+            catch (Exception ex) when (ex is COMException or InvalidOperationException or ArgumentException)
+            {
+                return false;
+            }
         }
 
         void OnContentLoading(object? sender, CoreWebView2ContentLoadingEventArgs e)
         {
             _progress = 0.5;
             // Page d'erreur de WebView2 : la page de PommeBrowser la remplace (voir OnNavigationCompleted).
+            _errorPage = e.IsErrorPage;
             if (!e.IsErrorPage)
                 LoadChanged?.Invoke(LoadStage.Committed, Uri);
             StateChanged?.Invoke();
@@ -263,7 +310,9 @@ namespace PommeBrowser.Engine.WebView2
             {
                 LoadChanged?.Invoke(LoadStage.Finished, Uri);
             }
-            else if (!_certificateShown && IsNetworkFailure(e))
+            // WebView2 affiche sa propre page d'erreur : c'est un échec, même quand son code est
+            // « inconnu » (réponse TLS invalide, ERR_SSL_PROTOCOL_ERROR…).
+            else if (!_certificateShown && (IsNetworkFailure(e) || (_errorPage && e.WebErrorStatus != CoreWebView2WebErrorStatus.OperationCanceled)))
             {
                 string uri = _navigationUri ?? Uri ?? string.Empty;
                 LoadFailed?.Invoke(uri, DescribeError(e.WebErrorStatus));
@@ -303,6 +352,7 @@ namespace PommeBrowser.Engine.WebView2
                 => Tr("Le certificat du site a été refusé."),
             CoreWebView2WebErrorStatus.ErrorHttpInvalidServerResponse => Tr("Le serveur a envoyé une réponse invalide."),
             CoreWebView2WebErrorStatus.RedirectFailed => Tr("Trop de redirections, ou redirection impossible."),
+            CoreWebView2WebErrorStatus.Unknown => Tr("La connexion au serveur a échoué (réponse invalide ou connexion sécurisée impossible)."),
             _ => Tr("Erreur réseau ({0}).", status.ToString())
         };
 
@@ -499,6 +549,11 @@ namespace PommeBrowser.Engine.WebView2
 
         void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
         {
+            // Journal (rapports, arrêt brutal) : quel processus du moteur, pourquoi, et le module fautif.
+            RuntimeLogBuffer.Append($"[WebView2] Processus arrêté : {e.ProcessFailedKind}, " +
+                                    $"raison {Safe(() => e.Reason.ToString(), "?")}, code {Safe(() => e.ExitCode, 0)}" +
+                                    (Safe(() => e.ProcessDescription, (string?)null) is { Length: > 0 } description ? ", " + description : string.Empty) +
+                                    (Safe(() => e.FailureSourceModulePath, (string?)null) is { Length: > 0 } module ? ", module " + module : string.Empty) + ".");
             if (e.ProcessFailedKind is not (CoreWebView2ProcessFailedKind.RenderProcessExited or CoreWebView2ProcessFailedKind.BrowserProcessExited))
                 return;
             _loading = false;
@@ -715,20 +770,22 @@ namespace PommeBrowser.Engine.WebView2
 
         /// <summary>
         /// Objet du pont vers le contenu Flash, offert au document principal seulement
-        /// (AddHostObjectToScript) ; la page l'appelle de façon synchrone.
+        /// (AddHostObjectToScript : les cadres ne le voient pas, d'où un jeton inutile ici) ; la
+        /// page l'appelle de façon synchrone.
         /// </summary>
-        public void SetFlashBridge(Func<string, string?>? callFunction)
+        public void SetFlashBridge(Func<string, string?>? callFunction, string? token)
         {
             if (_disposed)
                 return;
             try
             {
-                // Retrait sans effet si l'objet n'était pas offert (selon la version, ArgumentException).
+                // Retrait sans effet si l'objet n'était pas offert : selon la version, ArgumentException
+                // ou COMException « Élément introuvable » (0x80070490), qui empêchait l'ajout qui suit.
                 try
                 {
                     _core.RemoveHostObjectFromScript(RuffleContent.FlashBridgeName);
                 }
-                catch (ArgumentException)
+                catch (Exception ex) when (ex is ArgumentException or COMException)
                 {
                 }
                 if (callFunction != null)
@@ -747,6 +804,63 @@ namespace PommeBrowser.Engine.WebView2
                 return null;
             string json = await _core.ExecuteScriptAsync(script);
             return FromJson(json);
+        }
+
+        // Cadre de chaque contenu (adresse → identifiant du protocole DevTools), et monde isolé de
+        // PommeBrowser dans chaque cadre (identifiant → contexte d'exécution) : deux échanges de
+        // moins par appel. Un document remplacé emporte son monde : tout est relu une fois.
+        readonly Dictionary<string, string> _flashFrames = new(StringComparer.Ordinal);
+        readonly Dictionary<string, int> _flashFrameWorlds = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Voir <see cref="IEngineTab.EvaluateInFrameAsync"/> : par le protocole DevTools (arbre des
+        /// cadres, monde isolé du cadre, puis évaluation dans ce monde), sans abonnement aux cadres
+        /// de WebView2 (voir <see cref="OnWebMessageReceived"/>). Un cadre d'un autre site, tenu par
+        /// un autre processus, n'est pas dans l'arbre : refus.
+        /// </summary>
+        public async Task<(bool Ok, string? Value)> EvaluateInFrameAsync(Uri frame, string script)
+        {
+            if (frame.Scheme is not ("http" or "https"))
+                return (false, null);
+            string expression = FlashFrames.InFrameScript(frame, script);
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                if (_disposed)
+                    return (false, null);
+                try
+                {
+                    if (!_flashFrames.TryGetValue(frame.AbsoluteUri, out string? frameId))
+                    {
+                        using JsonDocument tree = JsonDocument.Parse(await _core.CallDevToolsProtocolMethodAsync("Page.getFrameTree", "{}"));
+                        if (!tree.RootElement.TryGetProperty("frameTree", out JsonElement root) || FlashFrames.FindFrameId(root, frame) is not { } found)
+                            return (false, null);
+                        _flashFrames[frame.AbsoluteUri] = frameId = found;
+                    }
+                    if (!_flashFrameWorlds.TryGetValue(frameId, out int context))
+                    {
+                        using JsonDocument world = JsonDocument.Parse(await _core.CallDevToolsProtocolMethodAsync("Page.createIsolatedWorld",
+                            "{\"frameId\":" + JsonSerializer.Serialize(frameId) + ",\"worldName\":\"PommeBrowser\"}"));
+                        if (!world.RootElement.TryGetProperty("executionContextId", out JsonElement id) || !id.TryGetInt32(out context))
+                            throw new InvalidOperationException("monde isolé du cadre non créé");
+                        _flashFrameWorlds[frameId] = context;
+                    }
+                    string reply = await _core.CallDevToolsProtocolMethodAsync("Runtime.evaluate",
+                        "{\"expression\":" + JsonSerializer.Serialize(expression) + ",\"contextId\":" +
+                        context.ToString(System.Globalization.CultureInfo.InvariantCulture) + ",\"returnByValue\":true}");
+                    if (FlashFrames.ReadResult(reply) is { } result)
+                        return result;
+                    throw new InvalidOperationException("contexte du cadre disparu");
+                }
+                catch (Exception ex) when (ex is COMException or InvalidOperationException or JsonException or ArgumentException)
+                {
+                    // Cadre rechargé ou retiré depuis : son monde et son identifiant sont relus.
+                    _flashFrames.Remove(frame.AbsoluteUri);
+                    _flashFrameWorlds.Clear();
+                    if (attempt == 1)
+                        throw new InvalidOperationException(ex.Message, ex);
+                }
+            }
+            return (false, null);
         }
 
         static string? FromJson(string? json)
@@ -795,7 +909,15 @@ namespace PommeBrowser.Engine.WebView2
 
         public void RegisterMessageHandler(string name) => _channels.Add(name);
 
-        /// <summary>Message d'un script de PommeBrowser : { channel, body } (voir EngineHost.ScriptPost).</summary>
+        /// <summary>
+        /// Message d'un script de PommeBrowser : { channel, body } (voir EngineHost.ScriptPost), du
+        /// document principal seulement. Ceux de Ruffle dans un cadre (jeu dans une iframe, Evony…)
+        /// lui sont relayés par le script de détection du document principal, qui vérifie leur
+        /// origine (voir RuffleContent.ProbeScript). Pas d'abonnement aux cadres de WebView2
+        /// (CoreWebView2.FrameCreated, CoreWebView2Frame.WebMessageReceived…) : sur une page qui crée
+        /// et détruit beaucoup de cadres (Google), le moteur arrêtait PommeBrowser sur une
+        /// vérification interne (0x80000003 dans EmbeddedBrowserWebView.dll).
+        /// </summary>
         void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
             try

@@ -191,26 +191,48 @@ namespace PommeBrowser.Views
         // Basilisk
         // ---------------------------------------------------------------
 
+        /// <summary>
+        /// Bouton ⚡ : le moteur qui lit le Flash de la page, par la forme et la couleur de
+        /// l'éclair (Ruffle : contour orange ; module Flash, moteur intégré : plein rouge ;
+        /// Basilisk : dans une fenêtre, turquoise), et ce qu'un clic change.
+        /// </summary>
         void UpdateLegacyButton(BrowserTab? tab)
         {
-            LegacyButton.IsVisible = App.Settings.EnableFlashSupport && tab is { Page: TabPage.Web } &&
-                                     (tab.HasFlashFallback || tab.HasFlashOverlay) && BasiliskInstall.IsOpenable(tab.WebUrl, out _);
-            ToolTip.SetTip(LegacyButton, tab?.HasFlashOverlay == true
-                ? Tr("Revenir à Ruffle pour le contenu Flash de cette page")
-                : tab?.FallbackIsIntegrated == true
-                    ? Tr("Lire le contenu Flash avec votre module Flash (moteur intégré)")
-                    : Tr("Ouvrir ce site avec Flash Legacy (Basilisk)"));
+            FlashEngine engine = tab?.FlashEngine ?? FlashEngine.Ruffle;
+            // Ruffle : un moteur de secours peut prendre le relais ; sinon, toujours (retour à Ruffle).
+            LegacyButton.IsVisible = App.Settings.EnableFlashSupport && tab != null &&
+                                     (engine != FlashEngine.Ruffle ||
+                                      tab.Page == TabPage.Web && tab.HasFlashFallback && BasiliskInstall.IsOpenable(tab.WebUrl, out _));
+            LegacyButton.Classes.Set("ruffle", engine == FlashEngine.Ruffle);
+            LegacyButton.Classes.Set("flashplayer", engine == FlashEngine.Integrated);
+            LegacyButton.Classes.Set("basilisk", engine == FlashEngine.Basilisk);
+            LegacyIcon.Data = (Geometry)this.FindResource(engine switch
+            {
+                FlashEngine.Integrated => "IconFlashFilled",
+                FlashEngine.Basilisk => "IconFlashFramed",
+                _ => "IconFlash"
+            })!;
+            ToolTip.SetTip(LegacyButton, engine switch
+            {
+                FlashEngine.Integrated => Tr("Flash lu par votre module Flash (moteur intégré). Cliquer : revenir à Ruffle."),
+                FlashEngine.Basilisk => Tr("Site ouvert dans Basilisk. Cliquer : revenir à Ruffle."),
+                _ => tab?.FallbackIsIntegrated == true
+                    ? Tr("Flash lu par Ruffle. Cliquer : le lire avec votre module Flash (moteur intégré).")
+                    : Tr("Flash lu par Ruffle. Cliquer : ouvrir ce site dans Basilisk.")
+            });
         }
 
         void Legacy_Click(object? sender, RoutedEventArgs e)
         {
-            if (_selected is not { } tab || !BasiliskInstall.IsOpenable(tab.WebUrl, out Uri uri))
+            if (_selected is not { } tab)
                 return;
-            if (tab.HasFlashOverlay)
+            if (tab.FlashEngine != FlashEngine.Ruffle)
             {
-                tab.StopFlashOverlay();
+                tab.ReturnToRuffle();
                 return;
             }
+            if (!BasiliskInstall.IsOpenable(tab.WebUrl, out Uri uri))
+                return;
 
             tab.OpenFlashFallback(uri);
             // Basilisk lancé : le site peut s'y ouvrir d'office ensuite (« Lire avec Ruffle » annule).

@@ -66,12 +66,23 @@ namespace PommeBrowser.Core
             if (exception == null)
                 return;
             RuntimeLogBuffer.Append($"[{context}] {exception.GetType().Name} (0x{exception.HResult:X8}) : {exception.Message}");
+            Append(context, exception.ToString());
+        }
 
+        /// <summary>Consigne un événement décrit par un texte (arrêt brutal de la session précédente…).</summary>
+        public static void WriteText(string context, string text)
+        {
+            RuntimeLogBuffer.Append($"[{context}] voir errors.log");
+            Append(context, text.TrimEnd());
+        }
+
+        static void Append(string context, string details)
+        {
             var entry = new StringBuilder()
                 .Append("=== ").Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")).Append(" · ").Append(context)
                 .Append(" · PommeBrowser ").Append(typeof(ErrorLog).Assembly.GetName().Version)
                 .Append(" · ").AppendLine(Environment.OSVersion.VersionString)
-                .AppendLine(exception.ToString())
+                .AppendLine(details)
                 .AppendLine();
             try
             {

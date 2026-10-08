@@ -16,6 +16,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Serveur de support (support-server/) : les paquets y envoient « Signaler un problème », qui
+# arrive sur Discord. Variable du dépôt POMMEBROWSER_SUPPORT_API_URL pour en viser un autre ; les
+# copies du dépôt n'envoient rien par défaut. Donnée seulement aux étapes qui fabriquent les
+# paquets (les tests n'envoient jamais de rapport).
+env:
+  PACKAGE_SUPPORT_API_URL: ${{ vars.POMMEBROWSER_SUPPORT_API_URL || (github.repository == 'vazer7070/MyHomelabBrowser' && 'https://support.maloquine.us' || '') }}
+
 jobs:
   support-server:
     name: Serveur de support
@@ -85,6 +92,8 @@ jobs:
         run: |
           gcc -shared -fPIC -O2 -o "$POMMEFLASH_TEST_PLUGIN" flash-engine/test-plugin/testplugin.c $(pkg-config --cflags --libs gtk+-2.0) -lX11 -lXtst -lpthread
           xvfb-run --auto-servernum dotnet test tests/PommeFlash.Tests/PommeFlash.Tests.csproj --configuration Release --logger "trx;LogFileName=moteur-flash-linux.trx" --results-directory TestResults
+          # Côté PommeBrowser, avec l'hôte réel : lecteur figé signalé puis rétabli, plantage reconnu.
+          xvfb-run --auto-servernum dotnet test tests/PommeBrowser.UiTests/PommeBrowser.UiTests.csproj --configuration Release --filter "FullyQualifiedName~FlashHostTests" --logger "trx;LogFileName=moteur-flash-navigateur.trx" --results-directory TestResults
 
       - name: Résultats des tests
         if: always()
@@ -93,6 +102,7 @@ jobs:
           name: resultats-tests
           path: TestResults
           if-no-files-found: ignore
+          retention-days: 3
 
       - name: Moteur Flash intégré (artefact)
         uses: actions/upload-artifact@v4
@@ -100,6 +110,7 @@ jobs:
           name: PommeFlashHost-Linux-x64
           path: artifacts/flash-linux-x64
           if-no-files-found: error
+          retention-days: 3
 
       - name: Compilation de l'édition Avalonia
         run: dotnet build avalonia/PommeBrowser.csproj --configuration Release
@@ -109,6 +120,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           POMMEFLASH_HOST_DIR: ${{ github.workspace }}/artifacts/flash-linux-x64
+          POMMEBROWSER_SUPPORT_API_URL: ${{ env.PACKAGE_SUPPORT_API_URL }}
         run: avalonia/packaging/linux/build-appimage.sh all
 
       - name: Essai de lancement
@@ -125,6 +137,7 @@ jobs:
             avalonia/packaging/out/*.AppImage
             avalonia/packaging/out/*.sha256
           if-no-files-found: error
+          retention-days: 3
 
   avalonia-windows:
     name: Avalonia Windows
@@ -144,7 +157,7 @@ jobs:
       - name: Publication (win-x64)
         shell: pwsh
         run: |
-          dotnet publish avalonia/PommeBrowser.csproj --configuration Release --runtime win-x64 --self-contained true -p:DebugType=none -p:RuffleDownloadOptional=false --output artifacts/avalonia-win-x64
+          dotnet publish avalonia/PommeBrowser.csproj --configuration Release --runtime win-x64 --self-contained true -p:DebugType=none -p:RuffleDownloadOptional=false "-p:SupportApiUrl=$env:PACKAGE_SUPPORT_API_URL" --output artifacts/avalonia-win-x64
           Move-Item artifacts/avalonia-win-x64/pommebrowser.exe artifacts/avalonia-win-x64/MyHomelabBrowser.exe
           if (-not (Test-Path artifacts/avalonia-win-x64/Assets/Ruffle/ruffle.js)) { throw "Ruffle absent de la publication." }
 
@@ -163,6 +176,18 @@ jobs:
           if (-not (Test-Path artifacts/avalonia-win-x64/flash/PommeFlashHost.exe)) { throw "PommeFlashHost absent de la publication." }
           dotnet publish flash-engine/PommeFlash.Host/PommeFlash.Host.csproj --configuration Release --runtime win-x86 -p:PublishAot=true -p:DebugType=none --output artifacts/avalonia-win-x64/flash/x86
           if (-not (Test-Path artifacts/avalonia-win-x64/flash/x86/PommeFlashHost.exe)) { throw "PommeFlashHost 32 bits absent de la publication." }
+
+      # Propre à Windows : instance unique (mutex nommé et tube réservé à l'utilisateur),
+      # inscription comme navigateur (registre de l'utilisateur, sous un nom de test) et clavier
+      # d'une fenêtre logée par SetParent (le journal dit si Windows relie la saisie de lui-même).
+      - name: Tests propres à Windows (instance unique, navigateur par défaut, fenêtre logée)
+        run: >
+          dotnet test tests/PommeBrowser.Tests/PommeBrowser.Tests.csproj
+          --configuration Release
+          --filter "FullyQualifiedName~SingleInstanceTests|FullyQualifiedName~DefaultBrowserTests|FullyQualifiedName~Win32EmbeddingTests"
+          --logger "console;verbosity=detailed"
+          --logger "trx;LogFileName=instance-unique.trx"
+          --results-directory TestResults
 
       # Le vrai hôte, avec un greffon NPAPI de test qui rapporte ce qu'il observe, dans les deux
       # architectures (greffon 32 bits : clang pour i686, points d'entrée __stdcall comme Flash).
@@ -244,6 +269,7 @@ jobs:
           name: espion-flash
           path: artifacts/espion-flash
           if-no-files-found: error
+          retention-days: 3
 
       - name: Résultats des tests du moteur Flash
         if: always()
@@ -252,6 +278,7 @@ jobs:
           name: resultats-tests-moteur-flash
           path: TestResults
           if-no-files-found: ignore
+          retention-days: 3
 
       - name: Dossier publié
         uses: actions/upload-artifact@v4
@@ -259,6 +286,7 @@ jobs:
           name: PommeBrowser-Avalonia-Windows-x64
           path: artifacts/avalonia-win-x64
           if-no-files-found: error
+          retention-days: 3
 
   avalonia-macos:
     name: Avalonia macOS (.app)
@@ -275,6 +303,8 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: PommeBrowser.app (arm64 et x64)
+        env:
+          POMMEBROWSER_SUPPORT_API_URL: ${{ env.PACKAGE_SUPPORT_API_URL }}
         run: avalonia/packaging/macos/build-app.sh all
 
       - name: Archives de l'app
@@ -285,3 +315,4 @@ jobs:
             avalonia/packaging/out/*.zip
             avalonia/packaging/out/*.sha256
           if-no-files-found: error
+          retention-days: 3

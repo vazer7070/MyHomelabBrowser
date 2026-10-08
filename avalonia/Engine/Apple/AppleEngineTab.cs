@@ -452,9 +452,17 @@ namespace PommeBrowser.Engine.Apple
 
         public Task SetCookieAsync(PageCookie cookie) => Task.CompletedTask;
 
-        public void SetFlashBridge(Func<string, string?>? callFunction)
+        public void SetFlashBridge(Func<string, string?>? callFunction, string? token)
         {
         }
+
+        /// <summary>Méthode des navigations non suivie ici (pas de décision de navigation) : inconnue.</summary>
+        public bool StartedWithData => false;
+
+        public string? UserAgent => null;
+
+        /// <summary>Cadres d'une autre origine hors d'atteinte depuis l'application (WebKit) : refus.</summary>
+        public Task<(bool Ok, string? Value)> EvaluateInFrameAsync(Uri frame, string script) => Task.FromResult((false, (string?)null));
 
         public unsafe Task<string?> EvaluateAsync(string script, bool isolated)
         {

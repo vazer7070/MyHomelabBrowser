@@ -128,9 +128,15 @@ namespace PommeFlash.Host.Native
         // Objets de l'hôte
         // ---------------------------------------------------------------
 
+        static long _liveHostObjects;
+
+        /// <summary>Objets de l'hôte (window, location…) encore référencés (diagnostic : commande « stats »).</summary>
+        public static long LiveHostObjects => Interlocked.Read(ref _liveHostObjects);
+
         /// <summary>Nouvel objet NPAPI pour <paramref name="managed"/> (une référence, à libérer).</summary>
         public static NpObjectRef Wrap(HostObject managed)
         {
+            Interlocked.Increment(ref _liveHostObjects);
             var block = (HostBlock*)NpMemory.AllocZeroed((nuint)sizeof(HostBlock));
             block->header._class = HostClass;
             block->header.referenceCount = 1;
@@ -192,6 +198,7 @@ namespace PommeFlash.Host.Native
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         static void HostDeallocate(nint obj)
         {
+            Interlocked.Decrement(ref _liveHostObjects);
             var block = (HostBlock*)obj;
             if (block->handle != 0)
                 GCHandle.FromIntPtr(block->handle).Free();

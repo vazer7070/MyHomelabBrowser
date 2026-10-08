@@ -26,6 +26,9 @@ namespace PommeFlash.Host
         PluginInstance? _instance;
         Action? _closeRequested;
         nint _pluginWindow;
+        long _lastKey = long.MinValue / 2;
+        int _keyNotes;
+        string _content = string.Empty;
 
         public nint Frame { get; private set; }
 
@@ -46,6 +49,8 @@ namespace PommeFlash.Host
         public void Create(HostOptions options)
         {
             _current = this;
+            _content = Path.GetFileName(options.Swf.AbsolutePath);
+            DeclareDpiAwareness();
             nint module = Win32.GetModuleHandleW(null);
             Register(FrameClass, (nint)(delegate* unmanaged<nint, uint, nuint, nint, nint>)&FrameProc, module);
             Register(PluginClass, (nint)(delegate* unmanaged<nint, uint, nuint, nint, nint>)&PluginProc, module);
@@ -69,6 +74,30 @@ namespace PommeFlash.Host
 
             if (!options.Hidden)
                 Win32.ShowWindow(Frame, Win32.SW_SHOW);
+        }
+
+        /// <summary>
+        /// Adapté à la densité de chaque écran, comme le plugin-container de Basilisk et de
+        /// Firefox : le module dessine à la taille réelle de la zone (en pixels de l'écran) au lieu
+        /// d'une image agrandie, floue au-delà de 100 %. Avant toute fenêtre, et avant le module.
+        /// </summary>
+        static void DeclareDpiAwareness()
+        {
+            try
+            {
+                if (Win32.SetProcessDpiAwarenessContext(Win32.DpiAwarenessPerMonitorV2))
+                    return;
+            }
+            catch (EntryPointNotFoundException)
+            {
+            }
+            try
+            {
+                Win32.SetProcessDPIAware();
+            }
+            catch (EntryPointNotFoundException)
+            {
+            }
         }
 
         static void Register(string name, nint procedure, nint module)
@@ -99,10 +128,31 @@ namespace PommeFlash.Host
             Win32.MSG msg;
             while (Win32.GetMessageW(&msg, 0, 0, 0) > 0)
             {
+                NoteKey(msg);
                 Win32.TranslateMessage(&msg);
                 Win32.DispatchMessageW(&msg);
             }
             return (int)msg.wParam;
+        }
+
+        /// <summary>
+        /// Journal : touches reçues par l'hôte (le clavier arrive bien jusqu'au lecteur), au début de
+        /// chaque série (après 10 s sans touche), 20 fois au plus, avec la fenêtre visée.
+        /// </summary>
+        void NoteKey(in Win32.MSG msg)
+        {
+            if (msg.message is not (Win32.WM_KEYDOWN or Win32.WM_SYSKEYDOWN))
+                return;
+            long now = Environment.TickCount64;
+            bool series = now - _lastKey > 10_000;
+            _lastKey = now;
+            if (!series || _keyNotes >= 20)
+                return;
+            _keyNotes++;
+            string target = msg.hwnd == _pluginWindow ? "fenêtre du module"
+                : _pluginWindow != 0 && Win32.IsChild(_pluginWindow, msg.hwnd) ? "fenêtre créée par le module"
+                : "autre fenêtre de l'hôte";
+            HostChannel.Log($"Clavier : touches reçues par le lecteur de {_content} ({target}).");
         }
 
         public void Close() => Win32.DestroyWindow(Frame);

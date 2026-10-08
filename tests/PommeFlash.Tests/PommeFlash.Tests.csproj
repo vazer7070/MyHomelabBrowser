@@ -14,6 +14,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <RootNamespace>PommeFlash.Tests</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,6 +29,9 @@
 
   <ItemGroup Label="Logique de l'hôte sans code natif">
     <Compile Include="..\..\flash-engine\PommeFlash.Host\HostOptions.cs" Link="Host\HostOptions.cs" />
+    <Compile Include="..\..\flash-engine\PommeFlash.Host\ResponseShape.cs" Link="Host\ResponseShape.cs" />
+    <Compile Include="..\..\flash-engine\PommeFlash.Host\PostData.cs" Link="Host\PostData.cs" />
+    <Compile Include="..\..\flash-engine\PommeFlash.Host\Native\NpMemory.cs" Link="Host\NpMemory.cs" />
   </ItemGroup>
 
 </Project>

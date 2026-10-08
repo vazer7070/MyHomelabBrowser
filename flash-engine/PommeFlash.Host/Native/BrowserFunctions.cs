@@ -146,8 +146,16 @@ namespace PommeFlash.Host.Native
         static short PostUrlNotify(nint npp, nint url, nint target, uint length, nint buffer, byte file, nint notifyData)
             => Guard("NPN_PostURLNotify", () => Instance(npp)?.RequestUrl(NpMemory.ReadUtf8(url), NpMemory.ReadUtf8(target), PostData.Read(buffer, length, file != 0), notify: true, notifyData) ?? Np.InvalidInstanceError);
 
+        /// <summary>
+        /// Lecture par plages : les flux sont annoncés non « seekable » (Flash Player recherche dans
+        /// une vidéo par de nouvelles requêtes). Noté dans le journal si un module la demande.
+        /// </summary>
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-        static short RequestRead(nint stream, nint ranges) => Np.StreamNotSeekable;
+        static short RequestRead(nint stream, nint ranges)
+        {
+            HostChannel.Trace("requestread", "Lecture par plages demandée (NPN_RequestRead) : non prise en charge, flux non seekable.");
+            return Np.StreamNotSeekable;
+        }
 
         /// <summary>Flux écrits par le module vers le navigateur : non pris en charge.</summary>
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
@@ -402,9 +410,16 @@ namespace PommeFlash.Host.Native
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         static byte UnfocusInstance(nint npp, int direction) => 0;
 
+        /// <summary>Réponse du module à une redirection qui lui a été soumise (NPP_URLRedirectNotify).</summary>
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
         static void UrlRedirectResponse(nint npp, nint notifyData, byte allow)
         {
+            if (notifyData != 0)
+                Guard("NPN_URLRedirectResponse", () =>
+                {
+                    Instance(npp)?.AnswerRedirects(notifyData, allow != 0);
+                    return Np.NoError;
+                });
         }
 
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]

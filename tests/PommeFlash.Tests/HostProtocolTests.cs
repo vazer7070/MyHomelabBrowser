@@ -105,6 +105,7 @@ public sealed class HostProtocolTests
         Assert.Contains($"stream-done url={server.Url("jeu/data.txt")} bytes={data.Length} hash={Fnv1a(data):x8} ordered=1 reason=0", reports);
         Assert.Contains("notify url=data.txt reason=0 data=1234", reports);
         Assert.Contains("notify url=missing.txt reason=1 data=5678", reports);
+        Assert.Contains("notify url=detour.txt reason=1 data=4321", reports);
         Assert.Contains($"stream-done url={server.Url("jeu/echo")} bytes=5 hash={Fnv1a("hello"u8.ToArray()):x8} ordered=1 reason=0", reports);
         Assert.Contains("notify url=echo reason=0 data=9abc", reports);
 
@@ -146,17 +147,183 @@ public sealed class HostProtocolTests
         string request = "<invoke name=\"jeu\" returntype=\"javascript\"><arguments><string>été</string></arguments></invoke>";
         await host.SendAsync("call 7 " + JsonSerializer.Serialize(new { request }));
         await host.WaitForAsync(h => h.Events.Any(e => e.GetProperty("event").GetString() == "called"), TimeSpan.FromSeconds(20));
-        JsonElement called = host.Events.Single(e => e.GetProperty("event").GetString() == "called");
+        JsonElement called = host.Events.First(e => e.GetProperty("event").GetString() == "called");
         Assert.Equal(7, called.GetProperty("id").GetInt32());
         Assert.True(called.GetProperty("ok").GetBoolean());
         Assert.Equal("retour:" + request, called.GetProperty("value").GetString());
         Assert.Contains("call main=1 request=" + request, host.Reports);
+
+        // Méthodes de Flash appelées par la page (API JavaScript de Flash Player) : valeur en JSON.
+        // Une méthode hors de cette liste, ou des arguments invalides, sont refusés sans appel.
+        string Method(int id) => host.Events.Single(e => e.GetProperty("event").GetString() == "called" && e.GetProperty("id").GetInt32() == id)
+            .GetProperty("value").GetString()!;
+        await host.SendAsync("call 8 " + JsonSerializer.Serialize(new { request = """{"method":"PercentLoaded","args":[]}""" }));
+        await host.SendAsync("call 9 " + JsonSerializer.Serialize(new { request = """{"method":"SetVariable","args":["/:etat","prêt \"ok\""]}""" }));
+        await host.SendAsync("call 10 " + JsonSerializer.Serialize(new { request = """{"method":"GetVariable","args":["/:etat"]}""" }));
+        await host.SendAsync("call 11 " + JsonSerializer.Serialize(new { request = """{"method":"CallFunction","args":["<invoke/>"]}""" }));
+        await host.SendAsync("call 12 " + JsonSerializer.Serialize(new { request = """{"method":"GetVariable","args":[{"x":1}]}""" }));
+        await host.WaitForAsync(h => h.Events.Count(e => e.GetProperty("event").GetString() == "called") >= 6, TimeSpan.FromSeconds(20));
+        Assert.Equal("100", Method(8));
+        Assert.Equal("null", Method(9));
+        Assert.Equal("prêt \"ok\"", JsonSerializer.Deserialize<string>(Method(10)));
+        Assert.Contains("method SetVariable /:etat=prêt \"ok\"", host.Reports);
+        foreach (int refused in new[] { 11, 12 })
+            Assert.False(host.Events.Single(e => e.GetProperty("event").GetString() == "called" && e.GetProperty("id").GetInt32() == refused).GetProperty("ok").GetBoolean());
+        Assert.DoesNotContain(host.Reports, r => r.StartsWith("call main=1 request=<invoke/>", StringComparison.Ordinal));
 
         // Fin demandée par PommeBrowser : instance détruite, sortie normale.
         await host.SendAsync("close");
         Assert.Equal(0, await host.WaitForExitAsync(TimeSpan.FromSeconds(30)));
         Assert.Contains("destroy", host.Reports);
         Assert.Contains(host.Events, e => e.GetProperty("event").GetString() == "exit");
+    }
+
+    [Fact(Timeout = 180_000)]
+    public async Task A_page_call_made_while_the_content_waits_for_a_script_is_answered_from_that_wait()
+    {
+        HostRun.SkipIfUnavailable();
+
+        byte[] movie = new byte[20_000];
+        new Random(5).NextBytes(movie);
+        using var server = new TestServer();
+        server.Add("movie.swf", movie, "application/x-shockwave-flash");
+        server.Add("jeu/data.txt", "x"u8.ToArray(), "text/plain");
+        const string request = "<invoke name=\"imbrique\" returntype=\"javascript\"><arguments></arguments></invoke>";
+
+        // Comme dans un navigateur : le script demandé par le contenu (ExternalInterface.call)
+        // appelle le contenu (fonction déclarée par addCallback) avant de rendre son résultat.
+        static async Task<bool> Arrived(HostRun run, string kind)
+        {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            while (!run.Events.Any(e => e.GetProperty("event").GetString() == kind))
+            {
+                if (clock.Elapsed > TimeSpan.FromSeconds(15))
+                    return false;
+                await Task.Delay(20);
+            }
+            return true;
+        }
+
+        static async Task<(bool Ok, string? Value)> CallBackIntoTheContent(HostRun run)
+        {
+            // Battement de cœur : le contenu qui attend la page répond aussitôt (il n'est pas figé).
+            await run.SendAsync("ping 42");
+            if (!await Arrived(run, "pong"))
+                return (false, null);
+            await run.SendAsync("call 11 " + JsonSerializer.Serialize(new { request }));
+            return await Arrived(run, "called") ? (true, "<number>5</number>") : (false, null);
+        }
+
+        await using HostRun host = HostRun.Start(new[]
+        {
+            "--plugin", HostRun.HostVisiblePath(HostRun.PluginPath!),
+            "--swf", server.Url("movie.swf"),
+            "--page", server.Url("jeu/page.html"),
+            "--hidden"
+        }, _ => (false, null), slowScripts: (run, code) => code.Contains("pommeAdd(2,3)", StringComparison.Ordinal) ? CallBackIntoTheContent(run) : null);
+
+        await host.WaitForAsync(h => h.Reports.Contains("done"), Scenario);
+        IReadOnlyList<string> reports = host.Reports;
+
+        // L'appel a été exécuté par le contenu pendant qu'il attendait le script, sur son fil,
+        // puis le script a rendu son résultat.
+        JsonElement called = host.Events.Single(e => e.GetProperty("event").GetString() == "called");
+        Assert.Equal(11, called.GetProperty("id").GetInt32());
+        Assert.True(called.GetProperty("ok").GetBoolean());
+        Assert.Equal("retour:" + request, called.GetProperty("value").GetString());
+        int call = reports.ToList().IndexOf("call main=1 request=" + request);
+        int script = reports.ToList().IndexOf("script=<number>5</number>");
+        Assert.True(call >= 0 && script > call, string.Join("\n", reports));
+        Assert.Equal(42, host.Events.First(e => e.GetProperty("event").GetString() == "pong").GetProperty("id").GetInt64());
+
+        await host.SendAsync("close");
+        Assert.Equal(0, await host.WaitForExitAsync(TimeSpan.FromSeconds(30)));
+    }
+
+    [Fact(Timeout = 180_000)]
+    public async Task Redirects_of_notified_loads_are_submitted_to_the_module()
+    {
+        HostRun.SkipIfUnavailable();
+
+        byte[] movie = new byte[20_000];
+        new Random(9).NextBytes(movie);
+        byte[] data = Encoding.UTF8.GetBytes("données après redirection");
+        using var server = new TestServer();
+        server.Add("movie.swf", movie, "application/x-shockwave-flash");
+        server.Redirect("jeu/data.txt", "/jeu/vrai.txt", "jeton=xyz; Path=/");
+        server.Add("jeu/vrai.txt", data, "text/plain; charset=utf-8");
+        // Le module refuse les redirections vers « interdit ».
+        server.Redirect("jeu/detour.txt", "/jeu/interdit.txt", "autre=1; Path=/");
+        server.Add("jeu/interdit.txt", data, "text/plain; charset=utf-8");
+
+        await using HostRun host = HostRun.Start(new[]
+        {
+            "--plugin", HostRun.HostVisiblePath(HostRun.PluginPath!),
+            "--swf", server.Url("movie.swf"),
+            "--page", server.Url("jeu/page.html"),
+            "--hidden"
+        }, code => code.Contains("pommeAdd(2,3)", StringComparison.Ordinal) ? (true, "<number>5</number>") : (false, null));
+
+        await host.WaitForAsync(h => h.Reports.Contains("done") && h.Reports.Any(r => r.StartsWith("notify url=detour.txt", StringComparison.Ordinal)), Scenario);
+        IReadOnlyList<string> reports = host.Reports;
+
+        // Accordée : suivie, avec les cookies propres à l'hôte déposés au passage.
+        Assert.Contains($"redirect url={server.Url("jeu/vrai.txt")} status=302 data=1234 main=1 allow=1", reports);
+        Assert.Contains($"stream-done url={server.Url("jeu/vrai.txt")} bytes={data.Length} hash={Fnv1a(data):x8} ordered=1 reason=0", reports);
+        Assert.Contains("notify url=data.txt reason=0 data=1234", reports);
+        Assert.Contains("jeton=xyz", server.CookieHeader("jeu/vrai.txt")!.Split("; "));
+
+        // Refusée : pas suivie, le chargement échoue.
+        Assert.Contains($"redirect url={server.Url("jeu/interdit.txt")} status=302 data=4321 main=1 allow=0", reports);
+        Assert.Contains("notify url=detour.txt reason=1 data=4321", reports);
+        Assert.False(server.WasRequested("jeu/interdit.txt"));
+
+        // Le contenu principal (sans notification) n'est pas soumis.
+        Assert.DoesNotContain(reports, r => r.StartsWith("redirect url=" + server.Url("movie.swf"), StringComparison.Ordinal));
+
+        await host.SendAsync("close");
+        Assert.Equal(0, await host.WaitForExitAsync(TimeSpan.FromSeconds(30)));
+    }
+
+    [Fact(Timeout = 180_000)]
+    public async Task Closing_during_a_download_ends_the_stream_then_the_instance()
+    {
+        HostRun.SkipIfUnavailable();
+
+        byte[] movie = new byte[20_000];
+        new Random(11).NextBytes(movie);
+        using var server = new TestServer();
+        server.Add("movie.swf", movie, "application/x-shockwave-flash");
+        server.Add("jeu/data.txt", "x"u8.ToArray(), "text/plain");
+        server.AddSlow("jeu/lent.bin");
+
+        await using HostRun host = HostRun.Start(new[]
+        {
+            "--plugin", HostRun.HostVisiblePath(HostRun.PluginPath!),
+            "--swf", server.Url("movie.swf"),
+            "--page", server.Url("jeu/page.html"),
+            "--hidden"
+        }, code => code.Contains("pommeAdd(2,3)", StringComparison.Ordinal) ? (true, "<number>5</number>") : (false, null));
+
+        string slow = server.Url("jeu/lent.bin");
+        await host.WaitForAsync(h => h.Reports.Contains("done") && h.Reports.Any(r => r.StartsWith("stream-open url=" + slow, StringComparison.Ordinal)), Scenario);
+
+        // Battement de cœur : réponse du fil du module.
+        await host.SendAsync("ping 7");
+        await host.WaitForAsync(h => h.Events.Any(e => e.GetProperty("event").GetString() == "pong"), TimeSpan.FromSeconds(20));
+        Assert.Equal(7, host.Events.First(e => e.GetProperty("event").GetString() == "pong").GetProperty("id").GetInt64());
+
+        // Onglet fermé pendant le téléchargement : flux interrompu (NPRES_USER_BREAK) et notifié,
+        // puis instance détruite, et fin normale sans attendre la fin du téléchargement.
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        await host.SendAsync("close");
+        Assert.Equal(0, await host.WaitForExitAsync(TimeSpan.FromSeconds(15)));
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(10), clock.Elapsed.ToString());
+        List<string> reports = host.Reports.ToList();
+        int streamDone = reports.FindIndex(r => r.StartsWith("stream-done url=" + slow, StringComparison.Ordinal) && r.EndsWith(" reason=2", StringComparison.Ordinal));
+        int notified = reports.IndexOf("notify url=lent.bin reason=2 data=7777");
+        int destroyed = reports.IndexOf("destroy");
+        Assert.True(streamDone >= 0 && notified > streamDone && destroyed > notified, string.Join("\n", reports));
     }
 
     [Fact(Timeout = 180_000)]
@@ -179,6 +346,8 @@ public sealed class HostProtocolTests
             "--swf", server.Url("movie.swf"),
             "--page", server.Url("jeu/page.html"),
             "--share-cookies",
+            "--http-user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Page/1.0",
+            "--accept-language", "fr-FR,fr;q=0.9",
             "--hidden"
         }, code => code.Contains("pommeAdd(2,3)", StringComparison.Ordinal) ? (true, "<number>5</number>") : (false, null),
         // PommeBrowser : cookies de la page, HttpOnly compris pour les chargements.
@@ -193,6 +362,17 @@ public sealed class HostProtocolTests
         Assert.Equal("session=abc; prefs=fr", server.CookieHeader("jeu/data.txt"));
         Assert.Equal("session=abc; prefs=fr", server.CookieHeader("jeu/vrai.txt"));
         Assert.Equal("session=abc; prefs=fr", server.CookieHeader("jeu/echo"));
+        // Comme les chargements d'un navigateur : identité et langues de la page, adresse de la page
+        // en Referer (paramètres compris), et l'envoi tel que le module l'a écrit.
+        foreach (string path in new[] { "movie.swf", "jeu/echo" })
+        {
+            Assert.Equal("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Page/1.0", server.Header(path, "User-Agent"));
+            Assert.Equal("fr-FR,fr;q=0.9", server.Header(path, "Accept-Language"));
+            Assert.Equal("*/*", server.Header(path, "Accept"));
+            Assert.Equal(server.Url("jeu/page.html"), server.Header(path, "Referer"));
+        }
+        Assert.Equal("text/plain", server.Header("jeu/echo", "Content-Type"));
+        Assert.Equal("5", server.Header("jeu/echo", "Content-Length"));
         Assert.Contains(events, e => e.GetProperty("event").GetString() == "cookies" &&
                                      e.GetProperty("url").GetString() == server.Url("jeu/vrai.txt") && e.GetProperty("http").GetBoolean());
 

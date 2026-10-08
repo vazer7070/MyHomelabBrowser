@@ -27,6 +27,10 @@
             <SolidColorBrush x:Key="SuccessBrush" Color="#3DD68C"/>
             <SolidColorBrush x:Key="SuccessSoftBrush" Color="#15342A"/>
             <SolidColorBrush x:Key="WarningBrush" Color="#F2B84B"/>
+            <!-- Moteur Flash de la page (bouton ⚡) : Ruffle, module Flash (moteur intégré), Basilisk. -->
+            <SolidColorBrush x:Key="RuffleBrush" Color="#FFAD33"/>
+            <SolidColorBrush x:Key="FlashPlayerBrush" Color="#FF5A4E"/>
+            <SolidColorBrush x:Key="BasiliskBrush" Color="#2ED3C6"/>
             <SolidColorBrush x:Key="WarningSoftBrush" Color="#3A2E14"/>
             <SolidColorBrush x:Key="DangerBrush" Color="#F2677A"/>
             <SolidColorBrush x:Key="DangerSoftBrush" Color="#3A1D24"/>
@@ -64,6 +68,9 @@
             <SolidColorBrush x:Key="SuccessBrush" Color="#16A34A"/>
             <SolidColorBrush x:Key="SuccessSoftBrush" Color="#DCF5E6"/>
             <SolidColorBrush x:Key="WarningBrush" Color="#B26A00"/>
+            <SolidColorBrush x:Key="RuffleBrush" Color="#C76A00"/>
+            <SolidColorBrush x:Key="FlashPlayerBrush" Color="#D0281F"/>
+            <SolidColorBrush x:Key="BasiliskBrush" Color="#0E8F86"/>
             <SolidColorBrush x:Key="WarningSoftBrush" Color="#FDF1D8"/>
             <SolidColorBrush x:Key="DangerBrush" Color="#D1334B"/>
             <SolidColorBrush x:Key="DangerSoftBrush" Color="#FBE3E7"/>
